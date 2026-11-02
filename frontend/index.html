@@ -1,0 +1,1047 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LUZ EMS - Scheduling</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --text: #0f172a;
+      --text-secondary: #64748b;
+      --border: #e2e8f0;
+      --accent: #8b5cf6;
+      --accent-dark: #7c3aed;
+      --accent-light: #ede9fe;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --shadow: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.1);
+      --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    .app { display: flex; min-height: 100vh; }
+    .sidebar {
+      width: 240px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      position: fixed; top: 0; left: 0; bottom: 0; z-index: 100;
+    }
+    .brand {
+      padding: 24px;
+      border-bottom: 1px solid var(--border);
+    }
+    .brand h1 {
+      margin: 0;
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+    .brand span { color: var(--accent); }
+    .brand p { margin: 4px 0 0; font-size: 0.75rem; color: var(--text-secondary); }
+    .nav { padding: 12px; flex: 1; }
+    .nav button {
+      width: 100%; text-align: left;
+      padding: 12px 14px;
+      margin-bottom: 4px;
+      border: none; border-radius: 10px;
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: 0.9rem; font-weight: 500;
+      cursor: pointer;
+      display: flex; align-items: center; gap: 10px;
+      transition: all 0.15s;
+    }
+    .nav button:hover { background: var(--bg); color: var(--text); }
+    .nav button.active { background: var(--accent-light); color: var(--accent-dark); }
+    .sidebar-footer {
+      padding: 16px;
+      border-top: 1px solid var(--border);
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      text-align: center;
+    }
+    .main {
+      flex: 1;
+      margin-left: 240px;
+      padding: 32px;
+      max-width: calc(100% - 240px);
+    }
+    .header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 28px;
+      flex-wrap: wrap; gap: 16px;
+    }
+    .header h2 { margin: 0; font-size: 1.6rem; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 10px 18px;
+      border: none; border-radius: 10px;
+      font-size: 0.875rem; font-weight: 600;
+      cursor: pointer; transition: all 0.15s;
+    }
+    .btn-primary { background: var(--accent); color: white; }
+    .btn-primary:hover { background: var(--accent-dark); }
+    .btn-secondary { background: white; color: var(--text); border: 1px solid var(--border); }
+    .btn-secondary:hover { background: var(--bg); }
+    .btn-danger { background: var(--danger); color: white; }
+    .btn-sm { padding: 6px 12px; font-size: 0.8rem; }
+
+    .grid-4 {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px; margin-bottom: 28px;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: var(--shadow);
+    }
+    .stat-label { font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 8px; }
+    .stat-value { font-size: 2rem; font-weight: 700; }
+    .section { margin-bottom: 28px; }
+    .section-title {
+      font-size: 1.1rem; font-weight: 600;
+      margin: 0 0 14px 0;
+    }
+    .toolbar {
+      display: flex; gap: 10px; margin-bottom: 16px;
+      flex-wrap: wrap; align-items: center;
+    }
+    .search-input, .input, select, textarea {
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: 0.875rem;
+      background: var(--surface);
+      color: var(--text);
+      font-family: inherit;
+    }
+    .search-input { min-width: 240px; }
+    .input, select, textarea { width: 100%; }
+    textarea { resize: vertical; min-height: 80px; }
+    .form-group { margin-bottom: 16px; }
+    .form-group label {
+      display: block; font-size: 0.8rem; font-weight: 600;
+      margin-bottom: 6px; color: var(--text-secondary);
+      text-transform: uppercase; letter-spacing: 0.3px;
+    }
+    table {
+      width: 100%; border-collapse: collapse;
+      background: var(--surface);
+      border-radius: 12px; overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+    th, td { padding: 14px 16px; text-align: left; font-size: 0.875rem; }
+    th { background: var(--bg); font-weight: 600; color: var(--text-secondary); text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.5px; }
+    tr:not(:last-child) td { border-bottom: 1px solid var(--border); }
+    .badge {
+      display: inline-block; padding: 4px 10px;
+      border-radius: 999px; font-size: 0.75rem; font-weight: 600;
+    }
+    .badge-scheduled { background: var(--accent-light); color: var(--accent-dark); }
+    .badge-completed { background: #d1fae5; color: #065f46; }
+    .badge-cancelled { background: #fee2e2; color: #991b1b; }
+    .badge-sent { background: #d1fae5; color: #065f46; }
+    .badge-failed { background: #fee2e2; color: #991b1b; }
+
+    .calendar-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; }
+    .calendar-wrapper { max-height: 70vh; overflow-y: auto; border-radius: 12px; box-shadow: var(--shadow); }
+    .calendar { display: grid; grid-template-columns: 60px repeat(7, 1fr); gap: 1px; background: var(--border); min-width: 100%; }
+    .calendar-header { background: var(--surface); padding: 12px; text-align: center; font-weight: 600; font-size: 0.85rem; position: sticky; top: 0; z-index: 2; }
+    .calendar-time { background: var(--bg); padding: 8px; text-align: right; font-size: 0.7rem; color: var(--text-secondary); }
+    .calendar-cell { background: var(--surface); min-height: 60px; padding: 6px; position: relative; }
+    .calendar-event {
+      padding: 6px 8px; border-radius: 8px;
+      font-size: 0.75rem; color: white; margin-bottom: 4px;
+      cursor: pointer; overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+    .calendar-event small { opacity: 0.9; }
+
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(15,23,42,0.5);
+      display: none; align-items: center; justify-content: center;
+      z-index: 200; padding: 20px;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal {
+      background: var(--surface); border-radius: 20px;
+      width: 100%; max-width: 520px;
+      max-height: 90vh; overflow-y: auto;
+      box-shadow: var(--shadow-md);
+    }
+    .modal-header { padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    .modal-header h3 { margin: 0; font-size: 1.1rem; }
+    .modal-body { padding: 24px; }
+    .modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
+    .close-btn { background: none; border: none; font-size: 1.4rem; color: var(--text-secondary); cursor: pointer; }
+
+    .empty { text-align: center; padding: 40px; color: var(--text-secondary); }
+    .tabs { display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 2px solid var(--border); }
+    .tab { padding: 10px 16px; background: none; border: none; cursor: pointer; font-weight: 600; color: var(--text-secondary); border-bottom: 2px solid transparent; margin-bottom: -2px; }
+    .tab.active { color: var(--accent-dark); border-bottom-color: var(--accent); }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    .toggle { position: relative; display: inline-block; width: 44px; height: 24px; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; cursor: pointer; inset: 0; background: #cbd5e1; border-radius: 24px; transition: 0.2s; }
+    .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.2s; }
+    .toggle input:checked + .slider { background: var(--accent); }
+    .toggle input:checked + .slider:before { transform: translateX(20px); }
+    .setting-row { display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-bottom: 1px solid var(--border); }
+    .setting-row:last-child { border-bottom: none; }
+    .toast {
+      position: fixed; bottom: 24px; right: 24px;
+      background: var(--text); color: white;
+      padding: 14px 20px; border-radius: 12px;
+      box-shadow: var(--shadow-md); z-index: 300;
+      transform: translateY(120%); transition: transform 0.3s;
+    }
+    .toast.show { transform: translateY(0); }
+
+    @media (max-width: 768px) {
+      .sidebar { width: 100%; top: auto; bottom: 0; height: 64px; flex-direction: row; border-right: none; border-top: 1px solid var(--border); }
+      .brand, .sidebar-footer { display: none; }
+      .nav { display: flex; width: 100%; padding: 8px; justify-content: space-around; }
+      .nav button { width: auto; flex-direction: column; padding: 6px; font-size: 0.65rem; gap: 4px; }
+      .main { margin-left: 0; max-width: 100%; padding: 20px; padding-bottom: 80px; }
+      .grid-4 { grid-template-columns: repeat(2, 1fr); }
+      .calendar { grid-template-columns: 40px repeat(7, 1fr); font-size: 0.7rem; }
+      .calendar-cell { min-height: 50px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <h1>LUZ <span>EMS</span></h1>
+        <p>Client Scheduling &amp; Reminders</p>
+      </div>
+      <nav class="nav">
+        <button class="active" onclick="showTab('dashboard', this)"><span>📊</span> Dashboard</button>
+        <button onclick="showTab('calendar', this)"><span>📅</span> Calendar</button>
+        <button onclick="showTab('clients', this)"><span>👥</span> Clients</button>
+        <button onclick="showTab('services', this)"><span>✨</span> Services</button>
+        <button onclick="showTab('subscriptions', this)"><span>👥</span> Subscriptions</button>
+        <button onclick="showTab('notifications', this)"><span>📤</span> Messages</button>
+        <button onclick="showTab('settings', this)"><span>⚙️</span> Settings</button>
+      </nav>
+      <div class="sidebar-footer">
+        Demo mode active
+      </div>
+    </aside>
+
+    <main class="main">
+      <!-- Dashboard -->
+      <section id="dashboard" class="tab-content active">
+        <div class="header">
+          <h2>Dashboard</h2>
+          <button class="btn btn-primary" onclick="openBookingModal()">+ Book Session</button>
+        </div>
+        <div class="grid-4" id="stats"></div>
+        <div class="card" style="margin-bottom:28px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;">
+            <div>
+              <div class="stat-label">This Week's Revenue</div>
+              <div class="stat-value" id="revenue-total">AED 0.00</div>
+              <div style="font-size:0.85rem;color:var(--text-secondary);margin-top:4px;" id="revenue-breakdown">0 appointments · 0 subscriptions</div>
+            </div>
+            <div style="display:flex;gap:24px;flex-wrap:wrap;" id="revenue-by-service"></div>
+          </div>
+        </div>
+        <div class="section">
+          <h3 class="section-title">Upcoming Sessions</h3>
+          <div id="upcoming-list"></div>
+        </div>
+      </section>
+
+      <!-- Calendar -->
+      <section id="calendar" class="tab-content">
+        <div class="header"><h2>Calendar</h2><button class="btn btn-primary" onclick="openBookingModal()">+ Book Session</button></div>
+        <div class="calendar-toolbar">
+          <button class="btn btn-secondary btn-sm" onclick="changeWeek(-7)">◀</button>
+          <strong id="calendar-week-label"></strong>
+          <button class="btn btn-secondary btn-sm" onclick="changeWeek(7)">▶</button>
+        </div>
+        <div class="calendar-wrapper">
+          <div id="calendar-grid" class="calendar"></div>
+        </div>
+      </section>
+
+      <!-- Clients -->
+      <section id="clients" class="tab-content">
+        <div class="header"><h2>Clients</h2><button class="btn btn-primary" onclick="openClientModal()">+ Add Client</button></div>
+        <div class="toolbar">
+          <input type="text" id="client-search" class="search-input" placeholder="Search clients..." oninput="loadClients()">
+        </div>
+        <div id="clients-list"></div>
+      </section>
+
+      <!-- Services -->
+      <section id="services" class="tab-content">
+        <div class="header"><h2>Services</h2><button class="btn btn-primary" onclick="openServiceModal()">+ Add Service</button></div>
+        <div id="services-list"></div>
+      </section>
+
+      <!-- Subscriptions -->
+      <section id="subscriptions" class="tab-content">
+        <div class="header"><h2>Subscriptions</h2><button class="btn btn-primary" onclick="openSubscriptionModal()">+ Sell Subscription</button></div>
+        <div class="tabs">
+          <button class="tab active" data-tab="active-subs" onclick="switchSubTab('active-subs', this)">Active</button>
+          <button class="tab" data-tab="all-subs" onclick="switchSubTab('all-subs', this)">All</button>
+          <button class="tab" data-tab="plans" onclick="switchSubTab('plans', this)">Plans</button>
+        </div>
+        <div id="tab-active-subs" class="tab-content active">
+          <div id="active-subscriptions-list"></div>
+        </div>
+        <div id="tab-all-subs" class="tab-content">
+          <div id="all-subscriptions-list"></div>
+        </div>
+        <div id="tab-plans" class="tab-content">
+          <div class="toolbar"><button class="btn btn-secondary" onclick="openPlanModal()">+ Add Plan</button></div>
+          <div id="subscription-plans-list"></div>
+        </div>
+      </section>
+
+      <!-- Notifications -->
+      <section id="notifications" class="tab-content">
+        <div class="header"><h2>Message Log</h2></div>
+        <p style="color: var(--text-secondary);">WhatsApp booking confirmations and 12-hour reminders appear here.</p>
+        <div id="notifications-list"></div>
+      </section>
+
+      <!-- Settings -->
+      <section id="settings" class="tab-content">
+        <div class="header"><h2>Settings</h2></div>
+        <div class="card" id="settings-form"></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Booking Modal -->
+  <div class="modal-overlay" id="booking-modal">
+    <div class="modal">
+      <div class="modal-header"><h3>Book Session</h3><button class="close-btn" onclick="closeModal('booking-modal')">&times;</button></div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Client</label>
+          <select id="booking-client-id" onchange="toggleNewClient()">
+            <option value="">+ New client</option>
+          </select>
+        </div>
+        <div id="new-client-fields">
+          <div class="form-group"><label>New client name</label><input type="text" id="booking-client-name" class="input"></div>
+          <div class="form-group"><label>Phone (WhatsApp)</label><input type="tel" id="booking-client-phone" class="input" placeholder="0501234567"></div>
+        </div>
+        <div class="form-group"><label>Service</label><select id="booking-service-id"></select></div>
+        <div class="form-group"><label>Date</label><input type="date" id="booking-date" class="input"></div>
+        <div class="form-group"><label>Time</label><input type="time" id="booking-time" class="input"></div>
+        <div class="form-group"><label>Notes</label><textarea id="booking-notes"></textarea></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('booking-modal')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveBooking()">Book &amp; Notify</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Client Modal -->
+  <div class="modal-overlay" id="client-modal">
+    <div class="modal">
+      <div class="modal-header"><h3 id="client-modal-title">Add Client</h3><button class="close-btn" onclick="closeModal('client-modal')">&times;</button></div>
+      <div class="modal-body">
+        <input type="hidden" id="client-id">
+        <div class="form-group"><label>Name</label><input type="text" id="client-name" class="input"></div>
+        <div class="form-group"><label>Phone</label><input type="tel" id="client-phone" class="input"></div>
+        <div class="form-group"><label>Email</label><input type="email" id="client-email" class="input"></div>
+        <div class="form-group"><label>Notes</label><textarea id="client-notes"></textarea></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('client-modal')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveClient()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Service Modal -->
+  <div class="modal-overlay" id="service-modal">
+    <div class="modal">
+      <div class="modal-header"><h3 id="service-modal-title">Add Service</h3><button class="close-btn" onclick="closeModal('service-modal')">&times;</button></div>
+      <div class="modal-body">
+        <input type="hidden" id="service-id">
+        <div class="form-group"><label>Name</label><input type="text" id="service-name" class="input"></div>
+        <div class="form-group"><label>Duration (minutes)</label><input type="number" id="service-duration" class="input"></div>
+        <div class="form-group"><label>Price (AED)</label><input type="number" step="0.01" id="service-price" class="input"></div>
+        <div class="form-group"><label>Color</label><input type="color" id="service-color" class="input" style="height:44px;padding:4px;"></div>
+        <div class="form-group"><label>Description</label><textarea id="service-description"></textarea></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('service-modal')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveService()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Subscription Plan Modal -->
+  <div class="modal-overlay" id="plan-modal">
+    <div class="modal">
+      <div class="modal-header"><h3 id="plan-modal-title">Add Plan</h3><button class="close-btn" onclick="closeModal('plan-modal')">&times;</button></div>
+      <div class="modal-body">
+        <input type="hidden" id="plan-id">
+        <div class="form-group"><label>Name</label><input type="text" id="plan-name" class="input"></div>
+        <div class="form-group"><label>Sessions included</label><input type="number" id="plan-sessions" class="input"></div>
+        <div class="form-group"><label>Validity (days, optional)</label><input type="number" id="plan-days" class="input"></div>
+        <div class="form-group"><label>Price (AED)</label><input type="number" step="0.01" id="plan-price" class="input"></div>
+        <div class="form-group"><label>Description</label><textarea id="plan-description"></textarea></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('plan-modal')">Cancel</button>
+        <button class="btn btn-primary" onclick="savePlan()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Subscription Modal -->
+  <div class="modal-overlay" id="subscription-modal">
+    <div class="modal">
+      <div class="modal-header"><h3 id="subscription-modal-title">Sell Subscription</h3><button class="close-btn" onclick="closeModal('subscription-modal')">&times;</button></div>
+      <div class="modal-body">
+        <input type="hidden" id="subscription-id">
+        <div class="form-group"><label>Client</label><select id="subscription-client-id" class="input"></select></div>
+        <div class="form-group"><label>Plan</label><select id="subscription-plan-id" class="input" onchange="fillPlanDefaults()"></select></div>
+        <div class="form-group"><label>Start date</label><input type="date" id="subscription-start" class="input"></div>
+        <div class="form-group"><label>End date (optional)</label><input type="date" id="subscription-end" class="input"></div>
+        <div class="form-group"><label>Total sessions</label><input type="number" id="subscription-total" class="input"></div>
+        <div class="form-group"><label>Sessions used</label><input type="number" id="subscription-used" class="input" value="0"></div>
+        <div class="form-group"><label>Price paid (AED)</label><input type="number" step="0.01" id="subscription-price" class="input"></div>
+        <div class="form-group"><label>Status</label><select id="subscription-status" class="input"><option value="active">Active</option><option value="expired">Expired</option><option value="cancelled">Cancelled</option></select></div>
+        <div class="form-group"><label>Notes</label><textarea id="subscription-notes"></textarea></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('subscription-modal')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveSubscription()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const API = '/api';
+    let currentWeekStart = getWeekStart(new Date());
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    function showTab(tab, el) {
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      document.getElementById(tab).classList.add('active');
+      document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+      if (el) el.classList.add('active');
+      if (tab === 'dashboard') loadDashboard();
+      if (tab === 'calendar') loadCalendar();
+      if (tab === 'clients') loadClients();
+      if (tab === 'services') loadServices();
+      if (tab === 'subscriptions') loadSubscriptions();
+      if (tab === 'notifications') loadNotifications();
+      if (tab === 'settings') loadSettings();
+    }
+
+    function switchSubTab(tab, el) {
+      document.querySelectorAll('#subscriptions .tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('#subscriptions .tab-content').forEach(c => c.classList.remove('active'));
+      if (el) el.classList.add('active');
+      document.getElementById('tab-' + tab).classList.add('active');
+      if (tab === 'active-subs') loadActiveSubscriptions();
+      if (tab === 'all-subs') loadAllSubscriptions();
+      if (tab === 'plans') loadSubscriptionPlans();
+    }
+
+    async function api(method, path, body) {
+      const opts = { method, headers: {} };
+      if (body) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+      const res = await fetch(API + path, opts);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || `Error ${res.status}`);
+      }
+      return res.status === 204 ? null : res.json();
+    }
+
+    async function loadDashboard() {
+      const [stats, revenue] = await Promise.all([api('GET', '/dashboard/'), api('GET', '/dashboard/revenue')]);
+      document.getElementById('stats').innerHTML = `
+        <div class="card"><div class="stat-label">Total Clients</div><div class="stat-value">${stats.total_clients}</div></div>
+        <div class="card"><div class="stat-label">Active Services</div><div class="stat-value">${stats.total_services}</div></div>
+        <div class="card"><div class="stat-label">Upcoming</div><div class="stat-value">${stats.upcoming_appointments}</div></div>
+        <div class="card"><div class="stat-label">This Week</div><div class="stat-value">${stats.appointments_this_week}</div></div>
+      `;
+      document.getElementById('revenue-total').textContent = 'AED ' + revenue.total_revenue.toFixed(2);
+      document.getElementById('revenue-breakdown').textContent = `${revenue.appointment_count} appointments · ${revenue.subscription_count} subscriptions · ${revenue.week_start} to ${revenue.week_end}`;
+      const byService = document.getElementById('revenue-by-service');
+      if (revenue.by_service.length) {
+        byService.innerHTML = revenue.by_service.map(s => `
+          <div style="text-align:center;min-width:100px;">
+            <div style="font-size:1.1rem;font-weight:700;">AED ${s.revenue.toFixed(2)}</div>
+            <div style="font-size:0.75rem;color:var(--text-secondary);">${s.name} (${s.count})</div>
+          </div>
+        `).join('');
+      } else {
+        byService.innerHTML = '<div style="color:var(--text-secondary);font-size:0.85rem;">No appointment revenue this week.</div>';
+      }
+      const list = document.getElementById('upcoming-list');
+      if (!stats.recent_appointments.length) { list.innerHTML = '<div class="card empty">No upcoming sessions.</div>'; return; }
+      list.innerHTML = `<table><thead><tr><th>Client</th><th>Service</th><th>Date</th><th>Status</th><th></th></tr></thead><tbody>` +
+        stats.recent_appointments.map(a => `
+          <tr>
+            <td><strong>${a.client.name}</strong><br><small>${a.client.phone}</small></td>
+            <td>${a.service.name}</td>
+            <td>${formatDateTime(a.start_time)}</td>
+            <td><span class="badge badge-${a.status}">${a.status}</span></td>
+            <td><button class="btn btn-secondary btn-sm" onclick="sendReminder(${a.id})">Remind</button></td>
+          </tr>
+        `).join('') + '</tbody></table>';
+    }
+
+    function getWeekStart(d) { const date = new Date(d); const day = date.getDay(); date.setDate(date.getDate() - day); date.setHours(0,0,0,0); return date; }
+    function changeWeek(days) { currentWeekStart.setDate(currentWeekStart.getDate() + days); loadCalendar(); }
+
+    async function loadCalendar() {
+      const fromDate = currentWeekStart.toISOString();
+      const end = new Date(currentWeekStart); end.setDate(end.getDate() + 7);
+      const [appointments] = await Promise.all([
+        api('GET', `/appointments/?from_date=${encodeURIComponent(fromDate)}&to_date=${encodeURIComponent(end.toISOString())}`)
+      ]);
+      const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      let html = `<div class="calendar-header">Time</div>`;
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(currentWeekStart); d.setDate(d.getDate() + i);
+        html += `<div class="calendar-header">${days[d.getDay()]}<br>${d.getDate()} ${months[d.getMonth()]}</div>`;
+      }
+      document.getElementById('calendar-week-label').textContent = `${dstr(currentWeekStart)} - ${dstr(new Date(currentWeekStart.getTime() + 6*86400000))}`;
+      const eventsByDaySlot = {};
+      appointments.forEach(a => {
+        const start = new Date(a.start_time);
+        const dayIdx = Math.floor((start - currentWeekStart) / 86400000);
+        if (dayIdx < 0 || dayIdx > 6) return;
+        const hour = start.getHours();
+        const key = `${dayIdx}-${hour}`;
+        if (!eventsByDaySlot[key]) eventsByDaySlot[key] = [];
+        eventsByDaySlot[key].push(a);
+      });
+      for (let h = 0; h < 24; h++) {
+        const label = h === 0 ? '12 AM' : h === 12 ? '12 PM' : h > 12 ? `${h-12} PM` : `${h} AM`;
+        html += `<div class="calendar-time">${label}</div>`;
+        for (let d = 0; d < 7; d++) {
+          const key = `${d}-${h}`;
+          const evs = eventsByDaySlot[key] || [];
+          html += `<div class="calendar-cell">${evs.map(a => `
+            <div class="calendar-event" style="background:${a.service.color}" onclick="openBookingModal(${a.id})">
+              <strong>${a.client.name}</strong><br>
+              <small>${new Date(a.start_time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} · ${a.service.name}</small>
+            </div>
+          `).join('')}</div>`;
+        }
+      }
+      document.getElementById('calendar-grid').innerHTML = html;
+    }
+
+    function dstr(d) { return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); }
+    function formatDateTime(iso) { return new Date(iso).toLocaleString('en-GB', { day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }); }
+
+    async function loadClients() {
+      const q = document.getElementById('client-search').value;
+      const clients = await api('GET', `/clients/?q=${encodeURIComponent(q)}`);
+      const div = document.getElementById('clients-list');
+      if (!clients.length) { div.innerHTML = '<div class="card empty">No clients found.</div>'; return; }
+      div.innerHTML = `<table><thead><tr><th>Name</th><th>Phone</th><th>Email</th><th>Actions</th></tr></thead><tbody>` +
+        clients.map(c => `<tr>
+          <td><strong>${c.name}</strong></td>
+          <td>${c.phone}</td>
+          <td>${c.email || '-'}</td>
+          <td>
+            <button class="btn btn-secondary btn-sm" onclick="editClient(${c.id}, '${esc(c.name)}', '${esc(c.phone)}', '${esc(c.email||'')}', '${esc(c.notes||'')}')">Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteClient(${c.id})">Delete</button>
+          </td>
+        </tr>`).join('') + '</tbody></table>';
+      updateClientSelect(clients);
+    }
+
+    async function loadServices() {
+      const services = await api('GET', '/services/');
+      const div = document.getElementById('services-list');
+      if (!services.length) { div.innerHTML = '<div class="card empty">No services yet.</div>'; return; }
+      div.innerHTML = `<table><thead><tr><th>Name</th><th>Duration</th><th>Price</th><th>Actions</th></tr></thead><tbody>` +
+        services.map(s => `<tr>
+          <td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${s.color};margin-right:8px;"></span>${s.name}</td>
+          <td>${s.duration_minutes} min</td>
+          <td>${s.price ? 'AED '+s.price.toFixed(2) : '-'}</td>
+          <td>
+            <button class="btn btn-secondary btn-sm" onclick="editService(${s.id}, '${esc(s.name)}', ${s.duration_minutes}, ${s.price||0}, '${s.color}', '${esc(s.description||'')}')">Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteService(${s.id})">Delete</button>
+          </td>
+        </tr>`).join('') + '</tbody></table>';
+      updateServiceSelect(services);
+    }
+
+    async function loadSubscriptions() {
+      loadActiveSubscriptions();
+    }
+
+    async function loadSubscriptionPlans() {
+      const plans = await api('GET', '/subscriptions/plans');
+      const div = document.getElementById('subscription-plans-list');
+      if (!plans.length) { div.innerHTML = '<div class="card empty">No plans yet.</div>'; return; }
+      div.innerHTML = `<table><thead><tr><th>Name</th><th>Sessions</th><th>Validity</th><th>Price</th><th>Actions</th></tr></thead><tbody>` +
+        plans.map(p => `<tr>
+          <td>${esc(p.name)}</td>
+          <td>${p.sessions_included}</td>
+          <td>${p.duration_days ? p.duration_days + ' days' : 'No expiry'}</td>
+          <td>AED ${p.price.toFixed(2)}</td>
+          <td>
+            <button class="btn btn-secondary btn-sm" onclick="editPlan(${p.id}, '${esc(p.name)}', ${p.sessions_included}, ${p.duration_days||'null'}, ${p.price}, '${esc(p.description||'')}')">Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="deletePlan(${p.id})">Delete</button>
+          </td>
+        </tr>`).join('') + '</tbody></table>';
+    }
+
+    function renderSubscriptions(subs, elementId) {
+      const div = document.getElementById(elementId);
+      if (!subs.length) { div.innerHTML = '<div class="card empty">No subscriptions.</div>'; return; }
+      div.innerHTML = `<table><thead><tr><th>Client</th><th>Plan</th><th>Sessions</th><th>Paid</th><th>Status</th><th>Actions</th></tr></thead><tbody>` +
+        subs.map(s => `<tr>
+          <td><strong>${esc(s.client.name)}</strong><br><small>${s.client.phone}</small></td>
+          <td>${esc(s.plan.name)}</td>
+          <td>${s.sessions_used} / ${s.sessions_total}</td>
+          <td>AED ${s.price_paid.toFixed(2)}</td>
+          <td><span class="badge badge-${s.status === 'active' ? 'scheduled' : 'cancelled'}">${s.status}</span></td>
+          <td>
+            <button class="btn btn-secondary btn-sm" onclick="editSubscription(${s.id}, ${s.client_id}, ${s.plan_id}, '${s.start_date.split('T')[0]}', '${s.end_date ? s.end_date.split('T')[0] : ''}', ${s.sessions_total}, ${s.sessions_used}, ${s.price_paid}, '${s.status}', '${esc(s.notes||'')}')">Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteSubscription(${s.id})">Delete</button>
+          </td>
+        </tr>`).join('') + '</tbody></table>';
+    }
+
+    async function loadActiveSubscriptions() {
+      const subs = await api('GET', '/subscriptions/?active=true');
+      renderSubscriptions(subs, 'active-subscriptions-list');
+    }
+
+    async function loadAllSubscriptions() {
+      const subs = await api('GET', '/subscriptions/');
+      renderSubscriptions(subs, 'all-subscriptions-list');
+    }
+
+    async function loadNotifications() {
+      const logs = await api('GET', '/notifications/logs?limit=50');
+      const div = document.getElementById('notifications-list');
+      if (!logs.length) { div.innerHTML = '<div class="card empty">No messages sent yet.</div>'; return; }
+      div.innerHTML = `<table><thead><tr><th>Time</th><th>To</th><th>Type</th><th>Status</th><th>Message</th></tr></thead><tbody>` +
+        logs.map(l => `<tr>
+          <td>${formatDateTime(l.created_at)}</td>
+          <td>${l.appointment?.client?.name || 'Unknown'}</td>
+          <td>${l.type.replace('_',' ')}</td>
+          <td><span class="badge badge-${l.status}">${l.status}</span></td>
+          <td><small>${esc(l.content).replace(/\n/g, '<br>')}</small></td>
+        </tr>`).join('') + '</tbody></table>';
+    }
+
+    async function loadSettings() {
+      const s = await api('GET', '/settings/');
+      const provider = s.whatsapp_provider || 'demo';
+      document.getElementById('settings-form').innerHTML = `
+        <div class="setting-row">
+          <div><strong>Demo mode</strong><p style="margin:4px 0 0;color:var(--text-secondary);font-size:0.85rem;">Log messages locally instead of sending real WhatsApp.</p></div>
+          <label class="toggle"><input type="checkbox" id="setting-demo" ${s.demo_mode ? 'checked' : ''}><span class="slider"></span></label>
+        </div>
+        <div class="setting-row">
+          <div><strong>WhatsApp enabled</strong></div>
+          <label class="toggle"><input type="checkbox" id="setting-whatsapp" ${s.whatsapp_enabled ? 'checked' : ''}><span class="slider"></span></label>
+        </div>
+        <div class="form-group" style="margin-top:16px;">
+          <label>WhatsApp provider</label>
+          <select id="setting-provider" class="input" onchange="toggleProviderFields()">
+            <option value="demo" ${provider==='demo'?'selected':''}>Demo (log only)</option>
+            <option value="whatsapp_web" ${provider==='whatsapp_web'?'selected':''}>WhatsApp Web (free, own number)</option>
+            <option value="twilio" ${provider==='twilio'?'selected':''}>Twilio</option>
+          </select>
+        </div>
+        <div id="provider-whatsapp-web" style="display:${provider==='whatsapp_web'?'block':'none'};padding:16px;background:var(--bg);border-radius:12px;margin-bottom:16px;">
+          <strong>WhatsApp Web pairing</strong>
+          <p style="margin:4px 0 12px;color:var(--text-secondary);font-size:0.85rem;">Scan the QR code with the business phone. Messages are sent from that number for free.</p>
+          <div id="whatsapp-qr" style="text-align:center;"><em>Loading status...</em></div>
+        </div>
+        <div id="provider-twilio" style="display:${provider==='twilio'?'block':'none'};">
+          <div class="form-group"><label>Twilio Account SID</label><input type="text" id="setting-sid" class="input" value="${esc(s.twilio_account_sid||'')}"></div>
+          <div class="form-group"><label>Twilio Auth Token</label><input type="password" id="setting-token" class="input" value="${esc(s.twilio_auth_token||'')}"></div>
+          <div class="form-group"><label>Twilio WhatsApp number</label><input type="text" id="setting-phone" class="input" value="${esc(s.twilio_phone_number||'')}" placeholder="whatsapp:+14155238886"></div>
+        </div>
+        <div class="form-group"><label>Business name</label><input type="text" id="setting-business" class="input" value="${esc(s.business_name)}"></div>
+        <div class="form-group"><label>Business phone</label><input type="text" id="setting-business-phone" class="input" value="${esc(s.business_phone||'')}"></div>
+        <div class="form-group"><label>Reminder hours before</label><input type="number" id="setting-hours" class="input" value="${s.reminder_hours_before}"></div>
+        <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+      `;
+      if (provider === 'whatsapp_web') loadWhatsAppStatus();
+    }
+
+    function toggleProviderFields() {
+      const p = document.getElementById('setting-provider').value;
+      document.getElementById('provider-whatsapp-web').style.display = p === 'whatsapp_web' ? 'block' : 'none';
+      document.getElementById('provider-twilio').style.display = p === 'twilio' ? 'block' : 'none';
+      if (p === 'whatsapp_web') loadWhatsAppStatus();
+    }
+
+    async function loadWhatsAppStatus() {
+      const container = document.getElementById('whatsapp-qr');
+      if (!container) return;
+      try {
+        const st = await api('GET', '/notifications/whatsapp-status');
+        if (st.ready) {
+          container.innerHTML = '<div style="color:var(--success);font-weight:600;">✓ Connected and ready</div>';
+        } else if (st.qr_image) {
+          container.innerHTML = `<img src="${st.qr_image}" style="max-width:280px;border-radius:12px;" alt="WhatsApp QR"><p style="font-size:0.8rem;color:var(--text-secondary);">Scan with the business phone</p>`;
+          setTimeout(loadWhatsAppStatus, 5000);
+        } else {
+          container.innerHTML = `<em>Waiting for QR code... (${st.status})</em>`;
+          setTimeout(loadWhatsAppStatus, 3000);
+        }
+      } catch (e) {
+        container.innerHTML = '<em>WhatsApp Web bridge offline. Restart the server.</em>';
+      }
+    }
+
+    function updateClientSelect(clients) {
+      const sel = document.getElementById('booking-client-id');
+      const val = sel.value;
+      sel.innerHTML = '<option value="">+ New client</option>' + clients.map(c => `<option value="${c.id}">${esc(c.name)} (${c.phone})</option>`).join('');
+      sel.value = val;
+    }
+
+    function updateServiceSelect(services) {
+      const sel = document.getElementById('booking-service-id');
+      const val = sel.value;
+      sel.innerHTML = services.map(s => `<option value="${s.id}">${esc(s.name)} (${s.duration_minutes} min)</option>`).join('');
+      sel.value = val || (services[0] && services[0].id);
+    }
+
+    function toggleNewClient() {
+      const show = !document.getElementById('booking-client-id').value;
+      document.getElementById('new-client-fields').style.display = show ? 'block' : 'none';
+    }
+
+    function openBookingModal(id) {
+      document.getElementById('booking-modal').classList.add('active');
+      document.getElementById('booking-date').value = new Date().toISOString().split('T')[0];
+      document.getElementById('booking-time').value = '10:00';
+      document.getElementById('booking-notes').value = '';
+      document.getElementById('booking-client-id').value = '';
+      document.getElementById('booking-client-name').value = '';
+      document.getElementById('booking-client-phone').value = '';
+      toggleNewClient();
+      loadClients();
+      loadServices();
+    }
+
+    function openClientModal() {
+      document.getElementById('client-modal').classList.add('active');
+      document.getElementById('client-modal-title').textContent = 'Add Client';
+      document.getElementById('client-id').value = '';
+      ['client-name','client-phone','client-email','client-notes'].forEach(id => document.getElementById(id).value = '');
+    }
+
+    function openServiceModal() {
+      document.getElementById('service-modal').classList.add('active');
+      document.getElementById('service-modal-title').textContent = 'Add Service';
+      document.getElementById('service-id').value = '';
+      document.getElementById('service-name').value = '';
+      document.getElementById('service-duration').value = '';
+      document.getElementById('service-price').value = '';
+      document.getElementById('service-color').value = '#8b5cf6';
+      document.getElementById('service-description').value = '';
+    }
+
+    function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+    async function saveBooking() {
+      const clientId = document.getElementById('booking-client-id').value;
+      const date = document.getElementById('booking-date').value;
+      const time = document.getElementById('booking-time').value;
+      if (!date || !time) return showToast('Please select date and time');
+      const payload = {
+        service_id: parseInt(document.getElementById('booking-service-id').value),
+        start_time: new Date(`${date}T${time}`).toISOString(),
+        notes: document.getElementById('booking-notes').value,
+      };
+      if (clientId) payload.client_id = parseInt(clientId);
+      else {
+        payload.client_name = document.getElementById('booking-client-name').value;
+        payload.client_phone = document.getElementById('booking-client-phone').value;
+        if (!payload.client_name || !payload.client_phone) return showToast('Please enter client name and phone');
+      }
+      await api('POST', '/appointments/', payload);
+      closeModal('booking-modal');
+      showToast('Session booked. WhatsApp confirmation queued.');
+      loadDashboard();
+      loadCalendar();
+      loadNotifications();
+    }
+
+    async function saveClient() {
+      const id = document.getElementById('client-id').value;
+      const payload = {
+        name: document.getElementById('client-name').value,
+        phone: document.getElementById('client-phone').value,
+        email: document.getElementById('client-email').value || null,
+        notes: document.getElementById('client-notes').value || null,
+      };
+      if (id) await api('PUT', `/clients/${id}`, payload);
+      else await api('POST', '/clients/', payload);
+      closeModal('client-modal');
+      showToast('Client saved');
+      loadClients();
+    }
+
+    async function saveService() {
+      const id = document.getElementById('service-id').value;
+      const payload = {
+        name: document.getElementById('service-name').value,
+        duration_minutes: parseInt(document.getElementById('service-duration').value),
+        price: parseFloat(document.getElementById('service-price').value) || null,
+        color: document.getElementById('service-color').value,
+        description: document.getElementById('service-description').value || null,
+      };
+      if (id) await api('PUT', `/services/${id}`, payload);
+      else await api('POST', '/services/', payload);
+      closeModal('service-modal');
+      showToast('Service saved');
+      loadServices();
+    }
+
+    function openPlanModal() {
+      document.getElementById('plan-modal').classList.add('active');
+      document.getElementById('plan-modal-title').textContent = 'Add Plan';
+      document.getElementById('plan-id').value = '';
+      document.getElementById('plan-name').value = '';
+      document.getElementById('plan-sessions').value = '';
+      document.getElementById('plan-days').value = '';
+      document.getElementById('plan-price').value = '';
+      document.getElementById('plan-description').value = '';
+    }
+
+    async function savePlan() {
+      const id = document.getElementById('plan-id').value;
+      const payload = {
+        name: document.getElementById('plan-name').value,
+        sessions_included: parseInt(document.getElementById('plan-sessions').value),
+        duration_days: document.getElementById('plan-days').value ? parseInt(document.getElementById('plan-days').value) : null,
+        price: parseFloat(document.getElementById('plan-price').value),
+        description: document.getElementById('plan-description').value || null,
+      };
+      if (id) await api('PUT', `/subscriptions/plans/${id}`, payload);
+      else await api('POST', '/subscriptions/plans', payload);
+      closeModal('plan-modal');
+      showToast('Plan saved');
+      loadSubscriptionPlans();
+    }
+
+    function editPlan(id, name, sessions, days, price, description) {
+      document.getElementById('plan-modal').classList.add('active');
+      document.getElementById('plan-modal-title').textContent = 'Edit Plan';
+      document.getElementById('plan-id').value = id;
+      document.getElementById('plan-name').value = name;
+      document.getElementById('plan-sessions').value = sessions;
+      document.getElementById('plan-days').value = days || '';
+      document.getElementById('plan-price').value = price;
+      document.getElementById('plan-description').value = description;
+    }
+
+    async function deletePlan(id) {
+      if (!confirm('Delete this plan?')) return;
+      await api('DELETE', `/subscriptions/plans/${id}`);
+      showToast('Plan deleted');
+      loadSubscriptionPlans();
+    }
+
+    let planCache = [];
+    async function populateSubscriptionSelects() {
+      const [clients, plans] = await Promise.all([api('GET', '/clients/'), api('GET', '/subscriptions/plans')]);
+      planCache = plans;
+      const csel = document.getElementById('subscription-client-id');
+      csel.innerHTML = clients.map(c => `<option value="${c.id}">${esc(c.name)} (${c.phone})</option>`).join('');
+      const psel = document.getElementById('subscription-plan-id');
+      psel.innerHTML = plans.map(p => `<option value="${p.id}">${esc(p.name)} - AED ${p.price.toFixed(2)}</option>`).join('');
+      fillPlanDefaults();
+    }
+
+    function fillPlanDefaults() {
+      const planId = parseInt(document.getElementById('subscription-plan-id').value);
+      const plan = planCache.find(p => p.id === planId);
+      if (!plan) return;
+      const totalEl = document.getElementById('subscription-total');
+      const priceEl = document.getElementById('subscription-price');
+      const startEl = document.getElementById('subscription-start');
+      const endEl = document.getElementById('subscription-end');
+      if (!document.getElementById('subscription-id').value) {
+        if (!totalEl.value) totalEl.value = plan.sessions_included;
+        if (!priceEl.value) priceEl.value = plan.price;
+        if (!startEl.value) {
+          const today = new Date().toISOString().split('T')[0];
+          startEl.value = today;
+          if (plan.duration_days) {
+            const end = new Date();
+            end.setDate(end.getDate() + plan.duration_days);
+            endEl.value = end.toISOString().split('T')[0];
+          }
+        }
+      }
+    }
+
+    function openSubscriptionModal() {
+      document.getElementById('subscription-modal').classList.add('active');
+      document.getElementById('subscription-modal-title').textContent = 'Sell Subscription';
+      document.getElementById('subscription-id').value = '';
+      document.getElementById('subscription-start').value = '';
+      document.getElementById('subscription-end').value = '';
+      document.getElementById('subscription-total').value = '';
+      document.getElementById('subscription-used').value = '0';
+      document.getElementById('subscription-price').value = '';
+      document.getElementById('subscription-status').value = 'active';
+      document.getElementById('subscription-notes').value = '';
+      populateSubscriptionSelects();
+    }
+
+    async function saveSubscription() {
+      const id = document.getElementById('subscription-id').value;
+      const payload = {
+        client_id: parseInt(document.getElementById('subscription-client-id').value),
+        plan_id: parseInt(document.getElementById('subscription-plan-id').value),
+        start_date: new Date(document.getElementById('subscription-start').value).toISOString(),
+        end_date: document.getElementById('subscription-end').value ? new Date(document.getElementById('subscription-end').value).toISOString() : null,
+        sessions_total: parseInt(document.getElementById('subscription-total').value),
+        sessions_used: parseInt(document.getElementById('subscription-used').value),
+        price_paid: parseFloat(document.getElementById('subscription-price').value),
+        status: document.getElementById('subscription-status').value,
+        notes: document.getElementById('subscription-notes').value || null,
+      };
+      if (id) await api('PUT', `/subscriptions/${id}`, payload);
+      else await api('POST', '/subscriptions/', payload);
+      closeModal('subscription-modal');
+      showToast('Subscription saved');
+      loadActiveSubscriptions();
+      loadAllSubscriptions();
+      loadDashboard();
+    }
+
+    function editSubscription(id, clientId, planId, startDate, endDate, total, used, price, status, notes) {
+      document.getElementById('subscription-modal').classList.add('active');
+      document.getElementById('subscription-modal-title').textContent = 'Edit Subscription';
+      document.getElementById('subscription-id').value = id;
+      populateSubscriptionSelects().then(() => {
+        document.getElementById('subscription-client-id').value = clientId;
+        document.getElementById('subscription-plan-id').value = planId;
+        document.getElementById('subscription-start').value = startDate;
+        document.getElementById('subscription-end').value = endDate;
+        document.getElementById('subscription-total').value = total;
+        document.getElementById('subscription-used').value = used;
+        document.getElementById('subscription-price').value = price;
+        document.getElementById('subscription-status').value = status;
+        document.getElementById('subscription-notes').value = notes;
+      });
+    }
+
+    async function deleteSubscription(id) {
+      if (!confirm('Delete this subscription?')) return;
+      await api('DELETE', `/subscriptions/${id}`);
+      showToast('Subscription deleted');
+      loadActiveSubscriptions();
+      loadAllSubscriptions();
+      loadDashboard();
+    }
+
+    async function saveSettings() {
+      const provider = document.getElementById('setting-provider').value;
+      await api('PUT', '/settings/', {
+        business_name: document.getElementById('setting-business').value,
+        business_phone: document.getElementById('setting-business-phone').value || null,
+        whatsapp_provider: provider,
+        twilio_account_sid: provider === 'twilio' ? (document.getElementById('setting-sid').value || null) : null,
+        twilio_auth_token: provider === 'twilio' ? (document.getElementById('setting-token').value || null) : null,
+        twilio_phone_number: provider === 'twilio' ? (document.getElementById('setting-phone').value || null) : null,
+        whatsapp_enabled: document.getElementById('setting-whatsapp').checked,
+        demo_mode: document.getElementById('setting-demo').checked,
+        reminder_hours_before: parseInt(document.getElementById('setting-hours').value),
+      });
+      showToast('Settings saved');
+      loadSettings();
+    }
+
+    async function sendReminder(id) {
+      await api('POST', `/notifications/${id}/reminder`);
+      showToast('Reminder sent');
+      loadNotifications();
+      loadDashboard();
+    }
+
+    function editClient(id, name, phone, email, notes) {
+      document.getElementById('client-modal').classList.add('active');
+      document.getElementById('client-modal-title').textContent = 'Edit Client';
+      document.getElementById('client-id').value = id;
+      document.getElementById('client-name').value = name;
+      document.getElementById('client-phone').value = phone;
+      document.getElementById('client-email').value = email;
+      document.getElementById('client-notes').value = notes;
+    }
+
+    function editService(id, name, duration, price, color, description) {
+      document.getElementById('service-modal').classList.add('active');
+      document.getElementById('service-modal-title').textContent = 'Edit Service';
+      document.getElementById('service-id').value = id;
+      document.getElementById('service-name').value = name;
+      document.getElementById('service-duration').value = duration;
+      document.getElementById('service-price').value = price;
+      document.getElementById('service-color').value = color;
+      document.getElementById('service-description').value = description;
+    }
+
+    async function deleteClient(id) {
+      if (!confirm('Delete this client?')) return;
+      await api('DELETE', `/clients/${id}`);
+      showToast('Client deleted');
+      loadClients();
+    }
+
+    async function deleteService(id) {
+      if (!confirm('Delete this service?')) return;
+      await api('DELETE', `/services/${id}`);
+      showToast('Service deleted');
+      loadServices();
+    }
+
+    function esc(s) {
+      if (!s) return '';
+      return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+    }
+
+    // Init
+    loadDashboard();
+  </script>
+</body>
+</html>

@@ -1,9 +1,10 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from backend.database import get_db
-from backend import models, schemas
+from backend import models, schemas, notifications
+from backend.tz import to_utc_naive, utcnow
 
 router = APIRouter(prefix="/api/subscriptions", tags=["Subscriptions"])
 
@@ -13,7 +14,7 @@ def list_plans(active_only: bool = False, db: Session = Depends(get_db)):
     query = db.query(models.SubscriptionPlan)
     if active_only:
         query = query.filter(models.SubscriptionPlan.active == True)
-    return query.order_by(models.SubscriptionPlan.name).all()
+    return query.order_by(models.SubscriptionPlan.price).all()
 
 
 @router.post("/plans", response_model=schemas.SubscriptionPlanResponse)
@@ -42,38 +43,30 @@ def delete_plan(plan_id: int, db: Session = Depends(get_db)):
     db_plan = db.query(models.SubscriptionPlan).filter(models.SubscriptionPlan.id == plan_id).first()
     if not db_plan:
         raise HTTPException(status_code=404, detail="Plan not found")
+    if db_plan.subscriptions:
+        db_plan.active = False
+        db.commit()
+        return {"detail": "Plan has been sold, so it was deactivated instead of deleted"}
     db.delete(db_plan)
     db.commit()
     return {"detail": "Plan deleted"}
 
 
 @router.get("/", response_model=List[schemas.SubscriptionResponse])
-def list_subscriptions(
-    client_id: Optional[int] = None,
-    status: Optional[str] = None,
-    active: Optional[bool] = None,
-    db: Session = Depends(get_db),
-):
+def list_subscriptions(client_id: Optional[int] = None, status: Optional[str] = None,
+                       active: Optional[bool] = None, db: Session = Depends(get_db)):
     query = db.query(models.Subscription)
     if client_id:
         query = query.filter(models.Subscription.client_id == client_id)
     if status:
         query = query.filter(models.Subscription.status == status)
+    rows = query.order_by(models.Subscription.created_at.desc()).all()
     if active is not None:
-        now = datetime.utcnow()
-        if active:
-            query = query.filter(
-                (models.Subscription.status == "active") &
-                ((models.Subscription.end_date.is_(None)) | (models.Subscription.end_date >= now)) &
-                (models.Subscription.sessions_used < models.Subscription.sessions_total)
-            )
-        else:
-            query = query.filter(
-                (models.Subscription.status != "active") |
-                ((models.Subscription.end_date.isnot(None)) & (models.Subscription.end_date < now)) |
-                (models.Subscription.sessions_used >= models.Subscription.sessions_total)
-            )
-    return query.order_by(models.Subscription.created_at.desc()).all()
+        now = utcnow()
+        def is_active(s):
+            return s.status == "active" and (s.end_date is None or s.end_date >= now) and s.sessions_remaining > 0
+        rows = [s for s in rows if is_active(s) == active]
+    return rows
 
 
 @router.post("/", response_model=schemas.SubscriptionResponse)
@@ -85,27 +78,29 @@ def create_subscription(sub: schemas.SubscriptionCreate, db: Session = Depends(g
     if not client:
         raise HTTPException(status_code=400, detail="Client not found")
 
-    end_date = sub.end_date
-    if not end_date and plan.duration_days:
-        end_date = sub.start_date + timedelta(days=plan.duration_days)
-
-    sessions_total = sub.sessions_total if sub.sessions_total else plan.sessions_included
-    price_paid = sub.price_paid if sub.price_paid else plan.price
+    start = to_utc_naive(sub.start_date) if sub.start_date else utcnow()
+    end = to_utc_naive(sub.end_date) if sub.end_date else (start + timedelta(days=plan.duration_days) if plan.duration_days else None)
+    sessions_total = sub.sessions_total or plan.sessions_included
+    price_paid = sub.price_paid if sub.price_paid is not None else plan.price
 
     db_sub = models.Subscription(
-        client_id=sub.client_id,
-        plan_id=sub.plan_id,
-        start_date=sub.start_date,
-        end_date=end_date,
-        sessions_total=sessions_total,
-        sessions_used=sub.sessions_used,
-        price_paid=price_paid,
-        status=sub.status,
-        notes=sub.notes,
+        client_id=sub.client_id, plan_id=sub.plan_id, start_date=start, end_date=end,
+        sessions_total=sessions_total, sessions_used=sub.sessions_used, price_paid=price_paid,
+        status=sub.status, notes=sub.notes,
     )
     db.add(db_sub)
     db.commit()
     db.refresh(db_sub)
+    if sub.record_payment and price_paid > 0:
+        db.add(models.Payment(client_id=client.id, subscription_id=db_sub.id, amount=price_paid,
+                              method=sub.payment_method or "cash", paid_at=utcnow(), notes=f"{plan.name}"))
+        db.commit()
+        db.refresh(db_sub)
+    if sub.send_notification:
+        try:
+            notifications.send_subscription_purchase(db, db_sub)
+        except Exception as e:
+            print(f"[notify] subscription purchase failed: {e}")
     return db_sub
 
 
@@ -114,7 +109,11 @@ def update_subscription(subscription_id: int, sub: schemas.SubscriptionUpdate, d
     db_sub = db.query(models.Subscription).filter(models.Subscription.id == subscription_id).first()
     if not db_sub:
         raise HTTPException(status_code=404, detail="Subscription not found")
-    for key, value in sub.model_dump(exclude_unset=True).items():
+    data = sub.model_dump(exclude_unset=True)
+    for k in ("start_date", "end_date"):
+        if data.get(k) is not None:
+            data[k] = to_utc_naive(data[k])
+    for key, value in data.items():
         setattr(db_sub, key, value)
     db.commit()
     db.refresh(db_sub)
@@ -126,6 +125,10 @@ def delete_subscription(subscription_id: int, db: Session = Depends(get_db)):
     db_sub = db.query(models.Subscription).filter(models.Subscription.id == subscription_id).first()
     if not db_sub:
         raise HTTPException(status_code=404, detail="Subscription not found")
+    for a in db_sub.appointments:
+        a.subscription_id = None
+    for p in db_sub.payments:
+        p.subscription_id = None
     db.delete(db_sub)
     db.commit()
     return {"detail": "Subscription deleted"}

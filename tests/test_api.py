@@ -1,0 +1,158 @@
+"""End-to-end API tests against a throwaway SQLite database."""
+import os
+import tempfile
+from datetime import datetime, timedelta, timezone
+
+os.environ["LUZ_DATA_DIR"] = tempfile.mkdtemp(prefix="luz-test-")
+os.environ["LUZ_DISABLE_JOBS"] = "1"
+os.environ["LUZ_DISABLE_WHATSAPP_BRIDGE"] = "1"
+os.environ["LUZ_ADMIN_PASSWORD"] = "test-pass"
+
+import pytest
+from fastapi.testclient import TestClient
+from backend.main import app
+
+
+@pytest.fixture(scope="module")
+def client():
+    with TestClient(app) as c:
+        r = c.post("/api/auth/login", json={"password": "test-pass"})
+        assert r.status_code == 200, r.text
+        c.headers["Authorization"] = f"Bearer {r.json()['token']}"
+        yield c
+
+
+def next_weekday_at(hour, days_ahead=1):
+    """A UTC datetime for `hour` Dubai time, on a weekday at least days_ahead away."""
+    d = datetime.now(timezone.utc) + timedelta(days=days_ahead)
+    while d.weekday() >= 5:
+        d += timedelta(days=1)
+    local = d.replace(hour=hour, minute=0, second=0, microsecond=0, tzinfo=timezone(timedelta(hours=4)))
+    return local.astimezone(timezone.utc)
+
+
+def test_requires_auth():
+    with TestClient(app) as c:
+        assert c.get("/api/clients/").status_code == 401
+        assert c.post("/api/auth/login", json={"password": "wrong"}).status_code == 401
+        assert c.get("/api/public/info").status_code == 200
+
+
+def test_seeded_defaults(client):
+    assert len(client.get("/api/services/").json()) >= 3
+    assert len(client.get("/api/settings/hours").json()) == 7
+    assert len(client.get("/api/notifications/templates").json()) >= 8
+
+
+def test_booking_flow_with_notifications_and_payment(client):
+    r = client.post("/api/clients/", json={"name": "Test Client", "phone": "0501112222", "email": "t@example.com"})
+    cid = r.json()["id"]
+    svc = client.get("/api/services/").json()[0]
+    start = next_weekday_at(10)
+    r = client.post("/api/appointments/", json={"client_id": cid, "service_id": svc["id"], "start_time": start.isoformat()})
+    assert r.status_code == 200, r.text
+    appt = r.json()
+    assert appt["status"] == "scheduled"
+    assert appt["price"] == svc["price"]
+    assert appt["public_token"]
+
+    # Confirmation went out on whatsapp + email (demo mode)
+    logs = client.get(f"/api/notifications/logs?client_id={cid}").json()
+    channels = {l["channel"] for l in logs if l["type"] == "booking_confirmation"}
+    assert channels == {"whatsapp", "email"}
+    assert all(l["status"] == "sent" for l in logs)
+    assert "Test" in logs[0]["content"]
+
+    # Double booking is rejected (single machine)
+    r = client.post("/api/appointments/", json={"client_name": "Other", "client_phone": "0509998888",
+                                                "service_id": svc["id"], "start_time": start.isoformat()})
+    assert r.status_code == 409
+    # ...but allowed with force
+    r = client.post("/api/appointments/", json={"client_name": "Other", "client_phone": "0509998888",
+                                                "service_id": svc["id"], "start_time": start.isoformat(), "force": True})
+    assert r.status_code == 200
+
+    # Outside opening hours is rejected
+    r = client.post("/api/appointments/", json={"client_id": cid, "service_id": svc["id"],
+                                                "start_time": next_weekday_at(23, 2).isoformat()})
+    assert r.status_code == 409
+
+    # Availability hides the taken slot
+    day = start.astimezone(timezone(timedelta(hours=4))).date().isoformat()
+    av = client.get(f"/api/appointments/availability?service_id={svc['id']}&date={day}").json()
+    assert av["open"]
+    taken = [s for s in av["slots"] if s["start_time"].startswith(start.strftime("%Y-%m-%dT%H:%M"))]
+    assert taken and not taken[0]["available"]
+
+    # Reschedule sends a reschedule message
+    new_start = start + timedelta(hours=3)
+    r = client.put(f"/api/appointments/{appt['id']}", json={"start_time": new_start.isoformat()})
+    assert r.status_code == 200, r.text
+    types = {l["type"] for l in client.get(f"/api/notifications/logs?client_id={cid}").json()}
+    assert "reschedule" in types
+
+    # Complete with payment
+    r = client.post(f"/api/appointments/{appt['id']}/status",
+                    json={"status": "completed", "payment_amount": svc["price"], "payment_method": "card"})
+    assert r.status_code == 200
+    assert r.json()["paid_amount"] == svc["price"]
+    assert r.json()["balance_due"] == 0
+
+    # Revenue report sees the payment
+    today = datetime.now().date().isoformat()
+    rep = client.get(f"/api/reports/summary?from={today}&to={today}").json()
+    assert rep["collected"] >= svc["price"]
+    assert rep["by_method"][0]["method"] == "card"
+
+
+def test_subscription_consumes_sessions_and_refunds_on_cancel(client):
+    cid = client.post("/api/clients/", json={"name": "Pack Client", "phone": "0503334444"}).json()["id"]
+    plan = client.get("/api/subscriptions/plans").json()[0]
+    r = client.post("/api/subscriptions/", json={"client_id": cid, "plan_id": plan["id"], "payment_method": "cash"})
+    assert r.status_code == 200, r.text
+    sub = r.json()
+    assert sub["sessions_remaining"] == plan["sessions_included"]
+    assert sub["paid_amount"] == plan["price"]
+    svc = [s for s in client.get("/api/services/").json() if s["price"]][0]
+    r = client.post("/api/appointments/", json={"client_id": cid, "service_id": svc["id"],
+                                                "start_time": next_weekday_at(16, 3).isoformat()})
+    assert r.status_code == 200, r.text
+    appt = r.json()
+    assert appt["subscription_id"] == sub["id"] and appt["price"] == 0
+    assert client.get(f"/api/subscriptions/?client_id={cid}").json()[0]["sessions_remaining"] == plan["sessions_included"] - 1
+    client.post(f"/api/appointments/{appt['id']}/status", json={"status": "cancelled", "reason": "sick"})
+    assert client.get(f"/api/subscriptions/?client_id={cid}").json()[0]["sessions_remaining"] == plan["sessions_included"]
+    types = [l["type"] for l in client.get(f"/api/notifications/logs?client_id={cid}").json()]
+    assert "cancellation" in types and "subscription_purchase" in types
+
+
+def test_public_booking_and_manage_link(client):
+    info = client.get("/api/public/info").json()
+    svc = info["services"][0]
+    day = next_weekday_at(9, 4)
+    av = client.get(f"/api/public/availability?service_id={svc['id']}&date={day.astimezone(timezone(timedelta(hours=4))).date()}").json()
+    assert av["slots"] and all(s["available"] for s in av["slots"])
+    slot = av["slots"][0]["start_time"]
+    with TestClient(app) as anon:
+        r = anon.post("/api/public/book", json={"name": "Web Client", "phone": "0505556666", "email": "web@example.com",
+                                                "service_id": svc["id"], "start_time": slot})
+        assert r.status_code == 200, r.text
+        token = r.json()["token"]
+        assert anon.get(f"/api/public/appointments/{token}").json()["can_cancel"]
+        assert anon.post(f"/api/public/appointments/{token}/confirm").json()["status"] == "confirmed"
+        assert anon.post(f"/api/public/appointments/{token}/cancel", json={"reason": "travel"}).json()["status"] == "cancelled"
+        # Same slot is bookable again after the cancellation
+        r = anon.post("/api/public/book", json={"name": "Web Client", "phone": "0505556666",
+                                                "service_id": svc["id"], "start_time": slot})
+        assert r.status_code == 200
+    # Admin was alerted and the client was created from the booking
+    logs = client.get("/api/notifications/logs?type=admin_new_booking").json()
+    assert logs
+    assert [c for c in client.get("/api/clients/?q=Web Client").json()][0]["source"] == "online"
+
+
+def test_jobs_run(client):
+    assert client.post("/api/notifications/run-jobs").status_code == 200
+    assert client.get("/api/dashboard/").status_code == 200
+    assert client.get("/api/reports/timeseries?granularity=week").status_code == 200
+    assert client.get("/api/reports/export/payments.csv").status_code == 200

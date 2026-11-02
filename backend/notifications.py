@@ -1,11 +1,126 @@
+"""Multi-channel client notifications (WhatsApp / SMS / email) driven by editable templates."""
 import os
+import smtplib
+import threading
 from datetime import datetime, timedelta
-from typing import Optional
+from email.mime.text import MIMEText
+from typing import Dict, List, Optional
+
 from sqlalchemy.orm import Session
+
 from backend import models
+from backend.database import DATA_DIR, SessionLocal
+from backend.tz import fmt_date, fmt_time, fmt_datetime, utcnow, to_local
+
+# ---------------------------------------------------------------- templates
+DEFAULT_TEMPLATES = {
+    "booking_confirmation": {
+        "name": "Booking confirmation",
+        "subject": "Your {service_name} session is confirmed - {business_name}",
+        "body": (
+            "Hi {client_name},\n\n"
+            "Your *{service_name}* session at *{business_name}* is confirmed.\n\n"
+            "📅 {date}\n⏰ {time}\n⏱ {duration} minutes{staff_line}{price_line}\n\n"
+            "Need to change it? Manage your booking here: {manage_link}\n\n"
+            "You'll get a reminder {reminder_hours} hours before. See you soon!\n{business_name}"
+        ),
+    },
+    "reminder": {
+        "name": "Session reminder",
+        "subject": "Reminder: {service_name} {time_relative} - {business_name}",
+        "body": (
+            "Hi {client_name},\n\n"
+            "⏰ Reminder: your *{service_name}* session at *{business_name}* is {time_relative}.\n\n"
+            "📅 {date}\n⏰ {time}\n⏱ {duration} minutes{staff_line}\n\n"
+            "Reply or use this link if you need to change it: {manage_link}\n\nSee you soon!"
+        ),
+    },
+    "reschedule": {
+        "name": "Booking rescheduled",
+        "subject": "Your session has been moved - {business_name}",
+        "body": (
+            "Hi {client_name},\n\n"
+            "Your *{service_name}* session at *{business_name}* has been rescheduled.\n\n"
+            "📅 New date: {date}\n⏰ New time: {time}\n⏱ {duration} minutes{staff_line}\n\n"
+            "Manage your booking: {manage_link}\n\nSee you then!"
+        ),
+    },
+    "cancellation": {
+        "name": "Booking cancelled",
+        "subject": "Your session was cancelled - {business_name}",
+        "body": (
+            "Hi {client_name},\n\n"
+            "Your *{service_name}* session on {date} at {time} has been cancelled.{reason_line}\n\n"
+            "To book again, contact us on {business_phone} or book online: {booking_link}\n\n{business_name}"
+        ),
+    },
+    "follow_up": {
+        "name": "After-session follow-up",
+        "subject": "Thanks for training with us - {business_name}",
+        "body": (
+            "Hi {client_name},\n\n"
+            "Thanks for your *{service_name}* session today at *{business_name}*! 💪\n\n"
+            "Drink plenty of water and get some rest - EMS works your muscles deeply.\n"
+            "{sessions_remaining_line}"
+            "Ready for the next one? Book here: {booking_link}\n\n{business_name}"
+        ),
+    },
+    "subscription_purchase": {
+        "name": "Package purchased",
+        "subject": "Your {plan_name} is active - {business_name}",
+        "body": (
+            "Hi {client_name},\n\n"
+            "Thank you for purchasing the *{plan_name}* at *{business_name}*.\n\n"
+            "🎟 Sessions: {sessions_total}\n📅 Valid until: {expiry_date}\n💰 Paid: {currency} {amount}\n\n"
+            "Book your sessions here: {booking_link}\n\n{business_name}"
+        ),
+    },
+    "subscription_low": {
+        "name": "Package running low",
+        "subject": "Only {sessions_remaining} sessions left - {business_name}",
+        "body": (
+            "Hi {client_name},\n\n"
+            "You have *{sessions_remaining}* session(s) left on your *{plan_name}* at *{business_name}*.\n\n"
+            "Renew now to keep your momentum going - just reply to this message or call {business_phone}.\n\n{business_name}"
+        ),
+    },
+    "subscription_expiring": {
+        "name": "Package expiring soon",
+        "subject": "Your {plan_name} expires on {expiry_date} - {business_name}",
+        "body": (
+            "Hi {client_name},\n\n"
+            "Your *{plan_name}* at *{business_name}* expires on *{expiry_date}* with "
+            "{sessions_remaining} session(s) remaining.\n\n"
+            "Book them here before they expire: {booking_link}\n\n{business_name}"
+        ),
+    },
+    "admin_new_booking": {
+        "name": "Admin alert: new online booking",
+        "subject": "New online booking: {client_name} - {service_name}",
+        "body": (
+            "📥 New online booking at {business_name}\n\n"
+            "👤 {client_name} ({client_phone})\n✨ {service_name}\n📅 {date} at {time}{staff_line}"
+        ),
+    },
+}
+
+PLACEHOLDERS = [
+    "client_name", "client_phone", "business_name", "business_phone", "business_address", "service_name",
+    "date", "time", "datetime", "duration", "staff_name", "staff_line", "price", "price_line", "currency",
+    "manage_link", "booking_link", "reminder_hours", "time_relative", "reason_line", "plan_name",
+    "sessions_total", "sessions_remaining", "sessions_remaining_line", "expiry_date", "amount",
+]
 
 
-def _get_settings(db: Session):
+def ensure_templates(db: Session):
+    existing = {t.key for t in db.query(models.MessageTemplate).all()}
+    for key, t in DEFAULT_TEMPLATES.items():
+        if key not in existing:
+            db.add(models.MessageTemplate(key=key, name=t["name"], subject=t["subject"], body=t["body"], enabled=True))
+    db.commit()
+
+
+def get_settings(db: Session) -> models.Setting:
     settings = db.query(models.Setting).first()
     if not settings:
         settings = models.Setting()
@@ -15,162 +130,389 @@ def _get_settings(db: Session):
     return settings
 
 
-def _normalize_phone(phone: str) -> str:
-    digits = "".join(c for c in phone if c.isdigit())
-    if digits.startswith("0") and len(digits) >= 9:
+class _SafeDict(dict):
+    def __missing__(self, key):
+        return "{" + key + "}"
+
+
+def render(db: Session, key: str, ctx: Dict[str, str]):
+    tpl = db.query(models.MessageTemplate).filter(models.MessageTemplate.key == key).first()
+    if tpl and not tpl.enabled:
+        return None, None
+    subject = tpl.subject if tpl else DEFAULT_TEMPLATES[key]["subject"]
+    body = tpl.body if tpl else DEFAULT_TEMPLATES[key]["body"]
+    safe = _SafeDict(ctx)
+    return (subject or "").format_map(safe), body.format_map(safe)
+
+
+def build_context(db: Session, client: models.Client, appointment: Optional[models.Appointment] = None,
+                  subscription: Optional[models.Subscription] = None, extra: Optional[dict] = None) -> Dict[str, str]:
+    s = get_settings(db)
+    tz = s.timezone
+    base = (s.public_base_url or "").rstrip("/")
+    ctx = {
+        "client_name": client.name.split(" ")[0] if client.name else "there",
+        "client_full_name": client.name,
+        "client_phone": client.phone,
+        "business_name": s.business_name,
+        "business_phone": s.business_phone or "",
+        "business_address": s.business_address or "",
+        "currency": s.currency,
+        "reminder_hours": str(s.reminder_hours_before),
+        "booking_link": f"{base}/book" if base else "(online booking link)",
+        "staff_line": "", "price_line": "", "reason_line": "", "sessions_remaining_line": "",
+        "time_relative": f"in {s.reminder_hours_before} hours",
+    }
+    if appointment:
+        svc = appointment.service
+        ctx.update({
+            "service_name": svc.name,
+            "date": fmt_date(appointment.start_time, tz),
+            "time": fmt_time(appointment.start_time, tz),
+            "datetime": fmt_datetime(appointment.start_time, tz),
+            "duration": str(svc.duration_minutes),
+            "staff_name": appointment.staff.name if appointment.staff else "",
+            "price": f"{appointment.price:.0f}",
+            "manage_link": f"{base}/a/{appointment.public_token}" if base else "(booking link)",
+        })
+        if appointment.staff:
+            ctx["staff_line"] = f"\n👤 Trainer: {appointment.staff.name}"
+        if appointment.subscription_id:
+            ctx["price_line"] = "\n🎟 Covered by your package"
+        elif appointment.price:
+            ctx["price_line"] = f"\n💰 Price: {s.currency} {appointment.price:.0f}"
+        if appointment.cancel_reason:
+            ctx["reason_line"] = f"\nReason: {appointment.cancel_reason}"
+        sub = appointment.subscription
+        if sub:
+            remaining = max(sub.sessions_total - sub.sessions_used, 0)
+            ctx["sessions_remaining"] = str(remaining)
+            ctx["sessions_remaining_line"] = f"You have {remaining} session(s) left on your {sub.plan.name}.\n\n"
+    if subscription:
+        remaining = max(subscription.sessions_total - subscription.sessions_used, 0)
+        ctx.update({
+            "plan_name": subscription.plan.name,
+            "sessions_total": str(subscription.sessions_total),
+            "sessions_remaining": str(remaining),
+            "expiry_date": fmt_date(subscription.end_date, tz).split(", ", 1)[-1] if subscription.end_date else "no expiry",
+            "amount": f"{subscription.price_paid:.0f}",
+        })
+    if extra:
+        ctx.update(extra)
+    return ctx
+
+
+# ---------------------------------------------------------------- delivery
+def normalize_phone(phone: str) -> str:
+    digits = "".join(c for c in (phone or "") if c.isdigit())
+    if digits.startswith("00"):
+        digits = digits[2:]
+    if digits.startswith("0") and len(digits) in (9, 10):
         digits = "971" + digits[1:]
     elif digits.startswith("5") and len(digits) == 9:
         digits = "971" + digits
-    elif len(digits) == 10 and digits.startswith("05"):
-        digits = "971" + digits[1:]
     return digits
 
 
-def _send_whatsapp_message(
-    db: Session,
-    appointment: models.Appointment,
-    message_type: str,
-    body: str,
-) -> models.NotificationLog:
-    settings = _get_settings(db)
-    to_phone = _normalize_phone(appointment.client.phone)
+def _demo_log(channel: str, to: str, message_type: str, subject: Optional[str], body: str):
+    path = os.path.join(DATA_DIR, "demo_messages.log")
+    try:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(f"\n{'=' * 60}\n{utcnow().isoformat()} UTC | {channel} -> {to} | {message_type}\n")
+            if subject:
+                f.write(f"Subject: {subject}\n")
+            f.write(f"{body}\n")
+    except Exception:
+        pass
 
-    log = models.NotificationLog(
-        appointment_id=appointment.id,
-        type=message_type,
-        channel="whatsapp",
-        status="queued",
-        content=body,
-    )
-    db.add(log)
-    db.commit()
 
-    provider = settings.whatsapp_provider if settings.whatsapp_provider else "demo"
-
-    if provider == "demo" or settings.demo_mode:
-        log.status = "sent"
-        log.external_response = f"DEMO_MODE ({provider}): message logged, not sent"
-        db.commit()
-        # Also append to a local demo log file for easy review
-        demo_log_path = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)), "data", "demo_messages.log"
-        )
-        try:
-            with open(demo_log_path, "a", encoding="utf-8") as f:
-                f.write(f"\n{'='*60}\n")
-                f.write(f"Time: {datetime.utcnow().isoformat()} UTC\n")
-                f.write(f"To: +{to_phone}\n")
-                f.write(f"Provider: {provider}\n")
-                f.write(f"Type: {message_type}\n")
-                f.write(f"Body:\n{body}\n")
-        except Exception:
-            pass
-        return log
-
-    if not settings.whatsapp_enabled:
-        log.status = "failed"
-        log.external_response = "WhatsApp not enabled in settings"
-        db.commit()
-        return log
-
+def _send_whatsapp(settings: models.Setting, to_phone: str, body: str) -> str:
+    provider = settings.whatsapp_provider or "demo"
     if provider == "whatsapp_web":
+        from backend import whatsapp_web_client
+        resp = whatsapp_web_client.send_message(to_phone, body)
+        return f"whatsapp_web: {resp}"
+    from twilio.rest import Client
+    if not all([settings.twilio_account_sid, settings.twilio_auth_token, settings.twilio_phone_number]):
+        raise ValueError("Twilio credentials incomplete")
+    client = Client(settings.twilio_account_sid, settings.twilio_auth_token)
+    sender = settings.twilio_phone_number
+    if not sender.startswith("whatsapp:"):
+        sender = f"whatsapp:{sender}"
+    msg = client.messages.create(from_=sender, body=body, to=f"whatsapp:+{to_phone}")
+    if msg.status in ("failed", "undelivered"):
+        raise RuntimeError(f"twilio status {msg.status}")
+    return f"twilio: sid={msg.sid}; status={msg.status}"
+
+
+def _send_sms(settings: models.Setting, to_phone: str, body: str) -> str:
+    from twilio.rest import Client
+    if not all([settings.twilio_account_sid, settings.twilio_auth_token, settings.twilio_sms_number]):
+        raise ValueError("Twilio SMS credentials incomplete")
+    client = Client(settings.twilio_account_sid, settings.twilio_auth_token)
+    plain = body.replace("*", "")
+    msg = client.messages.create(from_=settings.twilio_sms_number, body=plain, to=f"+{to_phone}")
+    if msg.status in ("failed", "undelivered"):
+        raise RuntimeError(f"twilio status {msg.status}")
+    return f"twilio-sms: sid={msg.sid}; status={msg.status}"
+
+
+def _send_email(settings: models.Setting, to_email: str, subject: str, body: str) -> str:
+    if not settings.smtp_host:
+        raise ValueError("SMTP host not configured")
+    msg = MIMEText(body.replace("*", ""), "plain", "utf-8")
+    msg["Subject"] = subject or settings.business_name
+    msg["From"] = settings.smtp_from or settings.smtp_username or settings.business_email or "noreply@example.com"
+    msg["To"] = to_email
+    port = settings.smtp_port or 587
+    if port == 465:
+        server = smtplib.SMTP_SSL(settings.smtp_host, port, timeout=20)
+    else:
+        server = smtplib.SMTP(settings.smtp_host, port, timeout=20)
+        server.ehlo()
         try:
-            from backend import whatsapp_web_client
-            resp = whatsapp_web_client.send_message(to_phone, body)
+            server.starttls()
+        except smtplib.SMTPException:
+            pass
+    try:
+        if settings.smtp_username:
+            server.login(settings.smtp_username, settings.smtp_password or "")
+        server.sendmail(msg["From"], [to_email], msg.as_string())
+    finally:
+        server.quit()
+    return "smtp: accepted"
+
+
+def _deliver(log_id: int):
+    """Runs in a worker thread with its own session."""
+    db = SessionLocal()
+    try:
+        log = db.query(models.NotificationLog).get(log_id)
+        if not log:
+            return
+        settings = get_settings(db)
+        try:
+            if log.channel == "whatsapp":
+                log.external_response = _send_whatsapp(settings, log.recipient, log.content)
+            elif log.channel == "sms":
+                log.external_response = _send_sms(settings, log.recipient, log.content)
+            elif log.channel == "email":
+                log.external_response = _send_email(settings, log.recipient, log.subject, log.content)
             log.status = "sent"
-            log.external_response = f"whatsapp_web: {resp}"
         except Exception as e:
             log.status = "failed"
-            log.external_response = f"whatsapp_web: {str(e)}"
+            log.external_response = f"{log.channel}: {e}"
         db.commit()
-        return log
+    finally:
+        db.close()
 
-    # Default: Twilio
-    try:
-        from twilio.rest import Client
 
-        if not all([
-            settings.twilio_account_sid,
-            settings.twilio_auth_token,
-            settings.twilio_phone_number,
-        ]):
-            raise ValueError("Twilio credentials incomplete")
+def channels_for(settings: models.Setting, client: models.Client) -> List[str]:
+    out = []
+    if client.phone and client.notify_whatsapp and (settings.whatsapp_enabled or settings.demo_mode):
+        out.append("whatsapp")
+    if client.phone and client.notify_sms and (settings.sms_enabled or settings.demo_mode):
+        out.append("sms")
+    if client.email and client.notify_email and (settings.email_enabled or settings.demo_mode):
+        out.append("email")
+    return out
 
-        client = Client(settings.twilio_account_sid, settings.twilio_auth_token)
-        twilio_msg = client.messages.create(
-            from_=f"whatsapp:{settings.twilio_phone_number}",
-            body=body,
-            to=f"whatsapp:+{to_phone}",
+
+def send(db: Session, key: str, client: models.Client, appointment: Optional[models.Appointment] = None,
+         subscription: Optional[models.Subscription] = None, extra: Optional[dict] = None,
+         channels: Optional[List[str]] = None, raw_body: Optional[str] = None, raw_subject: Optional[str] = None,
+         recipient_override: Optional[dict] = None, sync: bool = False) -> List[models.NotificationLog]:
+    """Render template `key` for the client and send on every channel they accept."""
+    settings = get_settings(db)
+    if raw_body is not None:
+        subject, body = raw_subject or settings.business_name, raw_body
+    else:
+        subject, body = render(db, key, build_context(db, client, appointment, subscription, extra))
+        if body is None:  # template disabled
+            return []
+    chans = channels if channels is not None else channels_for(settings, client)
+    logs: List[models.NotificationLog] = []
+    for channel in chans:
+        if channel == "email":
+            recipient = (recipient_override or {}).get("email") or client.email
+        else:
+            recipient = normalize_phone((recipient_override or {}).get("phone") or client.phone)
+        if not recipient:
+            continue
+        log = models.NotificationLog(
+            appointment_id=appointment.id if appointment else None,
+            client_id=client.id if client.id else None,
+            type=key, channel=channel, recipient=recipient,
+            status="queued", subject=subject if channel == "email" else None, content=body,
         )
-        log.status = "sent" if twilio_msg.status not in ("failed", "undelivered") else "failed"
-        log.external_response = f"twilio: sid={twilio_msg.sid}; status={twilio_msg.status}"
-    except Exception as e:
-        log.status = "failed"
-        log.external_response = f"twilio: {str(e)}"
-
+        db.add(log)
+        logs.append(log)
     db.commit()
-    return log
+    for log in logs:
+        if settings.demo_mode:
+            log.status = "sent"
+            log.external_response = f"DEMO MODE: {log.channel} message logged, not sent"
+            _demo_log(log.channel, log.recipient, key, log.subject, body)
+            db.commit()
+            continue
+        enabled = {"whatsapp": settings.whatsapp_enabled, "sms": settings.sms_enabled, "email": settings.email_enabled}
+        if not enabled.get(log.channel):
+            log.status = "skipped"
+            log.external_response = f"{log.channel} not enabled in settings"
+            db.commit()
+            continue
+        if sync:
+            _deliver(log.id)
+        else:
+            threading.Thread(target=_deliver, args=(log.id,), daemon=True).start()
+    return logs
 
 
-def _format_datetime(dt: datetime) -> str:
-    return dt.strftime("%A, %d %B %Y at %I:%M %p")
+# ---------------------------------------------------------------- high-level events
+def send_booking_confirmation(db, appointment):
+    return send(db, "booking_confirmation", appointment.client, appointment)
 
 
-def send_booking_confirmation(db: Session, appointment: models.Appointment) -> models.NotificationLog:
-    settings = _get_settings(db)
-    body = (
-        f"Hi {appointment.client.name},\n\n"
-        f"Your {appointment.service.name} session at *{settings.business_name}* is confirmed.\n\n"
-        f"📅 Date & Time: {_format_datetime(appointment.start_time)}\n"
-        f"⏱ Duration: {appointment.service.duration_minutes} minutes\n"
-    )
-    if appointment.service.price:
-        body += f"💰 Price: AED {appointment.service.price:.2f}\n"
-    body += (
-        f"\nYou'll receive a reminder {settings.reminder_hours_before} hours before your session.\n\n"
-        f"See you soon!\n{settings.business_name}"
-    )
-    return _send_whatsapp_message(db, appointment, "booking_confirmation", body)
-
-
-def send_reminder(db: Session, appointment: models.Appointment) -> models.NotificationLog:
-    settings = _get_settings(db)
-    body = (
-        f"Hi {appointment.client.name},\n\n"
-        f"⏰ Reminder: You have a *{appointment.service.name}* session at *{settings.business_name}* "
-        f"in {settings.reminder_hours_before} hours.\n\n"
-        f"📅 {_format_datetime(appointment.start_time)}\n"
-        f"⏱ {appointment.service.duration_minutes} minutes\n\n"
-        f"See you soon!"
-    )
-    log = _send_whatsapp_message(db, appointment, "reminder", body)
-    if log.status in ("sent",):
-        appointment.reminder_sent_at = datetime.utcnow()
+def send_reminder(db, appointment):
+    settings = get_settings(db)
+    hours = max(int((appointment.start_time - utcnow()).total_seconds() // 3600), 0)
+    rel = "today" if hours < 1 else ("in 1 hour" if hours == 1 else f"in {hours} hours")
+    logs = send(db, "reminder", appointment.client, appointment, extra={"time_relative": rel})
+    if any(l.status in ("sent", "queued") for l in logs):
+        appointment.reminder_sent_at = utcnow()
         db.commit()
-    return log
+    return logs
 
 
+def send_reschedule(db, appointment):
+    appointment.reminder_sent_at = None  # a new reminder will go out for the new time
+    db.commit()
+    return send(db, "reschedule", appointment.client, appointment)
+
+
+def send_cancellation(db, appointment):
+    return send(db, "cancellation", appointment.client, appointment)
+
+
+def send_follow_up(db, appointment):
+    logs = send(db, "follow_up", appointment.client, appointment)
+    appointment.follow_up_sent_at = utcnow()
+    db.commit()
+    return logs
+
+
+def send_subscription_purchase(db, subscription):
+    return send(db, "subscription_purchase", subscription.client, subscription=subscription)
+
+
+def notify_admin_new_booking(db, appointment):
+    settings = get_settings(db)
+    if not settings.notify_admin_online_booking or not (settings.business_phone or settings.business_email):
+        return []
+    admin = models.Client(name=settings.business_name, phone=settings.business_phone or "",
+                          email=settings.business_email, notify_whatsapp=True, notify_sms=False,
+                          notify_email=bool(settings.business_email))
+    ctx = build_context(db, appointment.client, appointment)
+    subject, body = render(db, "admin_new_booking", ctx)
+    if body is None:
+        return []
+    chans = []
+    if settings.business_phone and (settings.whatsapp_enabled or settings.demo_mode):
+        chans.append("whatsapp")
+    if settings.business_email and (settings.email_enabled or settings.demo_mode):
+        chans.append("email")
+    return send(db, "admin_new_booking", admin, appointment, channels=chans, raw_body=body, raw_subject=subject,
+                recipient_override={"phone": settings.business_phone, "email": settings.business_email})
+
+
+# ---------------------------------------------------------------- background jobs
 def run_reminder_job(db: Session):
-    settings = _get_settings(db)
+    settings = get_settings(db)
     if settings.reminder_hours_before <= 0:
         return
-
-    now = datetime.utcnow()
-    window_start = now
-    window_end = now + timedelta(minutes=5)
-    reminder_due_before = now + timedelta(hours=settings.reminder_hours_before)
-
-    appointments = (
+    now = utcnow()
+    due = (
         db.query(models.Appointment)
-        .filter(models.Appointment.status == "scheduled")
+        .filter(models.Appointment.status.in_(("scheduled", "confirmed")))
         .filter(models.Appointment.reminder_sent_at.is_(None))
-        .filter(models.Appointment.start_time <= reminder_due_before)
-        .filter(models.Appointment.start_time >= window_start)
+        .filter(models.Appointment.start_time <= now + timedelta(hours=settings.reminder_hours_before))
+        .filter(models.Appointment.start_time >= now)
         .all()
     )
-
-    for appointment in appointments:
+    for a in due:
         try:
-            send_reminder(db, appointment)
+            send_reminder(db, a)
         except Exception as e:
-            print(f"Reminder job failed for appointment {appointment.id}: {e}")
+            print(f"[jobs] reminder failed for appointment {a.id}: {e}")
+
+
+def run_auto_complete_job(db: Session):
+    settings = get_settings(db)
+    if not settings.auto_complete_past:
+        return
+    now = utcnow()
+    past = (
+        db.query(models.Appointment)
+        .filter(models.Appointment.status.in_(("scheduled", "confirmed")))
+        .filter(models.Appointment.end_time <= now)
+        .all()
+    )
+    for a in past:
+        a.status = "completed"
+        a.completed_at = a.end_time
+    if past:
+        db.commit()
+
+
+def run_follow_up_job(db: Session):
+    settings = get_settings(db)
+    if not settings.follow_up_enabled:
+        return
+    now = utcnow()
+    due = (
+        db.query(models.Appointment)
+        .filter(models.Appointment.status == "completed")
+        .filter(models.Appointment.follow_up_sent_at.is_(None))
+        .filter(models.Appointment.end_time <= now - timedelta(hours=settings.follow_up_hours_after))
+        .filter(models.Appointment.end_time >= now - timedelta(days=2))  # never spam old history
+        .all()
+    )
+    for a in due:
+        try:
+            send_follow_up(db, a)
+        except Exception as e:
+            print(f"[jobs] follow-up failed for appointment {a.id}: {e}")
+
+
+def run_subscription_job(db: Session):
+    settings = get_settings(db)
+    now = utcnow()
+    subs = db.query(models.Subscription).filter(models.Subscription.status == "active").all()
+    for s in subs:
+        remaining = s.sessions_total - s.sessions_used
+        if s.end_date and s.end_date < now:
+            s.status = "expired"
+            continue
+        if remaining <= 0:
+            s.status = "completed"
+            continue
+        if remaining <= settings.subscription_low_threshold and not s.low_notified_at:
+            send(db, "subscription_low", s.client, subscription=s)
+            s.low_notified_at = now
+        if (s.end_date and not s.expiry_notified_at
+                and s.end_date <= now + timedelta(days=settings.subscription_expiry_notice_days)):
+            send(db, "subscription_expiring", s.client, subscription=s)
+            s.expiry_notified_at = now
+    db.commit()
+
+
+def run_all_jobs(db: Session):
+    """Called every minute by the scheduler."""
+    run_auto_complete_job(db)
+    run_reminder_job(db)
+    run_follow_up_job(db)
+    settings = get_settings(db)
+    if not settings.last_daily_job_at or settings.last_daily_job_at < utcnow() - timedelta(hours=6):
+        run_subscription_job(db)
+        settings.last_daily_job_at = utcnow()
+        db.commit()

@@ -1,72 +1,55 @@
-from datetime import datetime, timedelta
 from backend.database import SessionLocal
 from backend import models
+from backend.notifications import ensure_templates
+
+
+DEFAULT_HOURS = {  # 0 = Monday
+    0: ("07:00", "21:00", False), 1: ("07:00", "21:00", False), 2: ("07:00", "21:00", False),
+    3: ("07:00", "21:00", False), 4: ("07:00", "21:00", False), 5: ("09:00", "18:00", False),
+    6: ("09:00", "14:00", True),
+}
 
 
 def seed_data():
     db = SessionLocal()
     try:
-        # Ensure settings row exists
         settings = db.query(models.Setting).first()
         if not settings:
-            settings = models.Setting(business_name="LUZ EMS", demo_mode=True)
+            settings = models.Setting(business_name="LUZ EMS", demo_mode=True, business_phone="0501234567")
             db.add(settings)
 
-        # Seed services if none
+        if db.query(models.BusinessHours).count() == 0:
+            for dow, (o, c, closed) in DEFAULT_HOURS.items():
+                db.add(models.BusinessHours(day_of_week=dow, open_time=o, close_time=c, closed=closed))
+
         if db.query(models.Service).count() == 0:
-            services = [
-                models.Service(
-                    name="EMS Body Sculpting",
-                    duration_minutes=45,
-                    price=250.0,
-                    color="#8b5cf6",
-                    description="Full body EMS sculpting session",
-                ),
-                models.Service(
-                    name="EMS Recovery",
-                    duration_minutes=30,
-                    price=150.0,
-                    color="#10b981",
-                    description="Post-workout recovery session",
-                ),
-                models.Service(
-                    name="EMS Trial Session",
-                    duration_minutes=20,
-                    price=0.0,
-                    color="#f59e0b",
-                    description="First-time trial session",
-                ),
-            ]
-            db.add_all(services)
+            db.add_all([
+                models.Service(name="EMS Body Sculpting", duration_minutes=45, buffer_minutes=15, price=250.0,
+                               color="#2a78d6", category="EMS", description="Full body EMS sculpting session"),
+                models.Service(name="EMS Recovery", duration_minutes=30, buffer_minutes=15, price=150.0,
+                               color="#1baf7a", category="EMS", description="Post-workout recovery session"),
+                models.Service(name="EMS Strength", duration_minutes=45, buffer_minutes=15, price=250.0,
+                               color="#eb6834", category="EMS", description="Strength-focused EMS training"),
+                models.Service(name="EMS Trial Session", duration_minutes=20, buffer_minutes=10, price=0.0,
+                               color="#eda100", category="Trial", description="First-time trial session"),
+            ])
 
-        # Seed demo clients if none
-        if db.query(models.Client).count() == 0:
-            clients = [
-                models.Client(name="Demo Client", phone="0501234567", email="demo@example.com"),
-                models.Client(name="Sarah Ahmed", phone="0559876543", email="sarah@example.com"),
-            ]
-            db.add_all(clients)
+        if db.query(models.Staff).count() == 0:
+            db.add_all([
+                models.Staff(name="Coach Luz", role="Head Trainer", color="#6250d6"),
+                models.Staff(name="Coach Maya", role="Trainer", color="#e87ba4"),
+            ])
 
-        # Seed subscription plans if none
         if db.query(models.SubscriptionPlan).count() == 0:
-            plans = [
-                models.SubscriptionPlan(
-                    name="10 Sessions Pack",
-                    sessions_included=10,
-                    duration_days=90,
-                    price=2000.0,
-                    description="10 EMS sessions, valid 90 days",
-                ),
-                models.SubscriptionPlan(
-                    name="Monthly Unlimited",
-                    sessions_included=30,
-                    duration_days=30,
-                    price=3000.0,
-                    description="Up to one session per day",
-                ),
-            ]
-            db.add_all(plans)
-
+            db.add_all([
+                models.SubscriptionPlan(name="5 Sessions Pack", sessions_included=5, duration_days=45, price=1100.0,
+                                        description="5 EMS sessions, valid 45 days"),
+                models.SubscriptionPlan(name="10 Sessions Pack", sessions_included=10, duration_days=90, price=2000.0,
+                                        description="10 EMS sessions, valid 90 days"),
+                models.SubscriptionPlan(name="Monthly Unlimited", sessions_included=30, duration_days=30, price=3000.0,
+                                        description="Up to one session per day"),
+            ])
         db.commit()
+        ensure_templates(db)
     finally:
         db.close()

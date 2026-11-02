@@ -1,8 +1,9 @@
 import os
 import requests
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 
-BRIDGE_URL = os.environ.get("WHATSAPP_BRIDGE_URL", "http://127.0.0.1:8020")
+BRIDGE_PORT = os.environ.get("WHATSAPP_BRIDGE_PORT", "8020")
+BRIDGE_URL = os.environ.get("WHATSAPP_BRIDGE_URL", f"http://127.0.0.1:{BRIDGE_PORT}")
 
 
 def get_status() -> Dict[str, Any]:
@@ -15,10 +16,6 @@ def get_status() -> Dict[str, Any]:
 
 
 def send_message(to: str, message: str) -> Dict[str, Any]:
-    r = requests.post(
-        f"{BRIDGE_URL}/send",
-        json={"to": to, "message": message},
-        timeout=30,
-    )
+    r = requests.post(f"{BRIDGE_URL}/send", json={"to": to, "message": message}, timeout=30)
     r.raise_for_status()
     return r.json()

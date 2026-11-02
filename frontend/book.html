@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Book a session</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root { --bg:#f6f7fb; --surface:#fff; --text:#0f172a; --text-2:#64748b; --border:#e5e7ef; --accent:#7c3aed; --accent-dark:#6d28d9; --accent-light:#efe9fe; --good:#0f9f6e; --bad:#dc2626; }
+    * { box-sizing:border-box; } body { margin:0; font-family:'Inter',-apple-system,sans-serif; background:var(--bg); color:var(--text); }
+    .wrap { max-width:620px; margin:0 auto; padding:28px 16px 60px; }
+    .brand { text-align:center; margin-bottom:22px; } .brand h1 { margin:0; font-size:1.6rem; font-weight:800; } .brand h1 span { color:var(--accent); } .brand p { margin:4px 0 0; color:var(--text-2); font-size:.9rem; }
+    .card { background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:22px; box-shadow:0 1px 3px rgba(15,23,42,.06); margin-bottom:14px; }
+    .step { font-size:.72rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--accent); margin-bottom:10px; }
+    h2 { margin:0 0 12px; font-size:1.1rem; }
+    .opts { display:grid; gap:8px; } .opt { display:flex; align-items:center; gap:12px; padding:12px 14px; border:1.5px solid var(--border); border-radius:12px; cursor:pointer; background:var(--surface); text-align:left; font-family:inherit; font-size:.95rem; }
+    .opt:hover { border-color:var(--accent); } .opt.selected { border-color:var(--accent); background:var(--accent-light); }
+    .opt .dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; } .opt .meta { color:var(--text-2); font-size:.8rem; } .opt .price { margin-left:auto; font-weight:700; white-space:nowrap; }
+    .days { display:flex; gap:6px; overflow-x:auto; padding-bottom:6px; } .day { flex:0 0 64px; padding:10px 6px; border:1.5px solid var(--border); border-radius:12px; text-align:center; cursor:pointer; background:var(--surface); font-family:inherit; }
+    .day.selected { border-color:var(--accent); background:var(--accent-light); } .day.closed { opacity:.4; cursor:not-allowed; } .day b { display:block; font-size:1.15rem; } .day small { color:var(--text-2); font-size:.7rem; }
+    .slots { display:flex; flex-wrap:wrap; gap:8px; } .slot { padding:10px 14px; border:1.5px solid var(--border); border-radius:10px; cursor:pointer; background:var(--surface); font-family:inherit; font-weight:600; font-size:.9rem; }
+    .slot.selected { background:var(--accent); color:#fff; border-color:var(--accent); }
+    .input { width:100%; padding:12px 14px; border:1.5px solid var(--border); border-radius:12px; font-family:inherit; font-size:1rem; outline:none; } .input:focus { border-color:var(--accent); }
+    label { display:block; font-size:.8rem; font-weight:600; color:var(--text-2); margin:0 0 6px; } .fg { margin-bottom:14px; }
+    .btn { width:100%; padding:14px; border:none; border-radius:12px; background:var(--accent); color:#fff; font-family:inherit; font-size:1rem; font-weight:700; cursor:pointer; } .btn:disabled { opacity:.5; cursor:not-allowed; } .btn:hover:not(:disabled) { background:var(--accent-dark); }
+    .muted { color:var(--text-2); font-size:.85rem; } .err { color:var(--bad); font-size:.85rem; margin-top:8px; min-height:18px; }
+    .summary { background:var(--accent-light); border-radius:12px; padding:14px; margin-bottom:14px; font-size:.95rem; line-height:1.6; }
+    .done { text-align:center; padding:20px 0; } .done .ok { width:64px; height:64px; border-radius:50%; background:#e6f7f0; color:var(--good); font-size:2rem; display:flex; align-items:center; justify-content:center; margin:0 auto 14px; }
+    a { color:var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="brand"><h1 id="biz-name">LUZ <span>EMS</span></h1><p id="biz-sub">Book your session in under a minute</p></div>
+    <div id="closed" class="card" style="display:none"><h2>Online booking is paused</h2><p class="muted">Please call us to book: <a id="closed-phone" href="#"></a></p></div>
+    <div id="flow">
+      <div class="card"><div class="step">1 · Service</div><div class="opts" id="services"></div></div>
+      <div class="card" id="staff-card" style="display:none"><div class="step">2 · Trainer</div><div class="opts" id="staff"></div></div>
+      <div class="card"><div class="step" id="step-when">2 · Date &amp; time</div><div class="days" id="days"></div><div id="slots" class="slots" style="margin-top:12px"><span class="muted">Pick a service first</span></div></div>
+      <div class="card"><div class="step" id="step-you">3 · Your details</div>
+        <div class="summary" id="summary" style="display:none"></div>
+        <div class="fg"><label>Full name</label><input id="name" class="input" autocomplete="name"></div>
+        <div class="fg"><label>WhatsApp / mobile number</label><input id="phone" class="input" type="tel" placeholder="05x xxx xxxx" autocomplete="tel"></div>
+        <div class="fg"><label>Email (optional)</label><input id="email" class="input" type="email" autocomplete="email"></div>
+        <div class="fg"><label>Anything we should know? (optional)</label><input id="notes" class="input"></div>
+        <button class="btn" id="book-btn" onclick="book()" disabled>Confirm booking</button>
+        <div class="err" id="err"></div>
+        <p class="muted" style="text-align:center;margin:10px 0 0">You'll get a WhatsApp confirmation and a reminder before your session.</p>
+      </div>
+    </div>
+    <div id="done" class="card done" style="display:none"></div>
+  </div>
+  <script>
+    const B = { info: null, service: null, staff: null, date: null, slot: null };
+    function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+    function money(v) { return `${B.info.currency} ${Math.round(v)}`; }
+    function fmtKey(k, o) { const [y,m,d] = k.split('-').map(Number); return new Date(Date.UTC(y,m-1,d)).toLocaleDateString('en-GB', { timeZone:'UTC', ...o }); }
+    function addDays(k, n) { const [y,m,d] = k.split('-').map(Number); return new Date(Date.UTC(y,m-1,d+n)).toISOString().slice(0,10); }
+    function dow(k) { const [y,m,d] = k.split('-').map(Number); return (new Date(Date.UTC(y,m-1,d)).getUTCDay()+6)%7; }
+    async function load() {
+      B.info = await fetch('/api/public/info').then(r => r.json());
+      document.title = `Book a session · ${B.info.business_name}`;
+      document.getElementById('biz-name').innerHTML = esc(B.info.business_name).replace(/ (\S+)$/, ' <span>$1</span>');
+      if (!B.info.online_booking_enabled) { document.getElementById('flow').style.display='none'; document.getElementById('closed').style.display='block'; const a = document.getElementById('closed-phone'); a.textContent = B.info.phone || ''; a.href = 'tel:' + (B.info.phone||''); return; }
+      document.getElementById('services').innerHTML = B.info.services.map(s => `<button class="opt" onclick="pickService(${s.id})"><span class="dot" style="background:${s.color}"></span><span><div><strong>${esc(s.name)}</strong></div><div class="meta">${s.duration_minutes} min${s.description ? ' · ' + esc(s.description) : ''}</div></span><span class="price">${s.price ? money(s.price) : 'Free'}</span></button>`).join('');
+      if (B.info.staff.length > 1) { document.getElementById('staff-card').style.display='block'; document.getElementById('step-when').textContent = '3 · Date & time'; document.getElementById('step-you').textContent = '4 · Your details';
+        document.getElementById('staff').innerHTML = `<button class="opt selected" data-s="" onclick="pickStaff(null)"><span class="dot" style="background:#94a3b8"></span><span><strong>Any available trainer</strong></span></button>` + B.info.staff.map(s => `<button class="opt" data-s="${s.id}" onclick="pickStaff(${s.id})"><span class="dot" style="background:${s.color}"></span><span><div><strong>${esc(s.name)}</strong></div><div class="meta">${esc(s.role||'')}</div></span></button>`).join(''); }
+      const days = []; for (let i = 0; i <= B.info.max_days_ahead && days.length < 21; i++) days.push(addDays(B.info.today, i));
+      document.getElementById('days').innerHTML = days.map(k => { const h = B.info.hours.find(x => x.day_of_week === dow(k)); const closed = !h || h.closed;
+        return `<button class="day ${closed ? 'closed' : ''}" data-d="${k}" ${closed ? 'disabled' : `onclick="pickDate('${k}')"`}><small>${fmtKey(k,{weekday:'short'})}</small><b>${+k.split('-')[2]}</b><small>${fmtKey(k,{month:'short'})}</small></button>`; }).join('');
+      B.date = days.find(k => { const h = B.info.hours.find(x => x.day_of_week === dow(k)); return h && !h.closed; }); markDate();
+    }
+    function pickService(id) { B.service = B.info.services.find(s => s.id === id); document.querySelectorAll('#services .opt').forEach((b, i) => b.classList.toggle('selected', B.info.services[i].id === id)); loadSlots(); }
+    function pickStaff(id) { B.staff = id; document.querySelectorAll('#staff .opt').forEach(b => b.classList.toggle('selected', String(b.dataset.s) === String(id ?? ''))); loadSlots(); }
+    function pickDate(k) { B.date = k; markDate(); loadSlots(); }
+    function markDate() { document.querySelectorAll('.day').forEach(b => b.classList.toggle('selected', b.dataset.d === B.date)); }
+    async function loadSlots() {
+      B.slot = null; update(); const box = document.getElementById('slots');
+      if (!B.service) { box.innerHTML = '<span class="muted">Pick a service first</span>'; return; }
+      box.innerHTML = '<span class="muted">Checking availability…</span>';
+      const r = await fetch(`/api/public/availability?service_id=${B.service.id}&date=${B.date}${B.staff ? '&staff_id=' + B.staff : ''}`); const av = await r.json();
+      if (!r.ok) { box.innerHTML = `<span class="muted">${esc(av.detail)}</span>`; return; }
+      if (!av.slots.length) { box.innerHTML = '<span class="muted">No free times on this day. Try another date.</span>'; return; }
+      box.innerHTML = av.slots.map(s => `<button class="slot" data-t="${s.start_time}" onclick="pickSlot('${s.start_time}','${esc(s.label)}')">${esc(s.label)}</button>`).join('');
+    }
+    function pickSlot(t, label) { B.slot = { t, label }; document.querySelectorAll('.slot').forEach(b => b.classList.toggle('selected', b.dataset.t === t)); update(); }
+    function update() { const ok = B.service && B.slot; document.getElementById('book-btn').disabled = !ok; const s = document.getElementById('summary'); s.style.display = ok ? 'block' : 'none';
+      if (ok) s.innerHTML = `<strong>${esc(B.service.name)}</strong> · ${B.service.duration_minutes} min<br>${fmtKey(B.date,{weekday:'long',day:'numeric',month:'long'})} at <strong>${esc(B.slot.label)}</strong>${B.staff ? '<br>with ' + esc(B.info.staff.find(x=>x.id===B.staff).name) : ''}<br>${B.service.price ? money(B.service.price) + ' · pay at the studio or use your package' : 'Free'}`; }
+    async function book() {
+      const btn = document.getElementById('book-btn'); const err = document.getElementById('err'); err.textContent = ''; btn.disabled = true; btn.textContent = 'Booking…';
+      const body = { name: document.getElementById('name').value.trim(), phone: document.getElementById('phone').value.trim(), email: document.getElementById('email').value.trim() || null, notes: document.getElementById('notes').value.trim() || null, service_id: B.service.id, staff_id: B.staff, start_time: B.slot.t };
+      const r = await fetch('/api/public/book', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) }); const data = await r.json();
+      if (!r.ok) { err.textContent = data.detail || 'Something went wrong'; btn.disabled = false; btn.textContent = 'Confirm booking'; if (r.status === 409) loadSlots(); return; }
+      document.getElementById('flow').style.display = 'none'; const d = document.getElementById('done'); d.style.display = 'block';
+      d.innerHTML = `<div class="ok">✓</div><h2>You're booked, ${esc(data.client_name.split(' ')[0])}!</h2><p><strong>${esc(data.service)}</strong><br>${esc(data.date)} at ${esc(data.time)}${data.staff ? '<br>with ' + esc(data.staff) : ''}</p><p class="muted">A confirmation is on its way to your WhatsApp${body.email ? ' and email' : ''}. Need to change it? <a href="/a/${data.token}">Manage your booking</a>.</p>${data.business.address ? `<p class="muted">📍 ${esc(data.business.address)}</p>` : ''}`;
+      window.scrollTo(0, 0);
+    }
+    load().catch(e => { document.getElementById('err').textContent = e.message; });
+  </script>
+</body>
+</html>

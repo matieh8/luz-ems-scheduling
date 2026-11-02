@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your booking</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root { --bg:#f6f7fb; --surface:#fff; --text:#0f172a; --text-2:#64748b; --border:#e5e7ef; --accent:#7c3aed; --accent-light:#efe9fe; --good:#0f9f6e; --bad:#dc2626; }
+    * { box-sizing:border-box; } body { margin:0; font-family:'Inter',-apple-system,sans-serif; background:var(--bg); color:var(--text); }
+    .wrap { max-width:520px; margin:0 auto; padding:28px 16px 60px; } .brand { text-align:center; margin-bottom:22px; } .brand h1 { margin:0; font-size:1.5rem; font-weight:800; } .brand h1 span { color:var(--accent); }
+    .card { background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:24px; box-shadow:0 1px 3px rgba(15,23,42,.06); }
+    h2 { margin:0 0 6px; font-size:1.2rem; } .muted { color:var(--text-2); font-size:.9rem; }
+    .badge { display:inline-block; padding:4px 10px; border-radius:999px; font-size:.75rem; font-weight:700; text-transform:capitalize; }
+    .b-scheduled { background:#e8effd; color:#2563eb; } .b-confirmed { background:#e6f7f0; color:var(--good); } .b-cancelled { background:#fde8e8; color:var(--bad); } .b-completed, .b-no_show { background:#ececf4; color:#4b4b63; }
+    dl { display:grid; grid-template-columns:100px 1fr; gap:8px 12px; margin:18px 0; font-size:.95rem; } dt { color:var(--text-2); } dd { margin:0; font-weight:600; }
+    .btn { width:100%; padding:13px; border:none; border-radius:12px; font-family:inherit; font-size:.95rem; font-weight:700; cursor:pointer; margin-top:8px; }
+    .btn-primary { background:var(--accent); color:#fff; } .btn-danger { background:#fde8e8; color:var(--bad); } .btn:disabled { opacity:.5; cursor:not-allowed; }
+    .input { width:100%; padding:12px; border:1.5px solid var(--border); border-radius:12px; font-family:inherit; font-size:1rem; margin-top:12px; }
+    .msg { margin-top:12px; font-size:.9rem; min-height:18px; } .msg.err { color:var(--bad); } .msg.ok { color:var(--good); } a { color:var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="brand"><h1 id="biz">LUZ <span>EMS</span></h1></div>
+    <div class="card" id="card"><p class="muted">Loading your booking…</p></div>
+  </div>
+  <script>
+    const token = location.pathname.split('/').pop();
+    function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    async function load() {
+      const r = await fetch(`/api/public/appointments/${token}`); const a = await r.json();
+      const card = document.getElementById('card');
+      if (!r.ok) { card.innerHTML = `<h2>Booking not found</h2><p class="muted">${esc(a.detail || '')}</p><p><a href="/book">Make a new booking</a></p>`; return; }
+      document.getElementById('biz').innerHTML = esc(a.business.name).replace(/ (\S+)$/, ' <span>$1</span>');
+      const active = ['scheduled','confirmed'].includes(a.status);
+      card.innerHTML = `<span class="badge b-${a.status}">${esc(a.status.replace('_',' '))}</span><h2 style="margin-top:10px">Hi ${esc(a.client_name.split(' ')[0])}, ${active ? 'here is your booking' : a.status === 'cancelled' ? 'this booking was cancelled' : 'this session is in the past'}</h2>
+        <dl><dt>Session</dt><dd>${esc(a.service)} · ${a.duration} min</dd><dt>Date</dt><dd>${esc(a.date)}</dd><dt>Time</dt><dd>${esc(a.time)}</dd>${a.staff ? `<dt>Trainer</dt><dd>${esc(a.staff)}</dd>` : ''}<dt>Price</dt><dd>${a.covered_by_package ? 'Covered by your package' : a.price ? `${a.currency} ${Math.round(a.price)}` : 'Free'}</dd>${a.business.address ? `<dt>Where</dt><dd>${esc(a.business.address)}</dd>` : ''}</dl>
+        ${a.can_confirm ? `<button class="btn btn-primary" onclick="act('confirm')">✓ Confirm I'm coming</button>` : ''}
+        ${a.can_cancel ? `<button class="btn btn-danger" onclick="showCancel()">Cancel this booking</button><div id="cancel-box" style="display:none"><input id="reason" class="input" placeholder="Reason (optional)"><button class="btn btn-danger" onclick="act('cancel')">Yes, cancel it</button></div>` : active ? `<p class="muted">Cancellations need at least ${a.cancel_notice_hours} hours notice. To change this booking please call <a href="tel:${esc(a.business.phone||'')}">${esc(a.business.phone||'the studio')}</a>.</p>` : ''}
+        <div class="msg" id="msg"></div>
+        <p class="muted" style="margin-top:16px"><a href="/book">Book another session</a>${a.business.phone ? ` · <a href="tel:${esc(a.business.phone)}">Call us</a>` : ''}</p>`;
+    }
+    function showCancel() { document.getElementById('cancel-box').style.display = 'block'; }
+    async function act(kind) {
+      const m = document.getElementById('msg'); m.className = 'msg';
+      const r = await fetch(`/api/public/appointments/${token}/${kind}`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ reason: (document.getElementById('reason')||{}).value || null }) }); const d = await r.json();
+      if (!r.ok) { m.className = 'msg err'; m.textContent = d.detail; return; }
+      await load(); const m2 = document.getElementById('msg'); m2.className = 'msg ok'; m2.textContent = kind === 'confirm' ? 'Thanks! See you there.' : 'Your booking has been cancelled.';
+    }
+    load().catch(() => { document.getElementById('card').innerHTML = '<p class="muted">Could not load this booking.</p>'; });
+  </script>
+</body>
+</html>

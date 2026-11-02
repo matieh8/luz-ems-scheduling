@@ -24,14 +24,6 @@ def create_service(service: schemas.ServiceCreate, db: Session = Depends(get_db)
     return db_service
 
 
-@router.get("/{service_id}", response_model=schemas.ServiceResponse)
-def get_service(service_id: int, db: Session = Depends(get_db)):
-    service = db.query(models.Service).filter(models.Service.id == service_id).first()
-    if not service:
-        raise HTTPException(status_code=404, detail="Service not found")
-    return service
-
-
 @router.put("/{service_id}", response_model=schemas.ServiceResponse)
 def update_service(service_id: int, service: schemas.ServiceUpdate, db: Session = Depends(get_db)):
     db_service = db.query(models.Service).filter(models.Service.id == service_id).first()
@@ -49,6 +41,10 @@ def delete_service(service_id: int, db: Session = Depends(get_db)):
     db_service = db.query(models.Service).filter(models.Service.id == service_id).first()
     if not db_service:
         raise HTTPException(status_code=404, detail="Service not found")
+    if db_service.appointments:
+        db_service.active = False
+        db.commit()
+        return {"detail": "Service has bookings, so it was deactivated instead of deleted"}
     db.delete(db_service)
     db.commit()
     return {"detail": "Service deleted"}

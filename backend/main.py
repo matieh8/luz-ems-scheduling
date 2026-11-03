@@ -2,6 +2,7 @@ import os
 import shutil
 import subprocess
 import threading
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
@@ -20,6 +21,8 @@ FRONTEND_DIR = os.path.join(ROOT_DIR, "frontend")
 
 
 BRIDGE_REASON = {"reason": None}
+_bridge_lock = threading.Lock()
+_bridge_stop_event = threading.Event()
 
 
 def _start_whatsapp_bridge():
@@ -47,6 +50,45 @@ def _start_whatsapp_bridge():
         return None
 
 
+def _stop_bridge(proc):
+    if proc is None:
+        return
+    try:
+        proc.terminate()
+        proc.wait(timeout=5)
+    except Exception:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+
+
+def _bridge_log_thread(proc):
+    for line in proc.stdout:
+        print(f"[whatsapp-bridge] {line.decode('utf-8', errors='replace').rstrip()}")
+
+
+def _bridge_watchdog(app):
+    """Restart the WhatsApp bridge if its process dies."""
+    while not _bridge_stop_event.is_set():
+        with _bridge_lock:
+            proc = getattr(app.state, "whatsapp_bridge", None)
+        if proc is not None and proc.poll() is not None:
+            print(f"[whatsapp-bridge] process exited with code {proc.returncode}; restarting in 5s")
+            time.sleep(5)
+            if _bridge_stop_event.is_set():
+                break
+            new_proc = _start_whatsapp_bridge()
+            if new_proc:
+                with _bridge_lock:
+                    app.state.whatsapp_bridge = new_proc
+                threading.Thread(target=_bridge_log_thread, args=(new_proc,), daemon=True).start()
+                BRIDGE_REASON["reason"] = None
+            else:
+                BRIDGE_REASON["reason"] = "bridge restart failed (see earlier log)"
+        time.sleep(30)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     run_migrations()
@@ -60,10 +102,8 @@ async def lifespan(app: FastAPI):
     bridge_proc = _start_whatsapp_bridge()
     app.state.whatsapp_bridge = bridge_proc
     if bridge_proc:
-        def log_bridge():
-            for line in bridge_proc.stdout:
-                print(f"[whatsapp-bridge] {line.decode('utf-8', errors='replace').rstrip()}")
-        threading.Thread(target=log_bridge, daemon=True).start()
+        threading.Thread(target=_bridge_log_thread, args=(bridge_proc,), daemon=True).start()
+        threading.Thread(target=_bridge_watchdog, args=(app,), daemon=True).start()
 
     from apscheduler.schedulers.background import BackgroundScheduler
     from backend.notifications import run_all_jobs
@@ -86,12 +126,9 @@ async def lifespan(app: FastAPI):
     yield
     if scheduler.running:
         scheduler.shutdown(wait=False)
-    if bridge_proc:
-        bridge_proc.terminate()
-        try:
-            bridge_proc.wait(timeout=5)
-        except Exception:
-            bridge_proc.kill()
+    _bridge_stop_event.set()
+    with _bridge_lock:
+        _stop_bridge(getattr(app.state, "whatsapp_bridge", None))
 
 
 app = FastAPI(title="LUZ EMS Scheduling", lifespan=lifespan)

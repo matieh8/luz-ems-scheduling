@@ -2,6 +2,7 @@
 set -e
 APP_DIR="/home/ubuntu/luz_ems_scheduling"
 BRANCH="main"
+export PATH="/home/ubuntu/.local/bin:$PATH"
 
 cd "$APP_DIR"
 

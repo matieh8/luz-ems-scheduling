@@ -53,6 +53,12 @@ async function loadSettings() {
         <div class="form-group"><label>New password</label><input type="password" id="pw-new" class="input" autocomplete="new-password"></div>
         <button class="btn btn-secondary" onclick="changePassword()">Change password</button>
       </div>
+      <div class="card" style="border-color:var(--bad-bg)"><div class="card-title" style="color:var(--bad)">Danger zone</div>
+        <p class="small muted">Clear all bookings, packages, payments, blocked times and message history. Services, trainers, plans, templates and settings are kept. Use this to remove demo data before going live.</p>
+        <label class="small" style="display:flex;align-items:center;gap:8px;margin:8px 0"><input type="checkbox" id="reset-keep-clients"> Keep the client list (only clear their history)</label>
+        <div class="form-group"><label>Type DELETE to confirm</label><input id="reset-confirm" class="input" placeholder="DELETE" autocomplete="off"></div>
+        <button class="btn btn-danger" onclick="resetData()">Clear all data</button>
+      </div>
     </div>`;
   if (s.whatsapp_provider === 'whatsapp_web') loadWhatsAppStatus();
 }
@@ -62,7 +68,7 @@ async function loadWhatsAppStatus() {
   try { const st = await api('GET', '/notifications/whatsapp-status');
     if (st.ready) box.innerHTML = '<div style="color:var(--good);font-weight:600">✓ Connected and ready</div>';
     else if (st.qr_image) { box.innerHTML = `<img src="${st.qr_image}" style="max-width:260px;border-radius:12px" alt="QR"><p class="small muted">Scan with the business phone</p>`; setTimeout(loadWhatsAppStatus, 5000); }
-    else { box.innerHTML = `<em class="small">Waiting for QR code… (${esc(st.status)})</em>`; if (st.status !== 'bridge_offline') setTimeout(loadWhatsAppStatus, 3000); else box.innerHTML = '<em class="small">WhatsApp bridge is offline on this server (Node bridge not running).</em>'; }
+    else { box.innerHTML = `<em class="small">Waiting for QR code… (${esc(st.status)})</em>`; if (st.status !== 'bridge_offline') setTimeout(loadWhatsAppStatus, 3000); else box.innerHTML = `<div style="color:var(--bad);font-weight:600">WhatsApp bridge is offline</div><p class="small muted">${esc(st.reason || 'Node bridge not running')}</p><p class="small muted">Until it is running, WhatsApp messages will fail. Turn on <strong>Demo mode</strong> to log messages without sending, or use the Twilio provider.</p>`; }
   } catch (e) { box.innerHTML = '<em class="small">Status unavailable.</em>'; }
 }
 async function saveSettings() {
@@ -101,3 +107,14 @@ function editStaff(id) { const s = S.staff.find(x => x.id === id); openStaffModa
 async function saveStaff() { guard(async () => { const id = val('staff-id'); const payload = { name: val('staff-name').trim(), role: val('staff-role') || null, phone: val('staff-phone') || null, email: val('staff-email') || null, color: val('staff-color'), active: $('staff-active').checked };
   if (!payload.name) throw new Error('Name is required'); if (id) await api('PUT', `/staff/${id}`, payload); else await api('POST', '/staff/', payload); closeModal('staff-modal'); toast('Trainer saved'); await refreshLookups(); loadCatalog(); }); }
 function deleteStaff(id) { confirmBox('Delete trainer', '<p>Delete this trainer? If they have sessions they will be deactivated instead.</p>', 'Delete', async () => { const r = await api('DELETE', `/staff/${id}`); toast(r.detail); await refreshLookups(); loadCatalog(); }, 'btn-danger'); }
+
+async function resetData() {
+  if (val('reset-confirm').trim().toUpperCase() !== 'DELETE') { toast('Type DELETE to confirm', true); return; }
+  if (!confirm('Clear all bookings, payments, packages and message history? This cannot be undone.')) return;
+  guard(async () => {
+    const r = await api('POST', '/settings/reset-data', { confirm: 'DELETE', keep_clients: $('reset-keep-clients').checked });
+    setVal('reset-confirm', '');
+    toast(`Cleared: ${Object.entries(r.deleted).map(([k, v]) => `${v} ${k.replace('_', ' ')}`).join(', ')}`);
+    await refreshLookups();
+  });
+}

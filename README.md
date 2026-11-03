@@ -81,3 +81,10 @@ frontend/
 scripts/seed_demo.py Sample data for staging
 tests/test_api.py    End-to-end API tests
 ```
+
+## Going live checklist
+
+1. Pull the branch on the server and restart with `./start.sh` (live) — it reads `.env`, where you should set `LUZ_ADMIN_PASSWORD` before the first start.
+2. Remove demo data: **Settings → Danger zone → Clear all data** (type DELETE), or on the server run `venv/bin/python scripts/reset_data.py`. Services, trainers, plans, templates and settings are kept; use `--keep-clients` to keep the client list.
+3. WhatsApp Web: the bridge needs Node.js 18+ on the server (`node -v`). `start.sh` runs `npm install` inside `backend/whatsapp` automatically the first time Node is present. If the bridge is still offline, Settings → Messaging shows the reason. Then set the provider to *WhatsApp Web*, enable WhatsApp, scan the QR code, and turn **Demo mode** off.
+4. Individual clients can be deleted from their profile (Clients → open client → Delete). This removes their sessions, packages, payments and message history.

@@ -114,7 +114,11 @@ def preview_template(key: str, db: Session = Depends(get_db)):
 
 @router.get("/whatsapp-status", response_model=Dict[str, Any])
 def whatsapp_status():
-    return whatsapp_web_client.get_status()
+    st = whatsapp_web_client.get_status()
+    if st.get("status") == "bridge_offline":
+        from backend.main import BRIDGE_REASON
+        st["reason"] = BRIDGE_REASON.get("reason") or "bridge process is not running (check the server log)"
+    return st
 
 
 @router.post("/run-jobs")

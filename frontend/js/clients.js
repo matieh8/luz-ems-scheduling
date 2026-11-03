@@ -42,7 +42,7 @@ async function openClientDetail(id) {
     <div id="cd-subs" class="subpanel">${subsTable(h.subscriptions)}</div>
     <div id="cd-pays" class="subpanel">${paymentsTable(h.payments, true)}</div>
     <div id="cd-msgs" class="subpanel">${messagesTable(h.messages, true)}</div>`;
-  $('cd-footer').innerHTML = `<div class="left"><button class="btn btn-secondary btn-sm" onclick="editClient(${c.id})">Edit</button><button class="btn btn-secondary btn-sm" onclick="closeModal('client-detail-modal');openCustomMessageModal(${c.id})">Message</button><button class="btn btn-secondary btn-sm" onclick="closeModal('client-detail-modal');openPaymentModal({client_id:${c.id}})">Record payment</button><button class="btn btn-secondary btn-sm" onclick="closeModal('client-detail-modal');openSubscriptionModal(null, ${c.id})">Sell package</button></div><button class="btn btn-primary" onclick="closeModal('client-detail-modal');openBookingModal(null, {clientId:${c.id}})">Book session</button>`;
+  $('cd-footer').innerHTML = `<div class="left"><button class="btn btn-secondary btn-sm" onclick="editClient(${c.id})">Edit</button><button class="btn btn-danger btn-sm" onclick="deleteClient(${c.id}, '${esc(c.name).replace(/'/g, "\\'")}')">Delete</button><button class="btn btn-secondary btn-sm" onclick="closeModal('client-detail-modal');openCustomMessageModal(${c.id})">Message</button><button class="btn btn-secondary btn-sm" onclick="closeModal('client-detail-modal');openPaymentModal({client_id:${c.id}})">Record payment</button><button class="btn btn-secondary btn-sm" onclick="closeModal('client-detail-modal');openSubscriptionModal(null, ${c.id})">Sell package</button></div><button class="btn btn-primary" onclick="closeModal('client-detail-modal');openBookingModal(null, {clientId:${c.id}})">Book session</button>`;
   openModal('client-detail-modal');
 }
 function cdTab(t, el) { document.querySelectorAll('#cd-body .tab').forEach(x => x.classList.remove('active')); el.classList.add('active'); document.querySelectorAll('#cd-body .subpanel').forEach(p => p.classList.toggle('active', p.id === 'cd-' + t)); }
@@ -71,5 +71,13 @@ async function saveClient() {
     if (!payload.name || !payload.phone) throw new Error('Name and phone are required');
     if (id) await api('PUT', `/clients/${id}`, payload); else await api('POST', '/clients/', payload);
     closeModal('client-modal'); toast('Client saved'); await refreshLookups(); refreshCurrent();
+  });
+}
+
+async function deleteClient(id, name) {
+  if (!confirm(`Delete ${name}?\n\nThis permanently removes the client together with all their sessions, packages, payments and message history. This cannot be undone.`)) return;
+  guard(async () => {
+    await api('DELETE', `/clients/${id}`);
+    closeModal('client-detail-modal'); toast('Client deleted'); await refreshLookups(); refreshCurrent();
   });
 }

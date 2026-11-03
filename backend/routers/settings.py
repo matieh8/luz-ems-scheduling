@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from zoneinfo import ZoneInfo
 from backend.database import get_db
 from backend import models, schemas
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/settings", tags=["Settings"])
 
@@ -54,3 +55,30 @@ def update_hours(items: List[schemas.BusinessHoursItem], db: Session = Depends(g
         row.open_time, row.close_time, row.closed = item.open_time, item.close_time, item.closed
     db.commit()
     return db.query(models.BusinessHours).order_by(models.BusinessHours.day_of_week).all()
+
+
+class ResetRequest(BaseModel):
+    confirm: str
+    keep_clients: bool = False
+
+
+def reset_business_data(db: Session, keep_clients: bool = False) -> dict:
+    """Delete bookings, payments, packages, blocked times and message logs.
+    Services, staff, plans, templates, hours and settings are kept."""
+    counts = {}
+    order = [("notification_logs", models.NotificationLog), ("payments", models.Payment),
+             ("appointments", models.Appointment), ("subscriptions", models.Subscription),
+             ("blocked_times", models.BlockedTime)]
+    if not keep_clients:
+        order.append(("clients", models.Client))
+    for name, model in order:
+        counts[name] = db.query(model).delete()
+    db.commit()
+    return counts
+
+
+@router.post("/reset-data")
+def reset_data(req: ResetRequest, db: Session = Depends(get_db)):
+    if req.confirm.strip().upper() != "DELETE":
+        raise HTTPException(status_code=400, detail="Type DELETE to confirm")
+    return {"detail": "Data cleared", "deleted": reset_business_data(db, req.keep_clients)}

@@ -100,6 +100,7 @@ def delete_client(client_id: int, db: Session = Depends(get_db)):
     db_client = db.query(models.Client).filter(models.Client.id == client_id).first()
     if not db_client:
         raise HTTPException(status_code=404, detail="Client not found")
+    db.query(models.NotificationLog).filter(models.NotificationLog.client_id == client_id).delete()
     db.delete(db_client)
     db.commit()
     return {"detail": "Client deleted"}

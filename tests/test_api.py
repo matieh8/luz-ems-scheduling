@@ -156,3 +156,24 @@ def test_jobs_run(client):
     assert client.get("/api/dashboard/").status_code == 200
     assert client.get("/api/reports/timeseries?granularity=week").status_code == 200
     assert client.get("/api/reports/export/payments.csv").status_code == 200
+
+
+def test_delete_client_and_reset_data(client):
+    c = client.post("/api/clients/", json={"name": "Temp Client", "phone": "0509998888"}).json()
+    client.post("/api/notifications/custom", json={"client_id": c["id"], "channels": ["whatsapp"], "body": "hi"})
+    r = client.delete(f"/api/clients/{c['id']}")
+    assert r.status_code == 200
+    assert client.get(f"/api/clients/{c['id']}").status_code == 404
+    assert not any(l["client_id"] == c["id"] for l in client.get("/api/notifications/logs").json())
+
+    assert client.post("/api/settings/reset-data", json={"confirm": "nope"}).status_code == 400
+    r = client.post("/api/settings/reset-data", json={"confirm": "DELETE", "keep_clients": True})
+    assert r.status_code == 200
+    assert client.get("/api/appointments/").json() == []
+    assert client.get("/api/payments/").json() == []
+    assert client.get("/api/clients/").json() != []
+    r = client.post("/api/settings/reset-data", json={"confirm": "DELETE"})
+    assert r.status_code == 200 and client.get("/api/clients/").json() == []
+    assert client.get("/api/services/").json()  # catalog kept
+    st = client.get("/api/notifications/whatsapp-status").json()
+    assert st["status"] == "bridge_offline" and st["reason"]

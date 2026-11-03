@@ -1,4 +1,5 @@
 import os
+import shutil
 import subprocess
 import threading
 from contextlib import asynccontextmanager
@@ -18,11 +19,21 @@ from backend.seed import seed_data
 FRONTEND_DIR = os.path.join(ROOT_DIR, "frontend")
 
 
+BRIDGE_REASON = {"reason": None}
+
+
 def _start_whatsapp_bridge():
     bridge_dir = os.path.join(os.path.dirname(__file__), "whatsapp")
     if os.environ.get("LUZ_DISABLE_WHATSAPP_BRIDGE") == "1":
+        BRIDGE_REASON["reason"] = "disabled: LUZ_DISABLE_WHATSAPP_BRIDGE=1 is set for this server"
+        return None
+    if shutil.which("node") is None:
+        BRIDGE_REASON["reason"] = "Node.js is not installed on this server (install Node 18+ and restart)"
+        print("[whatsapp-bridge] node not found; WhatsApp Web provider unavailable")
         return None
     if not os.path.exists(os.path.join(bridge_dir, "node_modules")):
+        BRIDGE_REASON["reason"] = "bridge dependencies missing: run `npm install` inside backend/whatsapp and restart"
+        print("[whatsapp-bridge] node_modules missing; run npm install in backend/whatsapp")
         return None
     env = os.environ.copy()
     env["PORT"] = os.environ.get("WHATSAPP_BRIDGE_PORT", "8020")
@@ -30,8 +41,9 @@ def _start_whatsapp_bridge():
     try:
         return subprocess.Popen(["node", "server.js"], cwd=bridge_dir, env=env,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    except FileNotFoundError:
-        print("[whatsapp-bridge] node not found; WhatsApp Web provider unavailable")
+    except OSError as e:
+        BRIDGE_REASON["reason"] = f"bridge failed to start: {e}"
+        print(f"[whatsapp-bridge] failed to start: {e}")
         return None
 
 

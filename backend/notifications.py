@@ -1,4 +1,5 @@
 """Multi-channel client notifications (WhatsApp / SMS / email) driven by editable templates."""
+import requests
 import os
 import smtplib
 import threading
@@ -230,7 +231,10 @@ def _send_whatsapp(settings: models.Setting, to_phone: str, body: str) -> str:
     provider = settings.whatsapp_provider or "demo"
     if provider == "whatsapp_web":
         from backend import whatsapp_web_client
-        resp = whatsapp_web_client.send_message(to_phone, body)
+        try:
+            resp = whatsapp_web_client.send_message(to_phone, body)
+        except requests.exceptions.ConnectionError:
+            raise RuntimeError("WhatsApp bridge is not running on this server. Open Settings → Messaging for the reason, or switch Demo mode on.")
         return f"whatsapp_web: {resp}"
     from twilio.rest import Client
     if not all([settings.twilio_account_sid, settings.twilio_auth_token, settings.twilio_phone_number]):

@@ -102,6 +102,8 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .alert-info { background: var(--info-bg); color: var(--info); }
 .alert-warning { background: var(--warn-bg); color: var(--warn); }
 .alert-serious { background: var(--bad-bg); color: var(--bad); }
+.alert-x { background: transparent; border: 0; color: inherit; opacity: .6; cursor: pointer; font-size: .9rem; padding: 2px 4px; line-height: 1; }
+.alert-x:hover { opacity: 1; }
 
 .toolbar { display: flex; gap: 10px; margin-bottom: 16px; align-items: center; flex-wrap: wrap; }
 .input { width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); outline: none; }

@@ -1,4 +1,5 @@
-from datetime import timedelta
+import json
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -8,6 +9,30 @@ from backend.scheduling import get_settings
 from backend.tz import local_day_bounds, local_today, utcnow
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
+
+
+def _dismissed(settings) -> dict:
+    try:
+        raw = json.loads(settings.alerts_dismissed or "{}")
+    except ValueError:
+        raw = {}
+    out = {}
+    for k, v in raw.items():
+        try:
+            out[k] = datetime.fromisoformat(v)
+        except (TypeError, ValueError):
+            pass
+    return out
+
+
+@router.post("/alerts/{key}/dismiss")
+def dismiss_alert(key: str, db: Session = Depends(get_db)):
+    settings = db.query(models.Setting).first()
+    d = {k: v.isoformat() for k, v in _dismissed(settings).items()}
+    d[key] = datetime.utcnow().isoformat()  # full precision: a failure logged the same second must not re-trigger
+    settings.alerts_dismissed = json.dumps(d)
+    db.commit()
+    return {"detail": "dismissed", "key": key}
 
 
 @router.get("/", response_model=schemas.DashboardStats)
@@ -51,19 +76,23 @@ def dashboard(db: Session = Depends(get_db)):
                 or s.sessions_remaining <= settings.subscription_low_threshold]
     upcoming = upcoming_q.order_by(models.Appointment.start_time).limit(8).all()
 
+    dismissed = _dismissed(settings)
     alerts = []
     if unconfirmed:
-        alerts.append({"level": "warning", "text": f"{unconfirmed} session(s) in the next 24h are not confirmed yet"})
+        alerts.append({"key": "unconfirmed", "level": "warning", "text": f"{unconfirmed} session(s) in the next 24h are not confirmed yet"})
     if unpaid:
-        alerts.append({"level": "serious", "text": f"{len(unpaid)} completed session(s) have unpaid balances", "link": "payments"})
+        alerts.append({"key": "unpaid", "level": "serious", "text": f"{len(unpaid)} completed session(s) have unpaid balances", "link": "payments"})
     if expiring:
-        alerts.append({"level": "info", "text": f"{len(expiring)} package(s) are running low or expiring soon", "link": "subscriptions"})
+        alerts.append({"key": "packages", "level": "info", "text": f"{len(expiring)} package(s) are running low or expiring soon", "link": "subscriptions"})
+    failed_since = max(now - timedelta(days=2), dismissed.get("failed_messages") or datetime.min)
     failed = db.query(func.count(models.NotificationLog.id)).filter(models.NotificationLog.status == "failed",
-                                                                    models.NotificationLog.created_at >= now - timedelta(days=2)).scalar() or 0
+                                                                    models.NotificationLog.created_at > failed_since).scalar() or 0
     if failed:
-        alerts.append({"level": "serious", "text": f"{failed} message(s) failed to send in the last 2 days", "link": "messages"})
+        alerts.append({"key": "failed_messages", "level": "serious", "text": f"{failed} message(s) failed to send in the last 2 days", "link": "messages"})
     if settings.demo_mode:
-        alerts.append({"level": "info", "text": "Demo mode is on: messages are logged, not sent to clients", "link": "settings"})
+        alerts.append({"key": "demo_mode", "level": "info", "text": "Demo mode is on: messages are logged, not sent to clients", "link": "settings"})
+    # Dismissed alerts stay hidden for a day (failed_messages instead only counts newer failures, handled above).
+    alerts = [a for a in alerts if a["key"] == "failed_messages" or not dismissed.get(a["key"]) or dismissed[a["key"]] < now - timedelta(hours=24)]
 
     return schemas.DashboardStats(
         total_clients=total_clients, new_clients_this_month=new_clients, total_services=total_services,

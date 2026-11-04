@@ -3,7 +3,7 @@ async function loadDashboard() {
   const t = todayKey();
   const [d, ts] = await Promise.all([api('GET', '/dashboard/'), api('GET', `/reports/timeseries?from=${addDays(t, -13)}&to=${t}&granularity=day`)]);
   $('dash-date').textContent = fmtKeyLong(t);
-  $('dash-alerts').innerHTML = d.alerts.map(a => `<div class="alert alert-${a.level}" onclick="${a.link ? `go('${a.link}')` : ''}">${a.level === 'serious' ? '⚠️' : a.level === 'warning' ? '⏳' : 'ℹ️'} ${esc(a.text)}${a.link ? ' <span style="margin-left:auto;font-size:.8rem">View →</span>' : ''}</div>`).join('');
+  $('dash-alerts').innerHTML = d.alerts.map(a => `<div class="alert alert-${a.level}" onclick="${a.link ? `dismissAlert('${a.key}', '${a.link}')` : ''}">${a.level === 'serious' ? '⚠️' : a.level === 'warning' ? '⏳' : 'ℹ️'} ${esc(a.text)}<span style="margin-left:auto;display:flex;gap:14px;align-items:center;font-size:.8rem">${a.link ? '<span>View →</span>' : ''}<button class="alert-x" title="Dismiss" onclick="event.stopPropagation();dismissAlert('${a.key}')">✕</button></span></div>`).join('');
   $('dash-stats').innerHTML = `
     <div class="stat accent"><div class="stat-label">Revenue this month</div><div class="stat-value">${money(d.revenue_this_month)}</div><div class="stat-sub">${money(d.revenue_this_week)} this week · ${money(d.revenue_today)} today</div></div>
     <div class="stat"><div class="stat-label">Sessions today</div><div class="stat-value">${d.appointments_today}</div><div class="stat-sub">${d.appointments_this_week} this week · ${d.sessions_this_month} done this month</div></div>
@@ -15,4 +15,11 @@ async function loadDashboard() {
       <div style="flex:1;min-width:0"><strong>${esc(a.client.name)}</strong><div class="tiny muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(a.service.name)}${a.staff ? ' · ' + esc(a.staff.name) : ''}${a.subscription_id ? ' · package' : ''}</div></div>${badge(a.status)}</div>`).join('') : '<div class="empty small">No sessions today. <a href="#" onclick="openBookingModal();return false">Book one</a></div>';
   barChart($('dash-chart'), ts.points.map(p => ({ label: labelPeriod(p.period, 'day'), tooltip: labelPeriod(p.period, 'day', true), v: p.collected, extra: `${p.sessions} session(s)` })), { series: [{ key: 'v', color: 'var(--series-1)', name: 'Collected' }], height: 200 });
   $('dash-upcoming').innerHTML = d.upcoming.length ? apptTable(d.upcoming, { withDate: true }) : '<div class="empty small">Nothing upcoming.</div>';
+}
+
+async function dismissAlert(key, link) {
+  const el = [...document.querySelectorAll('#dash-alerts .alert')].find(x => x.innerHTML.includes(`'${key}'`));
+  if (el) el.remove();
+  try { await api('POST', `/dashboard/alerts/${key}/dismiss`); } catch (e) {}
+  if (link) go(link);
 }

@@ -40,8 +40,12 @@ def _start_whatsapp_bridge():
         return None
     env = os.environ.copy()
     env["PORT"] = os.environ.get("WHATSAPP_BRIDGE_PORT", "8020")
-    env["SESSION_DIR"] = os.path.join(DATA_DIR, "whatsapp_session")
-    env["DATA_DIR"] = DATA_DIR
+    # The bridge runs in backend/whatsapp, so relative DATA_DIR would be resolved
+    # from that directory. Pass absolute paths so the session/QR files land in the
+    # same place as the SQLite database.
+    session_dir = os.path.join(DATA_DIR, "whatsapp_session")
+    env["SESSION_DIR"] = os.path.abspath(session_dir)
+    env["DATA_DIR"] = os.path.abspath(DATA_DIR)
     try:
         return subprocess.Popen(["node", "server.js"], cwd=bridge_dir, env=env,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT)

@@ -153,6 +153,8 @@ class NotificationLog(Base):
     subject = Column(String, nullable=True)
     content = Column(Text, nullable=False)
     external_response = Column(Text, nullable=True)
+    attempts = Column(Integer, default=0, nullable=False)
+    next_retry_at = Column(DateTime, nullable=True)  # set when a failure is worth retrying automatically
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
     appointment = relationship("Appointment", back_populates="notifications")

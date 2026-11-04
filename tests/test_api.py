@@ -177,3 +177,32 @@ def test_delete_client_and_reset_data(client):
     assert client.get("/api/services/").json()  # catalog kept
     st = client.get("/api/notifications/whatsapp-status").json()
     assert st["status"] == "bridge_offline" and st["reason"]
+
+
+def test_temporary_whatsapp_failure_is_retried_automatically(client, monkeypatch):
+    from backend.database import SessionLocal
+    from backend import notifications, models
+    from backend.tz import utcnow
+    client.put("/api/settings/", json={"demo_mode": False, "whatsapp_provider": "whatsapp_web", "whatsapp_enabled": True})
+    c = client.post("/api/clients/", json={"name": "Retry Client", "phone": "0501112222", "notify_whatsapp": True}).json()
+    db = SessionLocal()
+    try:
+        logs = notifications.send(db, "reminder", db.get(models.Client, c["id"]), raw_body="hi", channels=["whatsapp"], sync=True)
+        log = db.get(models.NotificationLog, logs[0].id); db.refresh(log)
+        assert log.status == "failed" and log.attempts == 1 and log.next_retry_at is not None
+        assert "not running" in log.external_response and "retry automatically" in log.external_response
+        # Not due yet: nothing happens
+        assert notifications.run_retry_job(db) == 0
+        # Make it due, pretend the bridge is now connected
+        log.next_retry_at = utcnow() - timedelta(minutes=1); db.commit()
+        monkeypatch.setattr(notifications, "_send_whatsapp", lambda s, to, body: "whatsapp_web: ok")
+        assert notifications.run_retry_job(db) == 1
+        import time
+        for _ in range(50):
+            db.refresh(log)
+            if log.status == "sent": break
+            time.sleep(0.05)
+        assert log.status == "sent" and log.next_retry_at is None
+    finally:
+        client.put("/api/settings/", json={"demo_mode": True})
+        db.close()

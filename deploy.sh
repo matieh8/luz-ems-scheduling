@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
-APP_DIR="/home/ubuntu/luz_ems_scheduling"
-BRANCH="main"
+APP_DIR="/home/ubuntu/luz_ems_scheduling_staging"
+BRANCH="staging"
 export PATH="/home/ubuntu/.local/bin:$PATH"
 
 cd "$APP_DIR"
@@ -22,11 +22,11 @@ if [ -d backend/whatsapp ]; then
 fi
 
 # Restart service
-sudo systemctl restart luz-ems.service
+sudo systemctl restart luz-ems-staging.service
 
 # Verify health
 sleep 3
-if curl -fsS http://127.0.0.1:8015/api/health > /dev/null; then
+if curl -fsS http://127.0.0.1:8016/api/health > /dev/null; then
     echo "Deploy successful. Health check passed."
 else
     echo "Deploy failed. Health check failed."

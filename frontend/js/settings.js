@@ -68,7 +68,8 @@ async function loadWhatsAppStatus() {
   try { const st = await api('GET', '/notifications/whatsapp-status');
     if (st.ready) box.innerHTML = '<div style="color:var(--good);font-weight:600">✓ Connected and ready</div>';
     else if (st.qr_image) { box.innerHTML = `<img src="${st.qr_image}" style="max-width:260px;border-radius:12px" alt="QR"><p class="small muted">Scan with the business phone</p>`; setTimeout(loadWhatsAppStatus, 5000); }
-    else { box.innerHTML = `<em class="small">Waiting for QR code… (${esc(st.status)})</em>`; if (st.status !== 'bridge_offline') setTimeout(loadWhatsAppStatus, 3000); else box.innerHTML = `<div style="color:var(--bad);font-weight:600">WhatsApp bridge is offline</div><p class="small muted">${esc(st.reason || 'Node bridge not running')}</p><p class="small muted">Until it is running, WhatsApp messages will fail. Turn on <strong>Demo mode</strong> to log messages without sending, or use the Twilio provider.</p>`; }
+    else { const label = { initializing: 'Starting WhatsApp and restoring the saved session… no need to scan again unless a QR code appears.', authenticated: 'Session restored, connecting…', disconnected: 'Phone disconnected, reconnecting…', auth_failure: 'Saved session was rejected by WhatsApp. A new QR code will appear shortly.' }[st.status] || `Waiting… (${esc(st.status)})`;
+      box.innerHTML = `<em class="small">${label}</em>`; if (st.status !== 'bridge_offline') setTimeout(loadWhatsAppStatus, 3000); else box.innerHTML = `<div style="color:var(--bad);font-weight:600">WhatsApp bridge is offline</div><p class="small muted">${esc(st.reason || 'Node bridge not running')}</p><p class="small muted">Until it is running, WhatsApp messages will fail. Turn on <strong>Demo mode</strong> to log messages without sending, or use the Twilio provider.</p>`; }
   } catch (e) { box.innerHTML = '<em class="small">Status unavailable.</em>'; }
 }
 async function saveSettings() {

@@ -87,4 +87,12 @@ tests/test_api.py    End-to-end API tests
 1. Pull the branch on the server and restart with `./start.sh` (live) — it reads `.env`, where you should set `LUZ_ADMIN_PASSWORD` before the first start.
 2. Remove demo data: **Settings → Danger zone → Clear all data** (type DELETE), or on the server run `venv/bin/python scripts/reset_data.py`. Services, trainers, plans, templates and settings are kept; use `--keep-clients` to keep the client list.
 3. WhatsApp Web: the bridge needs Node.js 18+ on the server (`node -v`). `start.sh` runs `npm install` inside `backend/whatsapp` automatically the first time Node is present. If the bridge is still offline, Settings → Messaging shows the reason. Then set the provider to *WhatsApp Web*, enable WhatsApp, scan the QR code, and turn **Demo mode** off.
-4. Individual clients can be deleted from their profile (Clients → open client → Delete). This removes their sessions, packages, payments and message history.
+4. Run it as a service so it stays up without an open terminal — reminders, follow-ups and the WhatsApp link all live inside the server process, so they only work while it is running:
+
+   ```bash
+   sudo ./deploy/install-service.sh
+   ```
+
+   After that use `sudo systemctl restart luz-ems` after each `git pull`, and `sudo journalctl -u luz-ems -f` for logs. Never start `./start.sh` by hand at the same time; two copies would fight over the WhatsApp session.
+5. The WhatsApp pairing is saved in `data/whatsapp_session/` and survives restarts. You only need to scan again if you unlink the device from the phone or delete that folder.
+6. Individual clients can be deleted from their profile (Clients → open client → Delete). This removes their sessions, packages, payments and message history.

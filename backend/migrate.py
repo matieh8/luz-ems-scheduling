@@ -6,6 +6,7 @@ renames anything, so it is safe to run on every start.
 """
 from sqlalchemy import inspect, text
 from backend.database import engine, Base
+from backend import models  # noqa: F401  (registers every table on Base.metadata)
 
 
 def _sql_type(col):

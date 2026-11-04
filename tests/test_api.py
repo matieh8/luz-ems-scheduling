@@ -206,3 +206,28 @@ def test_temporary_whatsapp_failure_is_retried_automatically(client, monkeypatch
     finally:
         client.put("/api/settings/", json={"demo_mode": True})
         db.close()
+
+
+def test_dismiss_failed_messages_alert(client):
+    from backend.database import SessionLocal
+    from backend import models
+    db = SessionLocal()
+    try:
+        c = db.query(models.Client).first() or models.Client(name="Alert Client", phone="0503334444")
+        db.add(c); db.commit()
+        db.add(models.NotificationLog(client_id=c.id, type="reminder", channel="whatsapp", status="failed", content="x", recipient="971503334444")); db.commit()
+    finally:
+        db.close()
+    keys = [a["key"] for a in client.get("/api/dashboard/").json()["alerts"]]
+    assert "failed_messages" in keys
+    assert client.post("/api/dashboard/alerts/failed_messages/dismiss").status_code == 200
+    keys = [a["key"] for a in client.get("/api/dashboard/").json()["alerts"]]
+    assert "failed_messages" not in keys
+    # A new failure after the dismissal brings the alert back
+    db = SessionLocal()
+    try:
+        c = db.query(models.Client).first()
+        db.add(models.NotificationLog(client_id=c.id, type="reminder", channel="whatsapp", status="failed", content="y", recipient="971503334444")); db.commit()
+    finally:
+        db.close()
+    assert "failed_messages" in [a["key"] for a in client.get("/api/dashboard/").json()["alerts"]]

@@ -260,6 +260,7 @@ class Setting(Base):
 
     admin_password_hash = Column(String, nullable=True)
     last_daily_job_at = Column(DateTime, nullable=True)
+    alerts_dismissed = Column(Text, nullable=True)  # JSON {alert_key: iso utc timestamp}
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 

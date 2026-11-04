@@ -41,6 +41,7 @@ def _start_whatsapp_bridge():
     env = os.environ.copy()
     env["PORT"] = os.environ.get("WHATSAPP_BRIDGE_PORT", "8020")
     env["SESSION_DIR"] = os.path.join(DATA_DIR, "whatsapp_session")
+    env["DATA_DIR"] = DATA_DIR
     try:
         return subprocess.Popen(["node", "server.js"], cwd=bridge_dir, env=env,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
@@ -55,7 +56,7 @@ def _stop_bridge(proc):
         return
     try:
         proc.terminate()
-        proc.wait(timeout=5)
+        proc.wait(timeout=15)  # give the bridge time to close the browser so the session is saved
     except Exception:
         try:
             proc.kill()

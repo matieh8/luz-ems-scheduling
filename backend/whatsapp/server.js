@@ -6,10 +6,15 @@ const path = require('path');
 
 const PORT = process.env.PORT || 8020;
 const SESSION_DIR = process.env.SESSION_DIR || path.join(__dirname, '..', '..', 'data', 'whatsapp_session');
-const QR_FILE = path.join(__dirname, '..', '..', 'data', 'whatsapp_qr.txt');
-const STATUS_FILE = path.join(__dirname, '..', '..', 'data', 'whatsapp_status.txt');
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', '..', 'data');
+const QR_FILE = path.join(DATA_DIR, 'whatsapp_qr.txt');
+const STATUS_FILE = path.join(DATA_DIR, 'whatsapp_status.txt');
 
 fs.mkdirSync(SESSION_DIR, { recursive: true });
+fs.mkdirSync(path.dirname(QR_FILE), { recursive: true });
+// A QR left over from a previous run is never valid: remove it so the UI does not ask for a re-scan
+// while the saved session is being restored.
+try { fs.unlinkSync(QR_FILE); } catch (e) {}
 
 let ready = false;
 let qrCodeData = null;
@@ -49,11 +54,22 @@ client.on('ready', () => {
   console.log('[whatsapp-web] Client is ready.');
 });
 
-client.on('disconnected', () => {
+client.on('authenticated', () => {
+  status = 'authenticated';
+  qrCodeData = null;
+  try { fs.unlinkSync(QR_FILE); } catch (e) {}
+  writeStatus();
+  console.log('[whatsapp-web] Session restored, loading...');
+});
+
+client.on('disconnected', (reason) => {
   ready = false;
   status = 'disconnected';
+  qrCodeData = null;
   writeStatus();
-  console.log('[whatsapp-web] Disconnected.');
+  console.log('[whatsapp-web] Disconnected:', reason, '- reconnecting in 10s');
+  // Only an explicit unlink from the phone wipes the session; anything else (network, phone offline) just reconnects.
+  setTimeout(() => { status = 'initializing'; writeStatus(); client.initialize().catch(e => console.error('[whatsapp-web] Reinit failed:', e.message)); }, 10000);
 });
 
 client.on('auth_failure', (msg) => {
@@ -62,7 +78,18 @@ client.on('auth_failure', (msg) => {
   console.error('[whatsapp-web] Auth failure:', msg);
 });
 
-client.initialize();
+client.initialize().catch(e => console.error('[whatsapp-web] Initialize failed:', e.message));
+
+// Close the browser cleanly on shutdown so the saved session is flushed to disk.
+let shuttingDown = false;
+async function shutdown(signal) {
+  if (shuttingDown) return; shuttingDown = true;
+  console.log(`[whatsapp-web] ${signal} received, closing...`);
+  try { await client.destroy(); } catch (e) {}
+  process.exit(0);
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 function normalizePhone(phone) {
   let digits = phone.replace(/\D/g, '');
@@ -82,7 +109,7 @@ app.use(express.json());
 app.get('/status', (req, res) => {
   let qrImage = null;
   try {
-    if (fs.existsSync(QR_FILE)) {
+    if (status === 'awaiting_qr' && fs.existsSync(QR_FILE)) {
       qrImage = fs.readFileSync(QR_FILE, 'utf8');
     }
   } catch (e) {}

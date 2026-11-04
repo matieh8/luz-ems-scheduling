@@ -1,0 +1,17 @@
+[Unit]
+Description=LUZ EMS scheduling app (API, scheduler, WhatsApp bridge)
+After=network.target
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__APP_DIR__
+ExecStart=__APP_DIR__/start.sh
+Restart=always
+RestartSec=5
+KillMode=mixed
+TimeoutStopSec=30
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

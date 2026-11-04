@@ -4,7 +4,7 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Separate data directories let staging and live run side by side on one server.
-DATA_DIR = os.environ.get("LUZ_DATA_DIR") or os.path.join(ROOT_DIR, "data")
+DATA_DIR = os.path.abspath(os.environ.get("LUZ_DATA_DIR") or os.path.join(ROOT_DIR, "data"))
 os.makedirs(DATA_DIR, exist_ok=True)
 DB_PATH = os.environ.get("LUZ_DB_PATH") or os.path.join(DATA_DIR, "app.db")
 

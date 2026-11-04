@@ -234,7 +234,7 @@ def _send_whatsapp(settings: models.Setting, to_phone: str, body: str) -> str:
         try:
             resp = whatsapp_web_client.send_message(to_phone, body)
         except requests.exceptions.ConnectionError:
-            raise RuntimeError("WhatsApp bridge is not running on this server. Open Settings → Messaging for the reason, or switch Demo mode on.")
+            raise whatsapp_web_client.BridgeNotReady("WhatsApp bridge is not running on this server. Open Settings → Messaging for the reason, or switch Demo mode on.")
         return f"whatsapp_web: {resp}"
     from twilio.rest import Client
     if not all([settings.twilio_account_sid, settings.twilio_auth_token, settings.twilio_phone_number]):
@@ -287,6 +287,32 @@ def _send_email(settings: models.Setting, to_email: str, subject: str, body: str
     return "smtp: accepted"
 
 
+RETRY_MAX_ATTEMPTS = 6
+RETRY_INTERVAL = timedelta(minutes=10)
+RETRY_WINDOW = timedelta(hours=3)
+
+
+def _retryable(exc: Exception) -> bool:
+    """Temporary conditions: WhatsApp not connected / bridge down / network. Not bad numbers or config errors."""
+    from backend import whatsapp_web_client
+    return isinstance(exc, (whatsapp_web_client.BridgeNotReady, requests.exceptions.RequestException, smtplib.SMTPConnectError, TimeoutError, ConnectionError))
+
+
+def run_retry_job(db: Session):
+    """Re-send failed messages whose failure was temporary (e.g. WhatsApp not yet paired)."""
+    now = utcnow()
+    due = (db.query(models.NotificationLog)
+           .filter(models.NotificationLog.status == "failed", models.NotificationLog.next_retry_at != None,  # noqa: E711
+                   models.NotificationLog.next_retry_at <= now).all())
+    for log in due:
+        log.status = "queued"
+        log.next_retry_at = None
+    db.commit()
+    for log in due:
+        threading.Thread(target=_deliver, args=(log.id,), daemon=True).start()
+    return len(due)
+
+
 def _deliver(log_id: int):
     """Runs in a worker thread with its own session."""
     db = SessionLocal()
@@ -303,9 +329,16 @@ def _deliver(log_id: int):
             elif log.channel == "email":
                 log.external_response = _send_email(settings, log.recipient, log.subject, log.content)
             log.status = "sent"
+            log.next_retry_at = None
         except Exception as e:
             log.status = "failed"
+            log.attempts = (log.attempts or 0) + 1
             log.external_response = f"{log.channel}: {e}"
+            if _retryable(e) and log.attempts < RETRY_MAX_ATTEMPTS and log.created_at > utcnow() - RETRY_WINDOW:
+                log.next_retry_at = utcnow() + RETRY_INTERVAL
+                log.external_response += f" — will retry automatically (attempt {log.attempts} of {RETRY_MAX_ATTEMPTS})"
+            else:
+                log.next_retry_at = None
         db.commit()
     finally:
         db.close()
@@ -515,6 +548,7 @@ def run_all_jobs(db: Session):
     run_auto_complete_job(db)
     run_reminder_job(db)
     run_follow_up_job(db)
+    run_retry_job(db)
     settings = get_settings(db)
     if not settings.last_daily_job_at or settings.last_daily_job_at < utcnow() - timedelta(hours=6):
         run_subscription_job(db)

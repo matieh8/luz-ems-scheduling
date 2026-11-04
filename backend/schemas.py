@@ -339,6 +339,8 @@ class NotificationLogResponse(BaseModel):
     subject: Optional[str] = None
     content: str
     external_response: Optional[str] = None
+    attempts: int = 0
+    next_retry_at: Optional[datetime] = None
     created_at: datetime
     client: Optional[ClientResponse] = None
     model_config = ConfigDict(from_attributes=True)

@@ -15,7 +15,18 @@ def get_status() -> Dict[str, Any]:
         return {"ready": False, "status": "bridge_offline", "error": str(e)}
 
 
+class BridgeNotReady(Exception):
+    """The bridge process is up but WhatsApp is not connected (no pairing yet, or reconnecting)."""
+
+
 def send_message(to: str, message: str) -> Dict[str, Any]:
     r = requests.post(f"{BRIDGE_URL}/send", json={"to": to, "message": message}, timeout=30)
-    r.raise_for_status()
+    if r.status_code == 503:
+        raise BridgeNotReady("WhatsApp is not connected on this server. Open Settings → Messaging and scan the QR code if one is shown.")
+    if not r.ok:
+        try:
+            detail = r.json().get("error") or r.text
+        except ValueError:
+            detail = r.text
+        raise RuntimeError(f"WhatsApp bridge error {r.status_code}: {detail}")
     return r.json()

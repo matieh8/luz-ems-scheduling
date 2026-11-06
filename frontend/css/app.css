@@ -231,6 +231,7 @@ textarea.input { min-height: 80px; resize: vertical; }
 .sheet-cell:focus-visible { outline: none; background: var(--bg); border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
 .sheet-cell .input { padding: 6px 10px; font-size: .86rem; border-radius: 8px; height: 34px; width: 100%; }
 .sheet-cell select.input { padding-right: 24px; }
+.cat-edit-wrap { display: flex; flex-direction: column; width: 100%; min-width: 140px; }
 /* Expense day cards */
 .day-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 10px; overflow: hidden; transition: border-color .15s ease, box-shadow .15s ease; }
 .day-card:hover { border-color: #d1d5db; }
@@ -251,15 +252,18 @@ textarea.input { min-height: 80px; resize: vertical; }
 .exp-day-list { max-height: 70vh; overflow-y: auto; padding-right: 4px; }
 
 @media (max-width: 900px) {
-  .sidebar { width: 100%; top: auto; bottom: 0; height: 62px; flex-direction: row; border-right: none; border-top: 1px solid var(--border); }
+  .sidebar { width: 100%; top: auto; bottom: 0; height: 72px; flex-direction: row; border-right: none; border-top: 1px solid var(--border); padding-bottom: env(safe-area-inset-bottom, 0); }
   .brand, .sidebar-footer, .nav .nav-label { display: none; }
-  .nav { display: flex; width: 100%; padding: 4px; justify-content: space-around; overflow-x: auto; }
-  .nav button { width: auto; flex-direction: column; padding: 6px 8px; font-size: .6rem; gap: 2px; margin: 0; }
-  .main { margin-left: 0; width: 100%; padding: 16px; padding-bottom: 90px; }
+  .nav { display: flex; width: 100%; padding: 6px 4px; justify-content: space-around; overflow-x: auto; gap: 2px; }
+  .nav button { width: auto; flex: 1; min-width: 56px; max-width: 90px; flex-direction: column; padding: 8px 4px; font-size: .62rem; gap: 4px; margin: 0; white-space: nowrap; border-radius: 10px; }
+  .nav button .ico { font-size: 1.15rem; }
+  .nav button.active { background: var(--accent-light); color: var(--accent-dark); }
+  .main { margin-left: 0; width: 100%; padding: 16px; padding-bottom: 100px; }
   .grid-4, .grid-6, .grid-3 { grid-template-columns: repeat(2, 1fr); }
   .grid-2 { grid-template-columns: 1fr; }
   .form-row, .form-row-3 { grid-template-columns: 1fr; }
   .drawer { width: 100%; }
   .kv { grid-template-columns: 100px 1fr; }
   .hours-row { grid-template-columns: 80px 1fr 12px 1fr 70px; }
+  .header h2 { font-size: 1.25rem; }
 }

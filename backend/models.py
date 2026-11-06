@@ -270,6 +270,7 @@ class Expense(Base):
     id = Column(Integer, primary_key=True, index=True)
     date = Column(DateTime, nullable=False, default=datetime.utcnow)
     category = Column(String, nullable=False)
+    payment_method = Column(String, nullable=True, default="Card")
     amount = Column(Float, nullable=False)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

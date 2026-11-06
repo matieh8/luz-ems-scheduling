@@ -54,32 +54,33 @@ def seed_data():
             from datetime import datetime, timedelta
             base = datetime.utcnow().replace(day=1)
             demo = [
-                ("Fast food", 45.00, "Lunch break"),
-                ("Fast food", 32.50, "Drive-through"),
-                ("Fast food", 28.00, "Snacks"),
-                ("Fast food", 52.00, "Dinner"),
-                ("Fuel", 120.00, "Petrol station"),
-                ("Fuel", 85.00, "Top-up"),
-                ("Fuel", 140.00, "Full tank"),
-                ("Groceries", 250.00, "Weekly shop"),
-                ("Groceries", 75.50, "Fresh produce"),
-                ("Groceries", 180.00, "Supermarket run"),
-                ("Utilities", 450.00, "Electricity bill"),
-                ("Utilities", 120.00, "Internet"),
-                ("Subscriptions", 55.00, "Music streaming"),
-                ("Subscriptions", 30.00, "Cloud storage"),
-                ("Transport", 25.00, "Taxi"),
-                ("Transport", 18.00, "Parking"),
-                ("Health", 200.00, "Gym membership"),
-                ("Health", 90.00, "Supplements"),
-                ("Shopping", 350.00, "New trainers"),
-                ("Shopping", 120.00, "Accessories"),
+                ("Fast food", 45.00, "Lunch break", "Card"),
+                ("Fast food", 32.50, "Drive-through", "Card"),
+                ("Fast food", 28.00, "Snacks", "Cash"),
+                ("Fast food", 52.00, "Dinner", "Card"),
+                ("Fuel", 120.00, "Petrol station", "Card"),
+                ("Fuel", 85.00, "Top-up", "Card"),
+                ("Fuel", 140.00, "Full tank", "Card"),
+                ("Groceries", 250.00, "Weekly shop", "Card"),
+                ("Groceries", 75.50, "Fresh produce", "Cash"),
+                ("Groceries", 180.00, "Supermarket run", "Card"),
+                ("Utilities", 450.00, "Electricity bill", "Card"),
+                ("Utilities", 120.00, "Internet", "Card"),
+                ("Subscriptions", 55.00, "Music streaming", "Card"),
+                ("Subscriptions", 30.00, "Cloud storage", "Card"),
+                ("Transport", 25.00, "Taxi", "Cash"),
+                ("Transport", 18.00, "Parking", "Cash"),
+                ("Health", 200.00, "Gym membership", "Card"),
+                ("Health", 90.00, "Supplements", "Card"),
+                ("Shopping", 350.00, "New trainers", "Card"),
+                ("Shopping", 120.00, "Accessories", "Card"),
             ]
-            for i, (cat, amt, note) in enumerate(demo):
+            for i, (cat, amt, note, pmt) in enumerate(demo):
                 day_offset = (i * 3) % 28
                 db.add(models.Expense(
                     date=base + timedelta(days=day_offset),
                     category=cat,
+                    payment_method=pmt,
                     amount=amt,
                     notes=note
                 ))

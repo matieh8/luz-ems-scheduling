@@ -482,6 +482,7 @@ class DashboardStats(BaseModel):
 class ExpenseBase(BaseModel):
     date: datetime
     category: str
+    payment_method: Optional[str] = "Card"
     amount: float
     notes: Optional[str] = None
 
@@ -493,6 +494,7 @@ class ExpenseCreate(ExpenseBase):
 class ExpenseUpdate(BaseModel):
     date: Optional[datetime] = None
     category: Optional[str] = None
+    payment_method: Optional[str] = None
     amount: Optional[float] = None
     notes: Optional[str] = None
 

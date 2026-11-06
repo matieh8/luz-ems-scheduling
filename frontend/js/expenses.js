@@ -47,6 +47,7 @@ function renderExpenseFilter() {
   const list = q
     ? EXPENSES.filter(e =>
         (e.category || '').toLowerCase().includes(q) ||
+        (e.payment_method || '').toLowerCase().includes(q) ||
         (e.notes || '').toLowerCase().includes(q) ||
         String(e.amount).includes(q)
       )
@@ -59,13 +60,14 @@ function renderExpenseFilter() {
 function renderExpenseList(list) {
   const box = $('exp-list');
   if (!list.length && !EXPENSES.length) {
-    box.innerHTML = `<table class="expense-sheet"><thead><tr><th>Date</th><th>Category</th><th>Item / Notes</th><th class="num">Amount</th><th></th></tr></thead><tbody><tr><td colspan="5" class="empty">No expenses yet. Click <strong>+ Add row</strong>.</td></tr></tbody></table>`;
+    box.innerHTML = `<table class="expense-sheet"><thead><tr><th>Date</th><th>Category</th><th>Type</th><th>Item / Notes</th><th class="num">Amount</th><th></th></tr></thead><tbody><tr><td colspan="6" class="empty">No expenses yet. Click <strong>+ Add row</strong>.</td></tr></tbody></table>`;
     return;
   }
   box.innerHTML = `<table class="expense-sheet"><thead><tr>
     <th>Date</th>
     <th style="width:38px"></th>
     <th>Category</th>
+    <th>Type</th>
     <th>Item / Notes</th>
     <th class="num">Amount</th>
     <th style="width:60px"></th>
@@ -74,6 +76,7 @@ function renderExpenseList(list) {
       <td>${cell(e.id, 'date', fmtDate(e.date))}</td>
       <td class="ico">${expIcon(e.category)}</td>
       <td>${cell(e.id, 'category', e.category)}</td>
+      <td>${cell(e.id, 'payment_method', e.payment_method || 'Card')}</td>
       <td>${cell(e.id, 'notes', e.notes || '')}</td>
       <td class="num bold">${cell(e.id, 'amount', money(e.amount).replace(/^AED\s*/, ''), 'right')}</td>
       <td class="num"><button class="btn btn-ghost btn-xs" style="color:var(--bad)" onclick="deleteExpense(${e.id})">×</button></td>
@@ -113,6 +116,9 @@ function startEditCell(e) {
     const opts = EXPENSE_CATS.map(c => `<option value="${esc(c)}">`).join('');
     el.innerHTML = `<input list="exp-cat-dl" class="input input-sm" value="${esc(expense.category)}" onblur="finishEdit()" onkeydown="editKey(event)"><datalist id="exp-cat-dl">${opts}</datalist>`;
     el.querySelector('input').focus();
+  } else if (field === 'payment_method') {
+    el.innerHTML = `<select class="input input-sm" onblur="finishEdit()" onkeydown="editKey(event)"><option value="Card" ${(expense.payment_method || 'Card') === 'Card' ? 'selected' : ''}>Card</option><option value="Cash" ${(expense.payment_method || 'Card') === 'Cash' ? 'selected' : ''}>Cash</option></select>`;
+    el.querySelector('select').focus();
   } else {
     el.innerHTML = `<input type="text" class="input input-sm" value="${esc(expense.notes || '')}" onblur="finishEdit()" onkeydown="editKey(event)">`;
     el.querySelector('input').focus();
@@ -127,8 +133,8 @@ function editKey(e) {
 async function finishEdit() {
   if (!EDITING) return;
   const { id, field, el, original } = EDITING;
-  const input = el.querySelector('input');
-  let value = input.value.trim();
+  const input = el.querySelector('input, select');
+  let value = (input.value || '').trim();
   EDITING = null;
 
   const expense = EXPENSES.find(x => x.id === id);
@@ -145,6 +151,8 @@ async function finishEdit() {
   } else if (field === 'category') {
     if (!value) { el.textContent = original; return; }
     payload.category = value;
+  } else if (field === 'payment_method') {
+    payload.payment_method = value || 'Card';
   } else if (field === 'notes') {
     payload.notes = value || null;
   }
@@ -172,6 +180,7 @@ async function addExpenseRow() {
   const payload = {
     date: zonedToDate(dateKey(today), '12:00').toISOString(),
     category: 'Other',
+    payment_method: 'Card',
     amount: 0,
     notes: ''
   };
@@ -209,5 +218,14 @@ function renderExpenseCats(cats) {
 
 function renderMethodBreakdown(expenses) {
   const box = $('exp-methods');
-  box.innerHTML = '<div class="empty small">Payment method tracking coming soon.</div>';
+  if (!expenses.length) { box.innerHTML = '<div class="empty small">No data yet.</div>'; return; }
+  const totals = expenses.reduce((acc, e) => {
+    const m = e.payment_method || 'Card';
+    acc[m] = (acc[m] || 0) + e.amount;
+    return acc;
+  }, {});
+  const rows = Object.entries(totals).sort((a, b) => b[1] - a[1]);
+  box.innerHTML = `<table><thead><tr><th>Type</th><th class="num">Total</th></tr></thead><tbody>` +
+    rows.map(([m, t]) => `<tr><td><span class="badge badge-neutral">${esc(m)}</span></td><td class="num bold">${money(t)}</td></tr>`).join('') +
+    `</tbody></table>`;
 }

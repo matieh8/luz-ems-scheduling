@@ -14,6 +14,7 @@ let EXPENSES = [];
 let FILTERED_EXPENSES = [];
 let EXPENSE_CATS = [];
 let EDITING = null;
+let OUTSIDE_CLICK_HANDLER = null;
 
 function expIcon(cat) {
   const key = String(cat).toLowerCase();
@@ -112,7 +113,7 @@ function renderDays() {
         ${items.length ? `<table class="day-table"><tbody>` +
           items.map(e => `<tr data-id="${e.id}">
             <td class="ico">${expIcon(e.category)}</td>
-            <td>${cell(e.id, 'category', e.category)}</td>
+            <td>${cell(e.id, 'category', `${expIcon(e.category)} ${e.category}`)}</td>
             <td>${cell(e.id, 'payment_method', e.payment_method || 'Card')}</td>
             <td>${cell(e.id, 'notes', e.notes || '')}</td>
             <td class="num bold">${cell(e.id, 'amount', money(e.amount).replace(/^AED\s*/, ''), 'right')}</td>
@@ -152,11 +153,12 @@ function startEditCell(e) {
   } else if (field === 'category') {
     const current = expense.category || 'Other';
     const isPreset = PRESET_CATS.includes(current);
-    const opts = PRESET_CATS.map(c => `<option value="${esc(c)}" ${c === current ? 'selected' : ''}>${esc(c)}</option>`).join('');
-    el.innerHTML = `<div class="cat-edit-wrap" onclick="event.stopPropagation()">` +
-      `<select id="cat-select-${expense.id}" class="input input-sm" onchange="onCategoryChange(${expense.id})" onblur="finishEdit()" onkeydown="editKey(event)">${opts}<option value="__other__" ${!isPreset ? 'selected' : ''}>Other</option></select>` +
-      `<input id="cat-other-${expense.id}" type="text" class="input input-sm" style="margin-top:6px;display:${!isPreset ? 'block' : 'none'}" value="${esc(!isPreset ? current : '')}" placeholder="Type category..." onblur="finishEdit()" onkeydown="editKey(event)">` +
+    const opts = PRESET_CATS.map(c => `<option value="${esc(c)}" ${c === current ? 'selected' : ''}>${expIcon(c)} ${esc(c)}</option>`).join('');
+    el.innerHTML = `<div class="cat-edit-wrap" id="cat-wrap-${expense.id}" onclick="event.stopPropagation()">` +
+      `<select id="cat-select-${expense.id}" class="input input-sm" onchange="onCategoryChange(${expense.id})">${opts}<option value="__other__" ${!isPreset ? 'selected' : ''}>📝 Other</option></select>` +
+      `<input id="cat-other-${expense.id}" type="text" class="input input-sm" style="margin-top:6px;display:${!isPreset ? 'block' : 'none'}" value="${esc(!isPreset ? current : '')}" placeholder="Type category..." onkeydown="editKey(event)">` +
       `</div>`;
+    installOutsideClickHandler();
   } else if (field === 'payment_method') {
     el.innerHTML = `<select class="input input-sm" onblur="finishEdit()" onkeydown="editKey(event)"><option value="Card" ${(expense.payment_method || 'Card') === 'Card' ? 'selected' : ''}>Card</option><option value="Cash" ${(expense.payment_method || 'Card') === 'Cash' ? 'selected' : ''}>Cash</option></select>`;
   } else {
@@ -175,17 +177,43 @@ function editKey(e) {
 function onCategoryChange(id) {
   const select = $(`cat-select-${id}`);
   const other = $(`cat-other-${id}`);
-  if (!select || !other) return;
+  if (!select) return;
   if (select.value === '__other__') {
-    other.style.display = 'block';
-    other.focus();
+    if (other) {
+      other.style.display = 'block';
+      setTimeout(() => other.focus(), 50);
+    }
   } else {
-    other.style.display = 'none';
+    if (other) other.style.display = 'none';
+    finishEdit();
+  }
+}
+
+function installOutsideClickHandler() {
+  removeOutsideClickHandler();
+  setTimeout(() => {
+    OUTSIDE_CLICK_HANDLER = (e) => {
+      if (!EDITING) return;
+      const wrap = document.querySelector('.cat-edit-wrap');
+      if (wrap && wrap.contains(e.target)) return;
+      const cell = EDITING.el;
+      if (cell && cell.contains(e.target)) return;
+      finishEdit();
+    };
+    document.addEventListener('click', OUTSIDE_CLICK_HANDLER, true);
+  }, 10);
+}
+
+function removeOutsideClickHandler() {
+  if (OUTSIDE_CLICK_HANDLER) {
+    document.removeEventListener('click', OUTSIDE_CLICK_HANDLER, true);
+    OUTSIDE_CLICK_HANDLER = null;
   }
 }
 
 async function finishEdit() {
   if (!EDITING) return;
+  removeOutsideClickHandler();
   const { id, field, el, original } = EDITING;
   const input = el.querySelector('input, select');
   let value = (input.value || '').trim();
@@ -226,6 +254,7 @@ async function finishEdit() {
 
 function cancelEdit() {
   if (!EDITING) return;
+  removeOutsideClickHandler();
   const { el, original } = EDITING;
   EDITING = null;
   el.textContent = original;

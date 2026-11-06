@@ -1,4 +1,4 @@
-/* Monthly expense tracker — calendar month view with day detail */
+/* Monthly expense tracker — vertical day cards, 1st to last day of month */
 const EXP_ICONS = {
   'rent': '🏠', 'housing': '🏠', 'mortgage': '🏠',
   'food': '🍔', 'fast food': '🍔', 'groceries': '🛒', 'restaurant': '🍽️',
@@ -13,7 +13,6 @@ let EXPENSES = [];
 let FILTERED_EXPENSES = [];
 let EXPENSE_CATS = [];
 let EDITING = null;
-let SELECTED_DAY = null;
 
 function expIcon(cat) {
   const key = String(cat).toLowerCase();
@@ -29,6 +28,9 @@ function initExpenseMonth() {
 
 async function loadExpenses() {
   initExpenseMonth();
+  // remove old detail panel from previous layout if present
+  const old = $('exp-day-detail');
+  if (old) old.remove();
   const [y, m] = val('exp-month').split('-').map(Number);
   const [summary, cats] = await Promise.all([
     api('GET', `/expenses/summary?year=${y}&month=${m}`),
@@ -38,10 +40,6 @@ async function loadExpenses() {
   EXPENSE_CATS = cats;
   $('exp-month-label').textContent = new Date(y, m - 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
   $('exp-export').href = `/api/expenses/export.csv?year=${y}&month=${m}&token=${S.token}`;
-  const today = dateKey(new Date());
-  if (!SELECTED_DAY || !EXPENSES.some(e => dateKey(parseISO(e.date)) === SELECTED_DAY)) {
-    SELECTED_DAY = EXPENSES.some(e => dateKey(parseISO(e.date)) === today) ? today : null;
-  }
   applyFilters(summary.by_category);
 }
 
@@ -55,9 +53,7 @@ function applyFilters(categorySummary) {
         String(e.amount).includes(q)
       )
     : [...EXPENSES];
-  const [y, m] = val('exp-month').split('-').map(Number);
-  renderCalendar(y, m);
-  renderDayDetail();
+  renderDays();
   const total = FILTERED_EXPENSES.reduce((a, e) => a + e.amount, 0);
   $('exp-grand').textContent = `Total: ${money(total)}${q ? ` · ${FILTERED_EXPENSES.length} result${FILTERED_EXPENSES.length === 1 ? '' : 's'}` : ''}`;
   if (categorySummary !== undefined) renderExpenseCats(categorySummary);
@@ -90,81 +86,43 @@ function daysInMonth(y, m) {
   return new Date(y, m, 0).getDate();
 }
 
-function renderCalendar(y, m) {
-  const groups = expensesByDay();
-  const firstDay = new Date(y, m - 1, 1).getDay(); // 0 = Sun
+function renderDays() {
+  const box = $('exp-list');
+  const [y, m] = val('exp-month').split('-').map(Number);
   const totalDays = daysInMonth(y, m);
+  const groups = expensesByDay();
   const todayKeyStr = dateKey(new Date());
 
-  const headerDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  let html = `<div class="exp-cal"><div class="exp-cal-header">` +
-    headerDays.map(d => `<div class="exp-cal-hday">${d}</div>`).join('') +
-    `</div><div class="exp-cal-grid">`;
-
-  // empty cells before the 1st
-  for (let i = 0; i < firstDay; i++) {
-    html += `<div class="exp-cal-cell empty"></div>`;
-  }
-
+  let html = '';
   for (let d = 1; d <= totalDays; d++) {
     const key = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
     const items = groups[key] || [];
-    const total = items.reduce((a, e) => a + e.amount, 0);
+    const dayTotal = items.reduce((a, e) => a + e.amount, 0);
+    const dateObj = new Date(y, m - 1, d);
     const isToday = key === todayKeyStr;
-    const isSelected = key === SELECTED_DAY;
-    html += `<div class="exp-cal-cell ${isToday ? 'today' : ''} ${isSelected ? 'selected' : ''} ${items.length ? 'has-data' : ''}" data-day="${key}" onclick="selectDay('${key}')">
-      <div class="exp-cal-date">${d}</div>
-      <div class="exp-cal-total">${total > 0 ? money(total) : ''}</div>
-      ${items.length ? `<div class="exp-cal-dot"></div>` : ''}
+    const label = dateObj.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+
+    html += `<div class="day-card ${isToday ? 'today' : ''} ${items.length ? 'has-data' : 'empty'}" data-day="${key}">
+      <div class="day-header">
+        <div class="day-title"><span class="day-date">${esc(label)}</span>${items.length ? `<span class="day-count">${items.length} expense${items.length === 1 ? '' : 's'}</span>` : '<span class="day-count muted">No expenses</span>'}</div>
+        <div class="day-total">${dayTotal > 0 ? money(dayTotal) : ''}</div>
+      </div>
+      <div class="day-body">
+        ${items.length ? `<table class="day-table"><tbody>` +
+          items.map(e => `<tr data-id="${e.id}">
+            <td class="ico">${expIcon(e.category)}</td>
+            <td>${cell(e.id, 'category', e.category)}</td>
+            <td>${cell(e.id, 'payment_method', e.payment_method || 'Card')}</td>
+            <td>${cell(e.id, 'notes', e.notes || '')}</td>
+            <td class="num bold">${cell(e.id, 'amount', money(e.amount).replace(/^AED\s*/, ''), 'right')}</td>
+            <td class="num"><button class="btn btn-ghost btn-xs" style="color:var(--bad)" onclick="deleteExpense(${e.id})">×</button></td>
+          </tr>`).join('') +
+          `</tbody></table>` : ''}
+        <button class="btn btn-ghost btn-sm add-to-day" onclick="addExpenseToDay('${key}')">+ Add expense</button>
+      </div>
     </div>`;
   }
-  html += `</div></div>`;
-  $('exp-list').innerHTML = html;
-}
-
-function selectDay(key) {
-  SELECTED_DAY = key;
-  renderCalendar(+key.split('-')[0], +key.split('-')[1]);
-  renderDayDetail();
-}
-
-function renderDayDetail() {
-  let box = $('exp-day-detail');
-  if (!box) {
-    box = document.createElement('div');
-    box.id = 'exp-day-detail';
-    box.className = 'mt';
-    $('page-expenses').appendChild(box);
-  }
-  if (!SELECTED_DAY) {
-    box.innerHTML = `<div class="card empty">Select a day from the calendar above to view or add expenses.</div>`;
-    return;
-  }
-  const groups = expensesByDay();
-  const items = groups[SELECTED_DAY] || [];
-  const dayTotal = items.reduce((a, e) => a + e.amount, 0);
-  const d = new Date(SELECTED_DAY + 'T00:00:00');
-  const label = d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
-
-  box.innerHTML = `<div class="card">
-    <div class="day-header">
-      <div class="day-title"><span class="day-date">${esc(label)}</span><span class="day-count">${items.length} expense${items.length === 1 ? '' : 's'}</span></div>
-      <div class="day-total">${money(dayTotal)}</div>
-    </div>
-    <div class="day-body">
-      ${items.length ? `<table class="day-table"><tbody>` +
-        items.map(e => `<tr data-id="${e.id}">
-          <td class="ico">${expIcon(e.category)}</td>
-          <td>${cell(e.id, 'category', e.category)}</td>
-          <td>${cell(e.id, 'payment_method', e.payment_method || 'Card')}</td>
-          <td>${cell(e.id, 'notes', e.notes || '')}</td>
-          <td class="num bold">${cell(e.id, 'amount', money(e.amount).replace(/^AED\s*/, ''), 'right')}</td>
-          <td class="num"><button class="btn btn-ghost btn-xs" style="color:var(--bad)" onclick="deleteExpense(${e.id})">×</button></td>
-        </tr>`).join('') +
-        `</tbody></table>` : `<div class="empty small" style="padding:20px 0">No expenses for this day.</div>`}
-      <button class="btn btn-primary btn-sm" style="margin-top:12px" onclick="addExpenseToDay('${SELECTED_DAY}')">+ Add expense to this day</button>
-    </div>
-  </div>`;
+  box.innerHTML = html;
   attachCellHandlers();
 }
 
@@ -251,7 +209,6 @@ function cancelEdit() {
 
 async function addExpenseRow() {
   const today = dateKey(new Date());
-  SELECTED_DAY = today;
   await createExpense(today, true);
 }
 
@@ -269,12 +226,12 @@ async function createExpense(dayKeyStr, focusAmount) {
   };
   const created = await api('POST', '/expenses/', payload);
   EXPENSES.unshift(created);
-  SELECTED_DAY = dayKeyStr;
   loadExpenses();
   setTimeout(() => {
     const cell = document.querySelector(`.sheet-cell[data-id="${created.id}"][data-field="${focusAmount ? 'amount' : 'category'}"]`);
+    if (cell) cell.scrollIntoView({ behavior: 'smooth', block: 'center' });
     if (cell) cell.click();
-  }, 50);
+  }, 60);
 }
 
 async function deleteExpense(id) {

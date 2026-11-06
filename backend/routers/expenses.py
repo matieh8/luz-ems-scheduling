@@ -80,6 +80,7 @@ def create_expense(body: schemas.ExpenseCreate, db: Session = Depends(get_db)):
     e = models.Expense(
         date=body.date,
         category=body.category.strip(),
+        payment_method=(body.payment_method or "Card").strip(),
         amount=body.amount,
         notes=body.notes
     )
@@ -97,6 +98,8 @@ def update_expense(expense_id: int, body: schemas.ExpenseUpdate, db: Session = D
     data = body.model_dump(exclude_unset=True)
     if "category" in data and data["category"]:
         data["category"] = data["category"].strip()
+    if "payment_method" in data and data["payment_method"]:
+        data["payment_method"] = data["payment_method"].strip()
     for k, v in data.items():
         setattr(e, k, v)
     db.commit()
@@ -123,11 +126,11 @@ def export_csv(year: int = Query(...), month: int = Query(...), db: Session = De
 
     out = StringIO()
     w = csv.writer(out)
-    w.writerow(["Date", "Category", "Item / Notes", "Amount"])
+    w.writerow(["Date", "Category", "Type", "Item / Notes", "Amount"])
     for e in expenses:
-        w.writerow([e.date.strftime("%Y-%m-%d"), e.category, e.notes or "", f"{e.amount:.2f}"])
+        w.writerow([e.date.strftime("%Y-%m-%d"), e.category, e.payment_method or "Card", e.notes or "", f"{e.amount:.2f}"])
     total = sum(e.amount for e in expenses)
-    w.writerow(["", "", "Total", f"{total:.2f}"])
+    w.writerow(["", "", "", "Total", f"{total:.2f}"])
 
     return PlainTextResponse(
         content=out.getvalue(),

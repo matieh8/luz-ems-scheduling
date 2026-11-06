@@ -147,24 +147,27 @@ function startEditCell(e) {
   EDITING = { id, field, el, original: el.textContent };
 
   if (field === 'amount') {
-    el.innerHTML = `<input type="number" step="0.01" class="input input-sm" style="text-align:right" value="${expense.amount}" onblur="finishEdit()" onkeydown="editKey(event)">`;
+    el.innerHTML = `<input type="text" inputmode="decimal" pattern="[0-9.,]*" class="input input-sm" style="text-align:right" value="${expense.amount}" onblur="blurField(event)" onkeydown="editKey(event)">`;
+    installOutsideClickHandler();
   } else if (field === 'category') {
     const current = expense.category || 'Other';
     const isPreset = PRESET_CATS.includes(current);
     const opts = PRESET_CATS.map(c => `<option value="${esc(c)}" ${c === current ? 'selected' : ''}>${expIcon(c)} ${esc(c)}</option>`).join('');
     el.innerHTML = `<div class="cat-edit-wrap" id="cat-wrap-${expense.id}" onclick="event.stopPropagation()">` +
       `<select id="cat-select-${expense.id}" class="input input-sm" onchange="onCategoryChange(${expense.id})">${opts}<option value="__other__" ${!isPreset ? 'selected' : ''}>📝 Other</option></select>` +
-      `<input id="cat-other-${expense.id}" type="text" class="input input-sm" style="margin-top:6px;display:${!isPreset ? 'block' : 'none'}" value="${esc(!isPreset ? current : '')}" placeholder="Type category..." onkeydown="editKey(event)">` +
+      `<input id="cat-other-${expense.id}" type="text" class="input input-sm" style="margin-top:6px;display:${!isPreset ? 'block' : 'none'}" value="${esc(!isPreset ? current : '')}" placeholder="Type category..." onblur="blurField(event)" onkeydown="editKey(event)">` +
       `</div>`;
     installOutsideClickHandler();
   } else if (field === 'payment_method') {
-    el.innerHTML = `<select class="input input-sm" onblur="finishEdit()" onkeydown="editKey(event)"><option value="Card" ${(expense.payment_method || 'Card') === 'Card' ? 'selected' : ''}>Card</option><option value="Cash" ${(expense.payment_method || 'Card') === 'Cash' ? 'selected' : ''}>Cash</option></select>`;
+    el.innerHTML = `<select class="input input-sm" onchange="finishEdit()" onblur="blurField(event)" onkeydown="editKey(event)"><option value="Card" ${(expense.payment_method || 'Card') === 'Card' ? 'selected' : ''}>Card</option><option value="Cash" ${(expense.payment_method || 'Card') === 'Cash' ? 'selected' : ''}>Cash</option></select>`;
+    installOutsideClickHandler();
   } else {
-    el.innerHTML = `<input type="text" class="input input-sm" value="${esc(expense.notes || '')}" onblur="finishEdit()" onkeydown="editKey(event)">`;
+    el.innerHTML = `<input type="text" class="input input-sm" value="${esc(expense.notes || '')}" onblur="blurField(event)" onkeydown="editKey(event)">`;
+    installOutsideClickHandler();
   }
   const input = el.querySelector('input, select');
   input.focus();
-  if (input.select) input.select();
+  if (field !== 'amount' && input.select) input.select();
 }
 
 function editKey(e) {
@@ -187,19 +190,28 @@ function onCategoryChange(id) {
   }
 }
 
+function blurField(e) {
+  // delay so relatedTarget / activeElement is settled
+  setTimeout(() => {
+    if (!EDITING) return;
+    const cell = EDITING.el;
+    if (cell && !cell.contains(document.activeElement)) {
+      finishEdit();
+    }
+  }, 50);
+}
+
 function installOutsideClickHandler() {
   removeOutsideClickHandler();
   setTimeout(() => {
     OUTSIDE_CLICK_HANDLER = (e) => {
       if (!EDITING) return;
-      const wrap = document.querySelector('.cat-edit-wrap');
-      if (wrap && wrap.contains(e.target)) return;
       const cell = EDITING.el;
       if (cell && cell.contains(e.target)) return;
       finishEdit();
     };
     document.addEventListener('click', OUTSIDE_CLICK_HANDLER, true);
-  }, 10);
+  }, 50);
 }
 
 function removeOutsideClickHandler() {
@@ -222,7 +234,8 @@ async function finishEdit() {
 
   let payload = {};
   if (field === 'amount') {
-    const amt = parseFloat(value);
+    const raw = value.replace(/,/g, '');
+    const amt = parseFloat(raw);
     if (isNaN(amt) || amt < 0) { el.textContent = original; return; }
     payload.amount = amt;
   } else if (field === 'category') {

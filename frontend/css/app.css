@@ -226,40 +226,29 @@ textarea.input { min-height: 80px; resize: vertical; }
 .progress > div { height: 100%; background: var(--accent); border-radius: 999px; }
 
 /* Expense spreadsheet */
-.sheet-cell { padding: 6px 10px; border-radius: 8px; min-height: 34px; cursor: text; border: 1px solid transparent; transition: background .12s ease, border-color .12s ease, box-shadow .12s ease; display: flex; align-items: center; }
+.sheet-cell { padding: 7px 10px; border-radius: 8px; min-height: 36px; cursor: text; border: 1px solid transparent; transition: background .12s ease, border-color .12s ease, box-shadow .12s ease; display: flex; align-items: center; }
 .sheet-cell:hover { background: var(--bg); border-color: var(--border); }
 .sheet-cell:focus-visible { outline: none; background: var(--bg); border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
-.sheet-cell .input { padding: 5px 8px; font-size: .85rem; border-radius: 8px; height: 32px; }
-/* Expense calendar */
-.exp-cal { padding: 6px; }
-.exp-cal-header { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-bottom: 6px; }
-.exp-cal-hday { text-align: center; font-size: .72rem; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: .04em; padding: 6px 0; }
-.exp-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
-.exp-cal-cell { min-height: 72px; border: 1px solid var(--border); border-radius: 10px; padding: 8px; cursor: pointer; background: var(--surface); transition: transform .1s ease, box-shadow .15s ease, border-color .15s ease; position: relative; }
-.exp-cal-cell:hover { border-color: var(--accent); transform: translateY(-1px); box-shadow: var(--shadow-md); }
-.exp-cal-cell.selected { border-color: var(--accent); background: var(--accent-light); box-shadow: 0 0 0 3px var(--accent-light); }
-.exp-cal-cell.today .exp-cal-date { color: var(--accent); font-weight: 800; }
-.exp-cal-cell.empty { background: transparent; border-color: transparent; cursor: default; pointer-events: none; }
-.exp-cal-cell.has-data { background: #fafbfe; }
-.exp-cal-date { font-size: .9rem; font-weight: 600; }
-.exp-cal-total { font-size: .78rem; font-weight: 700; color: var(--text-2); margin-top: 4px; font-variant-numeric: tabular-nums; }
-.exp-cal-dot { position: absolute; top: 8px; right: 8px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
-.day-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 12px; overflow: hidden; }
-.day-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; background: #fafbfe; border-bottom: 1px solid var(--border); }
-.day-title { display: flex; align-items: center; gap: 10px; }
+.sheet-cell .input { padding: 6px 10px; font-size: .86rem; border-radius: 8px; height: 34px; width: 100%; }
+.sheet-cell select.input { padding-right: 24px; }
+/* Expense day cards */
+.day-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 10px; overflow: hidden; transition: border-color .15s ease, box-shadow .15s ease; }
+.day-card:hover { border-color: #d1d5db; }
+.day-card.today { border-color: var(--accent-light); box-shadow: 0 0 0 3px var(--accent-light), var(--shadow); }
+.day-card.empty .day-header { background: #fafbfe; }
+.day-header { display: flex; justify-content: space-between; align-items: center; padding: 11px 16px; background: #f4f6fb; border-bottom: 1px solid var(--border); }
+.day-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .day-date { font-weight: 700; font-size: .95rem; }
 .day-count { font-size: .75rem; color: var(--text-2); background: var(--bg); padding: 2px 8px; border-radius: 999px; }
-.day-total { font-weight: 800; font-size: 1.1rem; font-variant-numeric: tabular-nums; }
+.day-count.muted { background: transparent; padding: 0; }
+.day-total { font-weight: 800; font-size: 1.05rem; font-variant-numeric: tabular-nums; }
 .day-body { padding: 10px 14px 14px; }
 .day-table { border: none; box-shadow: none; }
 .day-table td { padding: 5px 8px; border-bottom: none; font-size: .85rem; }
 .day-table td.ico { width: 28px; text-align: center; }
-.day-table td.num { min-width: 80px; }
-@media (max-width: 700px) {
-  .exp-cal-grid { gap: 4px; }
-  .exp-cal-cell { min-height: 52px; padding: 5px; }
-  .exp-cal-total { font-size: .65rem; }
-}
+.day-table td.num { min-width: 90px; }
+.add-to-day { margin-top: 8px; }
+.exp-day-list { max-height: 70vh; overflow-y: auto; padding-right: 4px; }
 
 @media (max-width: 900px) {
   .sidebar { width: 100%; top: auto; bottom: 0; height: 62px; flex-direction: row; border-right: none; border-top: 1px solid var(--border); }

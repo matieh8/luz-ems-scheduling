@@ -1,6 +1,0 @@
-2026/11/04-09:16:21.307 a1dc1 Creating DB /home/ubuntu/luz_ems_scheduling/data/whatsapp_session/session/Default/WebStorage/2/IndexedDB/indexeddb.leveldb since it was missing.
-2026/11/04-09:16:21.309 a1dc1 Reusing MANIFEST /home/ubuntu/luz_ems_scheduling/data/whatsapp_session/session/Default/WebStorage/2/IndexedDB/indexeddb.leveldb/MANIFEST-000001
-2026/11/04-09:16:23.610 a1dc3 Level-0 table #5: started
-2026/11/04-09:16:23.611 a1dc3 Level-0 table #5: 851 bytes OK
-2026/11/04-09:16:23.611 a1dc3 Delete type=0 #3
-2026/11/04-09:16:23.611 a1dc3 Manual compaction at level-0 from (begin) .. (end); will stop at (end)

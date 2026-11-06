@@ -9,6 +9,7 @@ const EXP_ICONS = {
   'subscriptions': '📺', 'entertainment': '🎬',
   'education': '📚', 'travel': '✈️', 'gift': '🎁', 'other': '📝'
 };
+const PRESET_CATS = ['Fast food', 'Groceries', 'Fuel', 'Transport', 'Utilities', 'Subscriptions', 'Shopping', 'Health', 'Rent', 'Entertainment', 'Education', 'Travel', 'Gift'];
 let EXPENSES = [];
 let FILTERED_EXPENSES = [];
 let EXPENSE_CATS = [];
@@ -149,8 +150,13 @@ function startEditCell(e) {
   if (field === 'amount') {
     el.innerHTML = `<input type="number" step="0.01" class="input input-sm" style="text-align:right" value="${expense.amount}" onblur="finishEdit()" onkeydown="editKey(event)">`;
   } else if (field === 'category') {
-    const opts = EXPENSE_CATS.map(c => `<option value="${esc(c)}">`).join('');
-    el.innerHTML = `<input list="exp-cat-dl" class="input input-sm" value="${esc(expense.category)}" onblur="finishEdit()" onkeydown="editKey(event)"><datalist id="exp-cat-dl">${opts}</datalist>`;
+    const current = expense.category || 'Other';
+    const isPreset = PRESET_CATS.includes(current);
+    const opts = PRESET_CATS.map(c => `<option value="${esc(c)}" ${c === current ? 'selected' : ''}>${esc(c)}</option>`).join('');
+    el.innerHTML = `<div class="cat-edit-wrap" onclick="event.stopPropagation()">` +
+      `<select id="cat-select-${expense.id}" class="input input-sm" onchange="onCategoryChange(${expense.id})" onblur="finishEdit()" onkeydown="editKey(event)">${opts}<option value="__other__" ${!isPreset ? 'selected' : ''}>Other</option></select>` +
+      `<input id="cat-other-${expense.id}" type="text" class="input input-sm" style="margin-top:6px;display:${!isPreset ? 'block' : 'none'}" value="${esc(!isPreset ? current : '')}" placeholder="Type category..." onblur="finishEdit()" onkeydown="editKey(event)">` +
+      `</div>`;
   } else if (field === 'payment_method') {
     el.innerHTML = `<select class="input input-sm" onblur="finishEdit()" onkeydown="editKey(event)"><option value="Card" ${(expense.payment_method || 'Card') === 'Card' ? 'selected' : ''}>Card</option><option value="Cash" ${(expense.payment_method || 'Card') === 'Cash' ? 'selected' : ''}>Cash</option></select>`;
   } else {
@@ -164,6 +170,18 @@ function startEditCell(e) {
 function editKey(e) {
   if (e.key === 'Enter') { e.preventDefault(); finishEdit(); }
   if (e.key === 'Escape') { e.preventDefault(); cancelEdit(); }
+}
+
+function onCategoryChange(id) {
+  const select = $(`cat-select-${id}`);
+  const other = $(`cat-other-${id}`);
+  if (!select || !other) return;
+  if (select.value === '__other__') {
+    other.style.display = 'block';
+    other.focus();
+  } else {
+    other.style.display = 'none';
+  }
 }
 
 async function finishEdit() {
@@ -182,8 +200,14 @@ async function finishEdit() {
     if (isNaN(amt) || amt < 0) { el.textContent = original; return; }
     payload.amount = amt;
   } else if (field === 'category') {
-    if (!value) { el.textContent = original; return; }
-    payload.category = value;
+    const select = el.querySelector('select');
+    const other = el.querySelector('input[type="text"]');
+    let cat = select ? select.value : value;
+    if (cat === '__other__') {
+      cat = other ? other.value.trim() : '';
+    }
+    if (!cat) { el.textContent = original; return; }
+    payload.category = cat;
   } else if (field === 'payment_method') {
     payload.payment_method = value || 'Card';
   } else if (field === 'notes') {

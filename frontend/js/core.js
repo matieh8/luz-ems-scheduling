@@ -55,8 +55,9 @@ async function refreshLookups() {
 }
 
 const PAGES = { dashboard: () => loadDashboard(), calendar: () => loadCalendar(), clients: () => loadClients(),
-  subscriptions: () => loadSubscriptions(), payments: () => loadPayments(), reports: () => loadReports(),
-  messages: () => loadMessages(), catalog: () => loadCatalog(), settings: () => loadSettings() };
+  subscriptions: () => loadSubscriptions(), payments: () => loadPayments(), expenses: () => loadExpenses(),
+  reports: () => loadReports(), messages: () => loadMessages(), catalog: () => loadCatalog(),
+  settings: () => loadSettings() };
 function go(page) {
   if (!PAGES[page]) page = 'dashboard';
   S.page = page; location.hash = page;

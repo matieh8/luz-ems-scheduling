@@ -1,0 +1,51 @@
+2026/11/04-09:18:40.043 a2ef9 Reusing MANIFEST /home/ubuntu/luz_ems_scheduling/data/whatsapp_session/session/Default/IndexedDB/https_web.whatsapp.com_0.indexeddb.leveldb/MANIFEST-000001
+2026/11/04-09:18:40.044 a2ef9 Recovering log #466
+2026/11/04-09:18:40.044 a2ef9 Reusing old log /home/ubuntu/luz_ems_scheduling/data/whatsapp_session/session/Default/IndexedDB/https_web.whatsapp.com_0.indexeddb.leveldb/000466.log 
+2026/11/04-09:18:40.044 a2ef9 Delete type=2 #446
+2026/11/04-09:18:40.044 a2ef9 Delete type=2 #470
+2026/11/04-09:18:40.048 a2ef9 Level-0 table #472: started
+2026/11/04-09:18:40.052 a2ef9 Level-0 table #472: 568 bytes OK
+2026/11/04-09:18:40.053 a2ef9 Delete type=0 #466
+2026/11/04-09:18:40.054 a2ef9 Manual compaction at level-0 from '\x00\x19\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00\x1a\x00\x00\x00' @ 0 : 0; will stop at '\x00\x1b\x03\x02\x03\x00\x00\x00\x00\x00\x00\xf0?' @ 2053340 : 0
+2026/11/04-09:18:40.054 a2ef9 Compacting 1@0 + 2@1 files
+2026/11/04-09:18:40.081 a2ef9 Generated table #473@0: 21736 keys, 463871 bytes
+2026/11/04-09:18:40.085 a2ef9 Generated table #474@0: 3985 keys, 98110 bytes
+2026/11/04-09:18:40.085 a2ef9 Compacted 1@0 + 2@1 files => 561981 bytes
+2026/11/04-09:18:40.086 a2ef9 compacted to: files[ 0 2 12 0 0 0 0 ]
+2026/11/04-09:18:40.087 a2ef9 Delete type=2 #472
+2026/11/04-09:18:40.087 a2ef9 Manual compaction at level-0 from '\x00\x1b\x03\x02\x03\x00\x00\x00\x00\x00\x00\xf0?' @ 2053340 : 0 .. '\x00\x1a\x00\x00\x00' @ 0 : 0; will stop at (end)
+2026/11/04-09:18:40.087 a2ef9 Manual compaction at level-1 from '\x00\x19\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00\x1a\x00\x00\x00' @ 0 : 0; will stop at '\x00\x1b\x03\x02\x03\x00\x00\x00\x00\x00\x00\xf0?' @ 2053340 : 0
+2026/11/04-09:18:40.087 a2ef9 Compacting 1@1 + 1@2 files
+2026/11/04-09:18:40.105 a2ef9 Generated table #475@1: 8637 keys, 610681 bytes
+2026/11/04-09:18:40.106 a2ef9 Compacted 1@1 + 1@2 files => 610681 bytes
+2026/11/04-09:18:40.107 a2ef9 compacted to: files[ 0 1 12 0 0 0 0 ]
+2026/11/04-09:18:40.107 a2ef9 Delete type=2 #474
+2026/11/04-09:18:40.107 a2ef9 Manual compaction at level-1 from '\x00\x1b\x03\x02\x03\x00\x00\x00\x00\x00\x00\xf0?' @ 2053340 : 0 .. '\x00\x1a\x00\x00\x00' @ 0 : 0; will stop at (end)
+2026/11/04-09:18:40.860 a2ef9 Compacting 1@1 + 10@2 files
+2026/11/04-09:18:40.968 a2ef9 Generated table #476@1: 53397 keys, 2188729 bytes
+2026/11/04-09:18:41.060 a2ef9 Generated table #477@1: 89898 keys, 2242129 bytes
+2026/11/04-09:18:41.128 a2ef9 Generated table #478@1: 45757 keys, 2257636 bytes
+2026/11/04-09:18:41.201 a2ef9 Generated table #479@1: 59444 keys, 2227481 bytes
+2026/11/04-09:18:41.230 a2ef9 Generated table #480@1: 1273 keys, 2137264 bytes
+2026/11/04-09:18:41.266 a2ef9 Generated table #481@1: 2741 keys, 2147536 bytes
+2026/11/04-09:18:41.304 a2ef9 Generated table #482@1: 3244 keys, 2153526 bytes
+2026/11/04-09:18:41.345 a2ef9 Generated table #483@1: 3276 keys, 2151202 bytes
+2026/11/04-09:18:41.417 a2ef9 Generated table #484@1: 31225 keys, 2230079 bytes
+2026/11/04-09:18:41.479 a2ef9 Generated table #485@1: 28540 keys, 2230916 bytes
+2026/11/04-09:18:41.483 a2ef9 Generated table #486@1: 1926 keys, 105114 bytes
+2026/11/04-09:18:41.484 a2ef9 Compacted 1@1 + 10@2 files => 22071612 bytes
+2026/11/04-09:18:41.484 a2ef9 compacted to: files[ 0 0 13 0 0 0 0 ]
+2026/11/04-09:18:41.485 a2ef9 Delete type=2 #462
+2026/11/04-09:18:41.485 a2ef9 Delete type=2 #455
+2026/11/04-09:18:41.485 a2ef9 Delete type=2 #442
+2026/11/04-09:18:41.485 a2ef9 Delete type=2 #458
+2026/11/04-09:18:41.485 a2ef9 Delete type=2 #464
+2026/11/04-09:18:41.485 a2ef9 Delete type=2 #457
+2026/11/04-09:18:41.485 a2ef9 Delete type=2 #461
+2026/11/04-09:18:41.485 a2ef9 Delete type=2 #463
+2026/11/04-09:18:41.486 a2ef9 Delete type=2 #459
+2026/11/04-09:18:41.486 a2ef9 Delete type=2 #468
+2026/11/04-09:18:41.486 a2ef9 Delete type=2 #456
+2026/11/04-09:18:41.486 a2ef9 Delete type=2 #460
+2026/11/04-09:18:41.486 a2ef9 Delete type=2 #473
+2026/11/04-09:18:41.486 a2ef9 Delete type=2 #469

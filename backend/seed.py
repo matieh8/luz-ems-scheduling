@@ -49,6 +49,40 @@ def seed_data():
                 models.SubscriptionPlan(name="Monthly Unlimited", sessions_included=30, duration_days=30, price=3000.0,
                                         description="Up to one session per day"),
             ])
+
+        if db.query(models.Expense).count() == 0:
+            from datetime import datetime, timedelta
+            base = datetime.utcnow().replace(day=1)
+            demo = [
+                ("Fast food", 45.00, "Lunch break"),
+                ("Fast food", 32.50, "Drive-through"),
+                ("Fast food", 28.00, "Snacks"),
+                ("Fast food", 52.00, "Dinner"),
+                ("Fuel", 120.00, "Petrol station"),
+                ("Fuel", 85.00, "Top-up"),
+                ("Fuel", 140.00, "Full tank"),
+                ("Groceries", 250.00, "Weekly shop"),
+                ("Groceries", 75.50, "Fresh produce"),
+                ("Groceries", 180.00, "Supermarket run"),
+                ("Utilities", 450.00, "Electricity bill"),
+                ("Utilities", 120.00, "Internet"),
+                ("Subscriptions", 55.00, "Music streaming"),
+                ("Subscriptions", 30.00, "Cloud storage"),
+                ("Transport", 25.00, "Taxi"),
+                ("Transport", 18.00, "Parking"),
+                ("Health", 200.00, "Gym membership"),
+                ("Health", 90.00, "Supplements"),
+                ("Shopping", 350.00, "New trainers"),
+                ("Shopping", 120.00, "Accessories"),
+            ]
+            for i, (cat, amt, note) in enumerate(demo):
+                day_offset = (i * 3) % 28
+                db.add(models.Expense(
+                    date=base + timedelta(days=day_offset),
+                    category=cat,
+                    amount=amt,
+                    notes=note
+                ))
         db.commit()
         ensure_templates(db)
     finally:

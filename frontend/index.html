@@ -32,6 +32,7 @@
         <button data-page="subscriptions" onclick="go('subscriptions')"><span class="ico">🎟️</span> Packages</button>
         <div class="nav-label">Money</div>
         <button data-page="payments" onclick="go('payments')"><span class="ico">💳</span> Payments</button>
+        <button data-page="expenses" onclick="go('expenses')"><span class="ico">🧾</span> Expenses</button>
         <button data-page="reports" onclick="go('reports')"><span class="ico">📈</span> Revenue</button>
         <div class="nav-label">Setup</div>
         <button data-page="messages" onclick="go('messages')"><span class="ico">💬</span> Messages</button>
@@ -138,6 +139,22 @@
           <div id="payments-table" class="table-wrap"></div>
         </div>
         <div id="pay-unpaid" class="subpanel"><div id="unpaid-table" class="table-wrap"></div></div>
+      </section>
+
+      <!-- Expenses -->
+      <section id="page-expenses" class="page">
+        <div class="header">
+          <div><h2>Expenses</h2><div class="sub" id="exp-month-label"></div></div>
+          <div class="actions"><button class="btn btn-primary" onclick="openExpenseModal()">+ Add expense</button></div>
+        </div>
+        <div class="toolbar">
+          <input type="month" id="exp-month" class="input input-sm" onchange="loadExpenses()">
+          <span class="bold" id="exp-grand" style="margin-left:auto;font-size:1.1rem"></span>
+        </div>
+        <div class="grid grid-3 mt">
+          <div class="card" style="grid-column:span 2"><div class="card-title">Expense list</div><div id="exp-list" class="table-wrap"></div></div>
+          <div class="card"><div class="card-title">By category</div><div id="exp-cats"></div></div>
+        </div>
       </section>
 
       <!-- Revenue -->
@@ -371,6 +388,20 @@
     <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('payment-modal')">Cancel</button><button class="btn btn-primary" onclick="savePayment()">Record payment</button></div>
   </div></div>
 
+  <div class="modal-overlay" id="expense-modal"><div class="modal">
+    <div class="modal-header"><h3 id="expense-modal-title">Add expense</h3><button class="close-btn" onclick="closeModal('expense-modal')">&times;</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="expense-id">
+      <div class="form-row">
+        <div class="form-group"><label>Date</label><input type="date" id="expense-date" class="input"></div>
+        <div class="form-group"><label>Amount</label><input type="number" step="0.01" id="expense-amount" class="input"></div>
+      </div>
+      <div class="form-group"><label>Category</label><input list="expense-cat-options" id="expense-category" class="input" placeholder="e.g. Fast food, Fuel, Groceries"><datalist id="expense-cat-options"></datalist></div>
+      <div class="form-group"><label>Notes</label><input id="expense-notes" class="input" placeholder="Optional note"></div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('expense-modal')">Cancel</button><button class="btn btn-primary" onclick="saveExpense()">Save expense</button></div>
+  </div></div>
+
   <div class="modal-overlay" id="block-modal"><div class="modal">
     <div class="modal-header"><h3>Block time</h3><button class="close-btn" onclick="closeModal('block-modal')">&times;</button></div>
     <div class="modal-body">
@@ -425,6 +456,7 @@
   <script src="/js/booking.js?v=2"></script>
   <script src="/js/clients.js?v=3"></script>
   <script src="/js/money.js?v=2"></script>
+  <script src="/js/expenses.js?v=1"></script>
   <script src="/js/messages.js?v=2"></script>
   <script src="/js/settings.js?v=4"></script>
   <script src="/js/dashboard.js?v=3"></script>

@@ -476,3 +476,42 @@ class DashboardStats(BaseModel):
     today_appointments: List[AppointmentResponse]
     upcoming: List[AppointmentResponse]
     alerts: List[Dict[str, Any]]
+
+
+# ---------- Expenses ----------
+class ExpenseBase(BaseModel):
+    date: datetime
+    category: str
+    amount: float
+    notes: Optional[str] = None
+
+
+class ExpenseCreate(ExpenseBase):
+    pass
+
+
+class ExpenseUpdate(BaseModel):
+    date: Optional[datetime] = None
+    category: Optional[str] = None
+    amount: Optional[float] = None
+    notes: Optional[str] = None
+
+
+class ExpenseResponse(ExpenseBase):
+    id: int
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ExpenseSummary(BaseModel):
+    category: str
+    total: float
+    count: int
+
+
+class ExpenseMonthSummary(BaseModel):
+    year: int
+    month: int
+    expenses: List[ExpenseResponse]
+    by_category: List[ExpenseSummary]
+    grand_total: float

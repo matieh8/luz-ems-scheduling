@@ -11,7 +11,7 @@ function subsTable(subs) {
       <td class="small">${fmtDate(s.start_date)} → ${s.end_date ? fmtDate(s.end_date) : 'no expiry'}${expSoon && s.status === 'active' ? '<div class="tiny" style="color:var(--warn)">expires soon</div>' : ''}</td>
       <td class="num">${money(s.price_paid)}${s.paid_amount < s.price_paid ? `<div class="tiny" style="color:var(--bad)">paid ${money(s.paid_amount)}</div>` : ''}</td>
       <td>${badge(s.status === 'active' ? 'active' : s.status === 'expired' ? 'expired' : 'neutral').replace('neutral', s.status)}</td>
-      <td class="num"><button class="btn btn-ghost btn-xs" onclick="editSubscription(${s.id})">Edit</button>${s.paid_amount < s.price_paid ? `<button class="btn btn-ghost btn-xs" onclick="openPaymentModal({client_id:${s.client_id}, subscription_id:${s.id}, amount:${s.price_paid - s.paid_amount}, label:'${esc(s.plan.name)}'})">Pay</button>` : ''}</td></tr>`; }).join('') + '</tbody></table></div>';
+      <td class="num"><button class="btn btn-ghost btn-xs" onclick="editSubscription(${s.id})">Edit</button>${s.paid_amount < s.price_paid ? `<button class="btn btn-ghost btn-xs" onclick="openPaymentModal({client_id:${s.client_id}, subscription_id:${s.id}, amount:${s.price_paid - s.paid_amount}, label:'${esc(s.plan.name)}'})">Pay</button>` : ''}<button class="btn btn-ghost btn-xs" style="color:var(--bad)" onclick="deleteSubscription(${s.id}, '${esc(s.plan.name).replace(/'/g, "\\'")}')">Delete</button></td></tr>`; }).join('') + '</tbody></table></div>';
 }
 let SUBS = { tab: 'active' };
 function subTab(t, el) { SUBS.tab = t; document.querySelectorAll('#page-subscriptions .tab').forEach(x => x.classList.remove('active')); el.classList.add('active'); document.querySelectorAll('#page-subscriptions .subpanel').forEach(p => p.classList.toggle('active', p.id === 'sub-' + t)); loadSubscriptions(); }
@@ -66,6 +66,11 @@ async function saveSubscription() {
     else { payload.record_payment = !!val('subscription-method'); payload.payment_method = val('subscription-method') || null; payload.send_notification = $('subscription-notify').checked; await api('POST', '/subscriptions/', payload); }
     closeModal('subscription-modal'); toast('Package saved'); await refreshLookups(); refreshCurrent();
   });
+}
+function deleteSubscription(id, planName) {
+  confirmBox('Delete package', `<p>Delete the <strong>${esc(planName)}</strong> package? This will remove the package and unlink any payments from it. Sessions already delivered will not be deleted.</p>`, 'Delete', async () => {
+    await api('DELETE', `/subscriptions/${id}`); toast('Package deleted'); await refreshLookups(); refreshCurrent();
+  }, 'btn-danger');
 }
 
 /* ---------- payments ---------- */

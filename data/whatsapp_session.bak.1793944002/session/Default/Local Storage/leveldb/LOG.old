@@ -1,0 +1,6 @@
+2026/11/04-16:03:37.687 b09da Reusing MANIFEST /home/ubuntu/luz_ems_scheduling_staging/data/whatsapp_session/session/Default/Local Storage/leveldb/MANIFEST-000001
+2026/11/04-16:03:37.691 b09da Recovering log #3
+2026/11/04-16:03:37.692 b09da Reusing old log /home/ubuntu/luz_ems_scheduling_staging/data/whatsapp_session/session/Default/Local Storage/leveldb/000003.log 
+2026/11/05-21:15:19.777 b09e0 Level-0 table #5: started
+2026/11/05-21:15:19.780 b09e0 Level-0 table #5: 14470 bytes OK
+2026/11/05-21:15:19.783 b09e0 Delete type=0 #3

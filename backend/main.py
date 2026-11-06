@@ -15,8 +15,8 @@ from fastapi.staticfiles import StaticFiles
 from backend.auth import require_auth, ensure_admin_password
 from backend.database import DATA_DIR, ROOT_DIR, SessionLocal
 from backend.migrate import run_migrations
-from backend.routers import (appointments, auth, clients, dashboard, notifications, payments, public, reports,
-                             services, settings, staff, subscriptions)
+from backend.routers import (appointments, auth, clients, dashboard, expenses, notifications, payments, public,
+                             reports, services, settings, staff, subscriptions)
 from backend.seed import seed_data
 
 FRONTEND_DIR = os.path.join(ROOT_DIR, "frontend")
@@ -185,6 +185,7 @@ app.include_router(public.router)
 
 # Admin endpoints (require login)
 protected = [Depends(require_auth)]
+app.include_router(expenses.router, dependencies=protected)
 for r in (clients.router, staff.router, services.router, appointments.router, appointments.blocked_router,
           settings.router, dashboard.router, notifications.router, subscriptions.router, payments.router,
           reports.router):

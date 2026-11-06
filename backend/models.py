@@ -264,6 +264,17 @@ class Setting(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class Expense(Base):
+    __tablename__ = "expenses"
+
+    id = Column(Integer, primary_key=True, index=True)
+    date = Column(DateTime, nullable=False, default=datetime.utcnow)
+    category = Column(String, nullable=False)
+    amount = Column(Float, nullable=False)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 # ---- derived values exposed to the API (read by pydantic via from_attributes) ----
 def _appt_paid_amount(self):
     return float(sum(p.amount for p in self.payments))

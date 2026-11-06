@@ -112,10 +112,8 @@ function renderDays() {
       <div class="day-body">
         ${items.length ? `<table class="day-table"><tbody>` +
           items.map(e => `<tr data-id="${e.id}">
-            <td class="ico">${expIcon(e.category)}</td>
             <td>${cell(e.id, 'category', `${expIcon(e.category)} ${e.category}`)}</td>
             <td>${cell(e.id, 'payment_method', e.payment_method || 'Card')}</td>
-            <td>${cell(e.id, 'notes', e.notes || '')}</td>
             <td class="num bold">${cell(e.id, 'amount', money(e.amount).replace(/^AED\s*/, ''), 'right')}</td>
             <td class="num"><button class="btn btn-ghost btn-xs" style="color:var(--bad)" onclick="deleteExpense(${e.id})">×</button></td>
           </tr>`).join('') +

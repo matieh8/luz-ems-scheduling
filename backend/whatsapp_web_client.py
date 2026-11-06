@@ -30,3 +30,12 @@ def send_message(to: str, message: str) -> Dict[str, Any]:
             detail = r.text
         raise RuntimeError(f"WhatsApp bridge error {r.status_code}: {detail}")
     return r.json()
+
+
+def reset_bridge() -> Dict[str, Any]:
+    try:
+        r = requests.post(f"{BRIDGE_URL}/reset", timeout=10)
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        return {"success": False, "error": str(e)}

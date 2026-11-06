@@ -121,6 +121,11 @@ def whatsapp_status():
     return st
 
 
+@router.post("/whatsapp-reset")
+def whatsapp_reset():
+    return whatsapp_web_client.reset_bridge()
+
+
 @router.post("/run-jobs")
 def run_jobs_now(db: Session = Depends(get_db)):
     notifications.run_all_jobs(db)

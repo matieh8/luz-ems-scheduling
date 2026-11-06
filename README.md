@@ -8,6 +8,7 @@ A complete scheduling and client-care app for the LUZ EMS studio: calendar and b
 - Week, day and agenda calendar in the studio's time zone (Asia/Dubai). Click an empty slot to book, click a session to manage it.
 - Opening hours per weekday, blocked time (holidays, breaks), trainer resources, and a "machines / rooms" limit. Double bookings and out-of-hours bookings are rejected (with an admin override).
 - Session lifecycle: scheduled → confirmed → completed / no-show / cancelled, plus reschedule. Each step can notify the client.
+- Public website at `/` (landing page: services, packages, hours and contact pulled live from Settings). The admin app is at `/admin`.
 - Public booking page at `/book`: clients pick a service, trainer, date and a free slot. Each booking gets a private link (`/a/<token>`) where the client can confirm or cancel.
 
 **Notifications to clients** (templates are editable in *Messages → Templates*)
@@ -33,7 +34,7 @@ A complete scheduling and client-care app for the LUZ EMS studio: calendar and b
 python3 -m venv venv
 venv/bin/pip install -r requirements.txt
 cp .env.example .env        # optional, adjust ports and password
-./start.sh                  # live:    http://localhost:8015
+./start.sh                  # live:    http://localhost:8015  (admin at /admin)
 ./start-staging.sh --demo-data   # staging: http://localhost:8016 with sample data
 ```
 
@@ -73,7 +74,8 @@ backend/
                      payments, reports, notifications, settings, dashboard, public, auth)
   whatsapp/          Node.js WhatsApp Web bridge
 frontend/
-  index.html         Admin app shell
+  home.html          Public landing page (served at /)
+  index.html         Admin app shell (served at /admin)
   css/app.css        Styles
   js/*.js            Admin app (core, calendar, booking, clients, money, messages, settings, dashboard)
   book.html          Public booking page

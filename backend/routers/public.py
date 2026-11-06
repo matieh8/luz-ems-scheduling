@@ -49,8 +49,10 @@ def info(db: Session = Depends(get_db)):
         .order_by(models.Service.price).all()
     staff = db.query(models.Staff).filter(models.Staff.active == True).order_by(models.Staff.name).all()
     hours = db.query(models.BusinessHours).order_by(models.BusinessHours.day_of_week).all()
+    plans = db.query(models.SubscriptionPlan).filter(models.SubscriptionPlan.active == True)\
+        .order_by(models.SubscriptionPlan.price).all()
     return {
-        "business_name": s.business_name, "phone": s.business_phone, "address": s.business_address,
+        "business_name": s.business_name, "phone": s.business_phone, "email": s.business_email, "address": s.business_address,
         "timezone": s.timezone, "currency": s.currency, "online_booking_enabled": s.online_booking_enabled,
         "min_notice_hours": s.online_min_notice_hours, "max_days_ahead": s.online_max_days_ahead,
         "today": local_today(s.timezone).isoformat(),
@@ -58,6 +60,8 @@ def info(db: Session = Depends(get_db)):
                       "description": x.description, "color": x.color} for x in services],
         "staff": [{"id": x.id, "name": x.name, "role": x.role, "color": x.color} for x in staff],
         "hours": [{"day_of_week": h.day_of_week, "open_time": h.open_time, "close_time": h.close_time, "closed": h.closed} for h in hours],
+        "plans": [{"id": p.id, "name": p.name, "sessions_included": p.sessions_included, "duration_days": p.duration_days,
+                   "price": p.price, "description": p.description} for p in plans],
     }
 
 

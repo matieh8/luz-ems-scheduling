@@ -197,6 +197,17 @@ def health():
     return {"status": "ok", "env": os.environ.get("LUZ_ENV", "local")}
 
 
+@app.get("/")
+def landing_page():
+    """Public marketing site. The admin app lives at /admin."""
+    return FileResponse(os.path.join(FRONTEND_DIR, "home.html"))
+
+
+@app.get("/admin")
+def admin_page():
+    return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
+
+
 @app.get("/book")
 def book_page():
     return FileResponse(os.path.join(FRONTEND_DIR, "book.html"))

@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LUZ EMS · Stronger in twenty minutes</title>
+  <meta name="description" content="LUZ EMS is a personal EMS training studio. One trainer, one 20-minute session, your whole body. Book online in under a minute.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* ---------- Tokens. Edit these to re-skin the whole page. ---------- */
+    :root {
+      --bg: #ffffff; --bg-soft: #f7f8f7; --ink: #23282a; --ink-2: #5d6664; --ink-3: #9aa3a0;
+      --line: #e6eae8; --sage: #7fa69b; --sage-dark: #5f8a7e; --sage-soft: #e9f1ee; --sage-ink: #4a6f65;
+      --night: #1b2322; --gold: #d9b26a;
+      --serif: 'Crimson Text', Georgia, serif; --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --wrap: 1180px; --pad: clamp(16px, 4vw, 48px);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; font-family: var(--sans); color: var(--ink); background: var(--bg); font-size: 15px; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+    a { color: inherit; text-decoration: none; }
+    img { max-width: 100%; display: block; }
+    h1, h2, h3, h4 { margin: 0; font-weight: 400; }
+    p { margin: 0; }
+    .wrap { max-width: var(--wrap); margin: 0 auto; padding-left: var(--pad); padding-right: var(--pad); }
+    .serif { font-family: var(--serif); letter-spacing: -0.01em; line-height: 1.05; }
+    .accent { color: var(--sage); }
+    .eyebrow { font-size: .68rem; font-weight: 600; letter-spacing: .18em; text-transform: uppercase; color: var(--sage-dark); }
+    .lede { color: var(--ink-2); font-size: 1rem; max-width: 46ch; }
+    .center { text-align: center; } .center .lede { margin: 0 auto; }
+    section { padding: clamp(72px, 10vw, 130px) 0; }
+
+    /* Pill buttons */
+    .pill { display: inline-flex; align-items: center; gap: 10px; padding: 12px 22px; border-radius: 999px; background: var(--sage); color: #fff; font-size: .68rem; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; border: 1px solid transparent; cursor: pointer; font-family: inherit; transition: background .2s, transform .2s; white-space: nowrap; }
+    .pill:hover { background: var(--sage-dark); transform: translateY(-1px); }
+    .pill::after { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: .8; }
+    .pill.ghost { background: transparent; color: var(--ink); border-color: var(--line); }
+    .pill.ghost:hover { background: var(--bg-soft); }
+    .pill.light { background: #fff; color: var(--ink); }
+    .pill.light:hover { background: var(--sage-soft); }
+    .link { color: var(--sage-dark); font-weight: 600; font-size: .68rem; letter-spacing: .16em; text-transform: uppercase; }
+    .link:hover { color: var(--sage-ink); }
+
+    /* Nav */
+    .nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; padding: 14px 0; transition: background .25s, box-shadow .25s; }
+    .nav.solid { background: rgba(255,255,255,.92); backdrop-filter: blur(12px); box-shadow: 0 1px 0 var(--line); }
+    .nav .wrap { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+    .logo { font-family: var(--serif); font-size: 1.25rem; letter-spacing: .02em; color: #fff; display: inline-flex; align-items: center; gap: 10px; }
+    .logo::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--sage); }
+    .nav.solid .logo { color: var(--ink); }
+    .nav-links { display: flex; gap: 28px; align-items: center; }
+    .nav-links a { font-size: .78rem; font-weight: 500; color: rgba(255,255,255,.85); }
+    .nav-links a:hover { color: #fff; }
+    .nav.solid .nav-links a { color: var(--ink-2); } .nav.solid .nav-links a:hover { color: var(--ink); }
+    .menu-btn { display: none; }
+    @media (max-width: 860px) {
+      .nav-links { display: none; position: absolute; top: 100%; left: 0; right: 0; background: #fff; flex-direction: column; align-items: stretch; gap: 0; padding: 8px 0 16px; box-shadow: 0 16px 32px -16px rgba(0,0,0,.2); border-top: 1px solid var(--line); }
+      .nav-links.open { display: flex; }
+      .nav-links a { padding: 12px var(--pad); color: var(--ink) !important; font-size: .95rem; }
+      .nav-links .pill { margin: 10px var(--pad) 0; justify-content: center; color: #fff !important; }
+      .menu-btn { display: inline-flex; }
+    }
+
+    /* Hero */
+    .hero { position: relative; min-height: 92vh; display: flex; align-items: flex-end; padding: 140px 0 72px; color: #fff; overflow: hidden; background: var(--night); }
+    .hero-art { position: absolute; inset: 0; background:
+        radial-gradient(60% 70% at 72% 30%, rgba(217,178,106,.55), transparent 65%),
+        radial-gradient(55% 60% at 30% 70%, rgba(127,166,155,.65), transparent 70%),
+        radial-gradient(40% 50% at 85% 85%, rgba(95,138,126,.5), transparent 70%),
+        linear-gradient(160deg, #2b3a37 0%, #1b2322 55%, #141a19 100%);
+      filter: saturate(1.05); }
+    .hero-art::after { content: ''; position: absolute; inset: 0; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.05'/%3E%3C/svg%3E"); mix-blend-mode: overlay; }
+    .hero-photo { position: absolute; inset: 0; object-fit: cover; width: 100%; height: 100%; opacity: .55; mix-blend-mode: luminosity; }
+    .hero .wrap { position: relative; display: grid; grid-template-columns: 1.4fr 1fr; gap: 40px; align-items: end; width: 100%; }
+    .hero h1 { font-size: clamp(3rem, 8vw, 6.4rem); color: #fff; }
+    .hero h1 em { font-style: italic; color: #e8efe9; }
+    .hero-side { max-width: 380px; justify-self: end; }
+    .hero-side p { font-size: .9rem; color: rgba(255,255,255,.85); margin-bottom: 22px; }
+    .hero .eyebrow { color: rgba(255,255,255,.7); margin-bottom: 18px; display: block; }
+    @media (max-width: 860px) { .hero .wrap { grid-template-columns: 1fr; } .hero-side { justify-self: start; } }
+
+    /* Services */
+    .intro h2 { font-size: clamp(1.7rem, 3.4vw, 2.5rem); font-weight: 500; letter-spacing: -.02em; line-height: 1.2; margin: 0 auto 16px; max-width: 24ch; }
+    .svc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 18px; margin-top: 56px; }
+    .svc { border: 1px solid var(--line); border-radius: 22px; padding: 28px 26px 24px; background: var(--bg); display: flex; flex-direction: column; min-height: 300px; transition: box-shadow .25s, transform .25s; }
+    .svc:hover { box-shadow: 0 24px 40px -28px rgba(35,40,42,.35); transform: translateY(-3px); }
+    .svc .swatch { width: 38px; height: 38px; border-radius: 12px; margin-bottom: 26px; opacity: .85; }
+    .svc h3 { font-family: var(--serif); font-size: 1.75rem; line-height: 1.05; margin-bottom: 10px; }
+    .svc p { color: var(--ink-2); font-size: .88rem; flex: 1; }
+    .svc .meta { display: flex; justify-content: space-between; align-items: center; margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--line); font-size: .8rem; color: var(--ink-2); }
+    .svc .meta b { color: var(--ink); font-weight: 600; }
+
+    /* Philosophy */
+    .philo { background: var(--bg); text-align: center; }
+    .philo .icon { width: 36px; height: 36px; margin: 0 auto 14px; color: var(--sage); }
+    .philo p.big { font-size: clamp(1.25rem, 2.6vw, 1.85rem); color: var(--ink-3); max-width: 30ch; margin: 18px auto 34px; line-height: 1.45; letter-spacing: -.01em; }
+    .philo p.big strong { color: var(--ink); font-weight: 500; }
+
+    /* How it works */
+    .how { background: var(--bg-soft); }
+    .how h2 { font-size: clamp(3rem, 7vw, 5.5rem); margin-bottom: 20px; }
+    .how .lede { max-width: 60ch; margin-bottom: 70px; }
+    .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; }
+    .step h3 { font-family: var(--serif); font-size: 2.1rem; color: var(--sage-dark); margin-bottom: 10px; }
+    .step .num { font-size: .68rem; letter-spacing: .18em; color: var(--ink-3); margin-bottom: 14px; font-weight: 600; }
+    .step p { color: var(--ink-2); font-size: .9rem; }
+    @media (max-width: 860px) { .steps { grid-template-columns: 1fr; gap: 32px; } }
+
+    /* Split CTA */
+    .split { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; align-items: center; }
+    .split h2 { font-size: clamp(1.7rem, 3.2vw, 2.3rem); font-weight: 500; letter-spacing: -.02em; line-height: 1.2; margin-bottom: 14px; }
+    .split .lede { margin-bottom: 28px; font-size: .92rem; }
+    .trust { font-size: .8rem; color: var(--ink-2); }
+    .trust .faces { display: flex; margin: 12px 0 10px; }
+    .trust .face { width: 36px; height: 36px; border-radius: 50%; border: 2px solid #fff; margin-left: -8px; display: grid; place-items: center; font-size: .7rem; font-weight: 700; color: #fff; }
+    .trust .face:first-child { margin-left: 0; }
+    .trust .rating { color: var(--ink); font-weight: 600; } .trust .rating span { color: var(--gold); }
+    .trust a { color: var(--sage-dark); font-weight: 500; }
+    @media (max-width: 860px) { .split { grid-template-columns: 1fr; gap: 36px; } }
+
+    /* Pricing */
+    .pricing { background: var(--bg-soft); }
+    .pricing .icon { width: 34px; height: 34px; margin: 0 auto 14px; color: var(--sage); }
+    .pricing h2 { font-size: clamp(1.7rem, 3.4vw, 2.5rem); font-weight: 500; letter-spacing: -.02em; margin: 12px 0 14px; }
+    .plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 18px; margin-top: 54px; text-align: left; }
+    .plan { background: #fff; border-radius: 22px; padding: 30px 28px; border: 1px solid var(--line); display: flex; flex-direction: column; }
+    .plan.featured { border-color: var(--sage); box-shadow: 0 30px 50px -36px rgba(95,138,126,.6); }
+    .plan .tag { font-size: .62rem; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--sage-dark); background: var(--sage-soft); padding: 4px 10px; border-radius: 999px; align-self: flex-start; margin-bottom: 14px; }
+    .plan h3 { font-family: var(--serif); font-size: 1.7rem; margin-bottom: 4px; }
+    .plan .desc { font-size: .82rem; color: var(--ink-2); min-height: 40px; }
+    .plan .price { font-family: var(--serif); font-size: 2.6rem; color: var(--sage-dark); margin: 20px 0 4px; line-height: 1; }
+    .plan .price small { font-family: var(--sans); font-size: .8rem; color: var(--ink-2); margin-left: 6px; }
+    .plan .per { font-size: .78rem; color: var(--ink-3); margin-bottom: 20px; }
+    .plan ul { list-style: none; margin: 0 0 26px; padding: 0; flex: 1; }
+    .plan li { font-size: .85rem; color: var(--ink-2); padding: 7px 0 7px 22px; position: relative; }
+    .plan li::before { content: ''; position: absolute; left: 0; top: 14px; width: 10px; height: 10px; border-radius: 3px; background: var(--sage-soft); border: 1px solid var(--sage); }
+
+    /* Quote band */
+    .quote { background: var(--night); color: #fff; position: relative; overflow: hidden; padding: clamp(100px, 14vw, 180px) 0; }
+    .quote::before { content: ''; position: absolute; inset: -30% -10% auto; height: 70%; background: radial-gradient(50% 60% at 60% 50%, rgba(127,166,155,.35), transparent 70%); }
+    .quote blockquote { position: relative; margin: 0; font-family: var(--serif); font-size: clamp(2rem, 4.6vw, 3.6rem); line-height: 1.12; max-width: 20ch; }
+    .quote cite { display: block; margin-top: 28px; font-style: normal; font-size: .78rem; color: rgba(255,255,255,.6); font-family: var(--sans); }
+
+    /* Stats */
+    .stats .split h2 { max-width: 20ch; }
+    .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 30px; margin-top: 80px; text-align: center; }
+    .stat b { display: block; font-family: var(--serif); font-size: clamp(2.6rem, 5vw, 4rem); color: var(--sage-dark); line-height: 1; font-weight: 600; }
+    .stat span { display: block; font-size: .78rem; color: var(--ink-2); margin-top: 10px; max-width: 16ch; margin-left: auto; margin-right: auto; }
+    @media (max-width: 860px) { .stat-grid { grid-template-columns: repeat(2, 1fr); } }
+
+    /* FAQ */
+    .faq { background: var(--bg-soft); }
+    .faq h2 { font-size: clamp(1.8rem, 3.4vw, 2.5rem); font-weight: 500; letter-spacing: -.02em; line-height: 1.15; margin-bottom: 12px; }
+    .faq-list { max-width: 760px; margin: 50px auto 0; border-top: 1px solid var(--line); }
+    .faq-item { border-bottom: 1px solid var(--line); }
+    .faq-item button { width: 100%; text-align: left; background: none; border: none; padding: 22px 44px 22px 0; font-family: inherit; font-size: 1.02rem; font-weight: 500; color: var(--ink); cursor: pointer; position: relative; }
+    .faq-item button::after { content: '+'; position: absolute; right: 4px; top: 50%; transform: translateY(-50%); font-size: 1.4rem; color: var(--sage); font-weight: 300; transition: transform .25s; }
+    .faq-item.open button::after { transform: translateY(-50%) rotate(45deg); }
+    .faq-item .ans { max-height: 0; overflow: hidden; transition: max-height .3s ease; }
+    .faq-item .ans p { padding: 0 0 22px; color: var(--ink-2); font-size: .9rem; max-width: 62ch; }
+    .faq .closing { text-align: center; margin-top: 60px; }
+    .faq .closing p { color: var(--ink-2); font-size: .9rem; max-width: 40ch; margin: 0 auto 22px; }
+
+    /* Book section */
+    .book .grid { display: grid; grid-template-columns: 1.1fr .9fr; gap: 60px; align-items: start; }
+    .book h2 { font-size: clamp(2.4rem, 5.2vw, 4rem); margin: 14px 0 20px; }
+    .book .lede { margin-bottom: 30px; }
+    .info-card { background: var(--bg-soft); border-radius: 22px; padding: 30px; }
+    .info-card h3 { font-size: 1.05rem; font-weight: 600; margin-bottom: 16px; }
+    .hours { width: 100%; border-collapse: collapse; font-size: .88rem; }
+    .hours td { padding: 7px 0; border-bottom: 1px solid var(--line); color: var(--ink-2); }
+    .hours td:last-child { text-align: right; color: var(--ink); font-weight: 500; }
+    .hours tr.today td { color: var(--sage-dark); font-weight: 600; }
+    .hours tr:last-child td { border-bottom: none; }
+    .contact-row { display: flex; flex-direction: column; gap: 10px; margin-top: 22px; font-size: .9rem; }
+    .contact-row a { color: var(--sage-dark); font-weight: 500; }
+    .contact-row span { color: var(--ink-2); }
+    @media (max-width: 860px) { .book .grid { grid-template-columns: 1fr; gap: 36px; } }
+
+    /* Footer */
+    footer { background: var(--night); color: rgba(255,255,255,.75); padding: 70px 0 30px; font-size: .85rem; }
+    footer .top { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 40px; padding-bottom: 50px; border-bottom: 1px solid rgba(255,255,255,.1); }
+    footer .logo { color: #fff; font-size: 1.5rem; margin-bottom: 14px; }
+    footer h4 { font-size: .65rem; letter-spacing: .18em; text-transform: uppercase; color: rgba(255,255,255,.45); margin-bottom: 16px; font-weight: 600; }
+    footer ul { list-style: none; margin: 0; padding: 0; } footer li { margin-bottom: 9px; } footer li a:hover { color: #fff; }
+    footer .bottom { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; padding-top: 24px; font-size: .75rem; color: rgba(255,255,255,.4); }
+    footer .bottom a:hover { color: #fff; }
+    @media (max-width: 860px) { footer .top { grid-template-columns: 1fr 1fr; } footer .top > div:first-child { grid-column: 1 / -1; } }
+
+    /* Reveal on scroll */
+    .reveal { opacity: 0; transform: translateY(18px); transition: opacity .7s ease, transform .7s ease; }
+    .reveal.in { opacity: 1; transform: none; }
+    @media (prefers-reduced-motion: reduce) { .reveal { opacity: 1; transform: none; transition: none; } html { scroll-behavior: auto; } }
+  </style>
+</head>
+<body>
+
+<header class="nav" id="nav">
+  <div class="wrap">
+    <a class="logo" href="#top">luz—ems</a>
+    <nav class="nav-links" id="nav-links">
+      <a href="#services">Training</a>
+      <a href="#how">How it works</a>
+      <a href="#pricing">Packages</a>
+      <a href="#faq">FAQ</a>
+      <a href="#visit">Visit</a>
+      <a class="pill" href="/book">Book a session</a>
+    </nav>
+    <button class="pill light menu-btn" onclick="toggleMenu()" aria-controls="nav-links" aria-expanded="false">Menu</button>
+  </div>
+</header>
+
+<section class="hero" id="top">
+  <div class="hero-art"></div>
+  <!-- Optional photo: drop a file at frontend/img/hero.jpg and uncomment.
+  <img class="hero-photo" src="/img/hero.jpg" alt=""> -->
+  <div class="wrap">
+    <div>
+      <span class="eyebrow">Personal EMS training · <span data-bind="address_short">Dubai</span></span>
+      <h1 class="serif">Stronger in<br>twenty <em>minutes.</em></h1>
+    </div>
+    <div class="hero-side">
+      <p>LUZ EMS is a one-to-one studio built around electro-muscle stimulation: a trainer, a suit, and a focused 20-minute session that works your whole body. No crowds, no wasted hours. Just steady, measurable progress at your own pace.</p>
+      <a class="pill light" href="/book">Book your first session</a>
+    </div>
+  </div>
+</section>
+
+<section id="services" class="center">
+  <div class="wrap">
+    <div class="intro reveal">
+      <span class="eyebrow">Training</span>
+      <h2 style="margin-top:14px">There's no shortcut to strength,<br><span class="accent">but there is a smarter path.</span></h2>
+      <p class="lede">Every body is different. These are the sessions we use to help people get stronger, recover faster, and feel at home in their bodies again.</p>
+    </div>
+    <div class="svc-grid" id="services-grid"></div>
+  </div>
+</section>
+
+<section class="philo">
+  <div class="wrap reveal">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/></svg>
+    <span class="eyebrow">Our philosophy</span>
+    <p class="big">At LUZ, we don't chase exhaustion. <strong>We train with intention:</strong> short, precise sessions, a trainer who knows your name, and enough rest between them for the work to actually land.</p>
+    <a class="pill" href="#how">How we train</a>
+  </div>
+</section>
+
+<section class="how" id="how">
+  <div class="wrap">
+    <h2 class="serif reveal">How <span class="accent">It Works</span></h2>
+    <p class="lede reveal">Getting started doesn't have to be complicated. Your first visit is a trial session with a trainer: we fit the suit, set the intensity for you, and you leave knowing exactly what EMS feels like. From there, you choose the rhythm.</p>
+    <div class="steps">
+      <div class="step reveal"><div class="num">01</div><h3>Book online</h3><p>Pick a session and a time that suits you. You'll get a WhatsApp confirmation straight away and a reminder before you arrive. Rescheduling takes one tap.</p></div>
+      <div class="step reveal"><div class="num">02</div><h3>Suit up</h3><p>Arrive ten minutes early. We fit the EMS suit, talk through how you're feeling that day, and dial the intensity to your level. No experience needed, and nothing to bring.</p></div>
+      <div class="step reveal"><div class="num">03</div><h3>Train &amp; recover</h3><p>Twenty focused minutes with your trainer, then you're done. Most clients train once or twice a week and feel the difference in posture and strength within the first month.</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap split">
+    <div class="reveal">
+      <h2>Ready to feel<br><span class="accent">the difference?</span></h2>
+      <p class="lede">Every plan is flexible. Whether you're here for a short reset or a longer transformation, we adapt the intensity, the pace, and the schedule to you.</p>
+      <a class="pill" href="/book">Book your first session</a>
+    </div>
+    <div class="trust reveal">
+      <div>Trusted by clients across <span data-bind="address_short">Dubai</span></div>
+      <div class="faces">
+        <div class="face" style="background:#7fa69b">S</div><div class="face" style="background:#d9b26a">A</div><div class="face" style="background:#5f8a7e">M</div><div class="face" style="background:#23282a">R</div><div class="face" style="background:#9aa3a0">L</div>
+      </div>
+      <div class="rating"><span>★★★★★</span> Rated by our members</div>
+      <p style="margin-top:14px">Prefer to chat first? <a data-bind="whatsapp_link" href="#">Message us on WhatsApp</a> or <a data-bind="tel_link" href="#">give us a call</a>. We're happy to help.</p>
+    </div>
+  </div>
+</section>
+
+<section class="pricing center" id="pricing">
+  <div class="wrap">
+    <div class="reveal">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M3 9c3-3 6 3 9 0s6 3 9 0M3 15c3-3 6 3 9 0s6 3 9 0"/></svg>
+      <span class="eyebrow">Our packages</span>
+      <h2>Training that fits <span class="accent">your rhythm.</span></h2>
+      <p class="lede">Start with a single session, or commit to a pack and bring the price per session down. Packages are tracked automatically, so you always know how many sessions you have left.</p>
+    </div>
+    <div class="plans" id="plans-grid"></div>
+  </div>
+</section>
+
+<section class="quote">
+  <div class="wrap">
+    <blockquote class="reveal">"Twenty honest minutes, twice a week, will change more than an hour you dread."</blockquote>
+    <cite class="reveal">— The LUZ EMS team</cite>
+  </div>
+</section>
+
+<section class="stats">
+  <div class="wrap">
+    <div class="split">
+      <h2 class="reveal" style="font-size:clamp(1.7rem,3.2vw,2.3rem);font-weight:500;letter-spacing:-.02em;line-height:1.2">From the first trial to lasting strength, these numbers reflect <span class="accent">how we train together.</span></h2>
+      <p class="lede reveal" style="font-size:.9rem">Behind every number is a person who showed up. Short sessions, consistent weeks, and a trainer who adjusts as you go.</p>
+    </div>
+    <div class="stat-grid">
+      <div class="stat reveal"><b>20</b><span>minutes per full-body session</span></div>
+      <div class="stat reveal"><b>1:1</b><span>trainer attention, every time</span></div>
+      <div class="stat reveal"><b>2×</b><span>per week is all most clients need</span></div>
+      <div class="stat reveal"><b data-bind="days_open">6</b><span>days a week, open for you</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="faq center" id="faq">
+  <div class="wrap">
+    <div class="reveal">
+      <h2>Your questions.<br><span class="accent">Answered.</span></h2>
+      <p class="lede">Not sure what to expect? These answers might help you feel more confident before your first session.</p>
+    </div>
+    <div class="faq-list" id="faq-list" style="text-align:left">
+      <div class="faq-item"><button onclick="toggleFaq(this)">What is EMS training?</button><div class="ans"><p>EMS stands for electro-muscle stimulation. You wear a suit with electrodes that send gentle impulses to your muscles while you perform simple movements with a trainer. It activates far more muscle fibres than conventional training in the same time, which is why a session is only twenty minutes.</p></div></div>
+      <div class="faq-item"><button onclick="toggleFaq(this)">Does it hurt?</button><div class="ans"><p>No. It feels like a strong tingling or a deep muscle contraction. Your trainer sets the intensity for each muscle group individually and adjusts it in real time, so it is always within your comfort zone.</p></div></div>
+      <div class="faq-item"><button onclick="toggleFaq(this)">Do I need to be fit already?</button><div class="ans"><p>Not at all. EMS is low-impact and easy on the joints, which makes it a good fit for beginners, people returning from a break, and anyone short on time. We start gently and build up over the first few sessions.</p></div></div>
+      <div class="faq-item"><button onclick="toggleFaq(this)">What should I bring or wear?</button><div class="ans"><p>Nothing. We provide the training suit and the underlayer that goes beneath it, plus towels. Just arrive about ten minutes before your session, well hydrated.</p></div></div>
+      <div class="faq-item"><button onclick="toggleFaq(this)">How often should I train?</button><div class="ans"><p>Once or twice a week, with at least 48 hours between sessions so your muscles can recover. That is where most people see steady progress without feeling drained.</p></div></div>
+      <div class="faq-item"><button onclick="toggleFaq(this)">Is EMS safe for everyone?</button><div class="ans"><p>EMS is safe for most healthy adults. It is not suitable during pregnancy, with a pacemaker or other implanted electronic device, or with certain medical conditions. We go through a short health questionnaire before your first session, and if in doubt we will ask you to check with your doctor.</p></div></div>
+      <div class="faq-item"><button onclick="toggleFaq(this)">Can I cancel or reschedule?</button><div class="ans"><p>Yes. Every booking confirmation includes a link to reschedule or cancel. We ask for <span data-bind="cancel_hours">12</span> hours' notice so the slot can go to someone else; package sessions cancelled in time are returned to your balance automatically.</p></div></div>
+    </div>
+    <div class="closing reveal">
+      <p>Didn't find your answer? Send us a message and we'll get back to you the same day.</p>
+      <a class="pill" data-bind="whatsapp_link" href="#">Ask on WhatsApp</a>
+    </div>
+  </div>
+</section>
+
+<section class="book" id="visit">
+  <div class="wrap grid">
+    <div class="reveal">
+      <span class="eyebrow">Book a session</span>
+      <h2 class="serif">Your first session starts with <span class="accent">a simple step.</span></h2>
+      <p class="lede">Whether you're starting fresh, returning after a break, or just curious what EMS feels like, we'd love to meet you. Pick a time online and we'll take care of the rest.</p>
+      <a class="pill" href="/book">Book online now</a>
+      <p style="margin-top:18px;font-size:.82rem;color:var(--ink-3)">Takes under a minute. You'll receive a WhatsApp confirmation and a reminder before your session.</p>
+    </div>
+    <div class="info-card reveal">
+      <h3>Studio hours</h3>
+      <table class="hours" id="hours-table"></table>
+      <div class="contact-row">
+        <span data-bind="address">—</span>
+        <a data-bind="tel_link" href="#"><span data-bind="phone">—</span></a>
+        <a data-bind="mail_link" href="#"><span data-bind="email"></span></a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="top">
+      <div>
+        <div class="logo">luz—ems</div>
+        <p style="max-width:34ch">Personal EMS training in <span data-bind="address_short">Dubai</span>. Short, focused sessions with a trainer who knows your name.</p>
+      </div>
+      <div>
+        <h4>Sitemap</h4>
+        <ul><li><a href="#services">Training</a></li><li><a href="#how">How it works</a></li><li><a href="#pricing">Packages</a></li><li><a href="#faq">FAQ</a></li><li><a href="/book">Book a session</a></li></ul>
+      </div>
+      <div>
+        <h4>Contact</h4>
+        <ul><li><a data-bind="whatsapp_link" href="#">WhatsApp</a></li><li><a data-bind="tel_link" href="#"><span data-bind="phone">—</span></a></li><li><a data-bind="mail_link" href="#"><span data-bind="email"></span></a></li><li><span data-bind="address">—</span></li></ul>
+      </div>
+    </div>
+    <div class="bottom">
+      <span>© <span id="year"></span> <span data-bind="business_name">LUZ EMS</span>. All rights reserved.</span>
+      <a href="/admin">Studio login</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+  const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  function esc(s) { return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function bind(key, fn) { document.querySelectorAll(`[data-bind="${key}"]`).forEach(fn); }
+  function setText(key, v) { bind(key, el => { el.textContent = v; }); }
+  function money(cur, v) { return `${cur} ${Math.round(v).toLocaleString()}`; }
+  function fmtTime(t) { if (!t) return ''; const [h, m] = t.split(':').map(Number); const ap = h >= 12 ? 'pm' : 'am'; const hh = ((h + 11) % 12) + 1; return m ? `${hh}:${String(m).padStart(2, '0')}${ap}` : `${hh}${ap}`; }
+  // Turn a local number such as 050 123 4567 into a wa.me link. Numbers that already carry a country code are used as-is.
+  function waNumber(phone, defaultCountry = '971') { let d = String(phone || '').replace(/\D/g, ''); if (!d) return ''; if (String(phone).trim().startsWith('+')) return d; if (d.startsWith('00')) return d.slice(2); if (d.startsWith('0')) return defaultCountry + d.slice(1); return d; }
+
+  async function load() {
+    document.getElementById('year').textContent = new Date().getFullYear();
+    let info;
+    try { info = await fetch('/api/public/info').then(r => r.json()); } catch (e) { return; }
+    const cur = info.currency || 'AED';
+
+    setText('business_name', info.business_name);
+    if (info.address) { setText('address', info.address); setText('address_short', info.address.split(',').pop().trim()); }
+    else { bind('address', el => { el.style.display = 'none'; }); }
+    if (info.phone) { setText('phone', info.phone); bind('tel_link', a => { a.href = 'tel:' + info.phone.replace(/\s/g, ''); }); }
+    const wa = waNumber(info.phone);
+    bind('whatsapp_link', a => { if (wa) a.href = `https://wa.me/${wa}?text=${encodeURIComponent("Hi! I'd like to know more about EMS training at " + info.business_name)}`; else a.style.display = 'none'; });
+    bind('mail_link', a => { if (info.email) { a.href = 'mailto:' + info.email; } else { a.style.display = 'none'; } });
+    if (info.email) setText('email', info.email);
+    setText('cancel_hours', info.cancel_notice_hours ?? 12);
+
+    // Services
+    const grid = document.getElementById('services-grid');
+    grid.innerHTML = (info.services || []).map(s => `
+      <a class="svc reveal" href="/book">
+        <div class="swatch" style="background:${esc(s.color)}"></div>
+        <h3>${esc(s.name).replace(/^EMS /, 'EMS<br>')}</h3>
+        <p>${esc(s.description || '')}</p>
+        <div class="meta"><span>${s.duration_minutes} min</span><b>${s.price ? money(cur, s.price) : 'Free trial'}</b></div>
+      </a>`).join('');
+
+    // Packages
+    const plans = info.plans || [];
+    const single = (info.services || []).filter(s => s.price > 0).sort((a, b) => a.price - b.price)[0];
+    const featured = plans.length ? plans.reduce((a, b) => (b.price / b.sessions_included < a.price / a.sessions_included ? b : a)) : null;
+    const cards = [];
+    if (single) cards.push(`
+      <div class="plan reveal">
+        <h3>Single session</h3><p class="desc">Pay as you go. Perfect for a first visit or an occasional top-up.</p>
+        <div class="price">${money(cur, single.price)}</div><div class="per">per session</div>
+        <ul><li>Any ${single.duration_minutes}-minute session</li><li>Suit and underlayer included</li><li>Book online, any time</li><li>Free reschedule with notice</li></ul>
+        <a class="pill" href="/book">Book a session</a>
+      </div>`);
+    plans.forEach(p => {
+      const per = p.price / p.sessions_included;
+      cards.push(`
+        <div class="plan reveal ${p === featured ? 'featured' : ''}">
+          ${p === featured ? '<span class="tag">Best value</span>' : ''}
+          <h3>${esc(p.name)}</h3><p class="desc">${esc(p.description || '')}</p>
+          <div class="price">${money(cur, p.price)}</div>
+          <div class="per">${p.sessions_included} sessions · ${money(cur, per)} each${p.duration_days ? ` · valid ${p.duration_days} days` : ''}</div>
+          <ul><li>${p.sessions_included} full EMS sessions</li><li>Sessions tracked automatically</li><li>Priority booking for members</li><li>Unused sessions returned if you cancel in time</li></ul>
+          <a class="pill ${p === featured ? '' : 'ghost'}" href="/book">Get started</a>
+        </div>`);
+    });
+    document.getElementById('plans-grid').innerHTML = cards.join('');
+
+    // Hours
+    const todayDow = (() => { const [y, m, d] = (info.today || '').split('-').map(Number); return y ? (new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7 : -1; })();
+    const hours = (info.hours || []).slice().sort((a, b) => a.day_of_week - b.day_of_week);
+    document.getElementById('hours-table').innerHTML = hours.map(h => `<tr class="${h.day_of_week === todayDow ? 'today' : ''}"><td>${DAYS[h.day_of_week]}</td><td>${h.closed ? 'Closed' : fmtTime(h.open_time) + ' – ' + fmtTime(h.close_time)}</td></tr>`).join('');
+    const open = hours.filter(h => !h.closed).length; if (open) setText('days_open', open);
+
+    observeReveals();
+  }
+
+  // Interaction
+  function toggleMenu() { const l = document.getElementById('nav-links'); const open = l.classList.toggle('open'); document.querySelector('.menu-btn').setAttribute('aria-expanded', open); }
+  document.querySelectorAll('.nav-links a').forEach(a => a.addEventListener('click', () => document.getElementById('nav-links').classList.remove('open')));
+  function toggleFaq(btn) { const item = btn.parentElement; const ans = item.querySelector('.ans'); const open = item.classList.toggle('open'); ans.style.maxHeight = open ? ans.scrollHeight + 'px' : 0; }
+  const nav = document.getElementById('nav');
+  function onScroll() { nav.classList.toggle('solid', window.scrollY > window.innerHeight - 90); }
+  window.addEventListener('scroll', onScroll, { passive: true }); onScroll();
+  let io;
+  function observeReveals() {
+    if (!('IntersectionObserver' in window)) { document.querySelectorAll('.reveal').forEach(el => el.classList.add('in')); return; }
+    io = io || new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }), { rootMargin: '0px 0px -8% 0px' });
+    document.querySelectorAll('.reveal:not(.in)').forEach(el => io.observe(el));
+  }
+  observeReveals();
+  load();
+</script>
+</body>
+</html>

@@ -231,3 +231,14 @@ def test_dismiss_failed_messages_alert(client):
     finally:
         db.close()
     assert "failed_messages" in [a["key"] for a in client.get("/api/dashboard/").json()["alerts"]]
+
+
+def test_public_pages_and_landing_data():
+    with TestClient(app) as c:
+        home = c.get("/")
+        assert home.status_code == 200 and "Stronger in" in home.text
+        assert "Sign in to manage your studio" in c.get("/admin").text
+        assert "Book a session" in c.get("/book").text
+        info = c.get("/api/public/info").json()
+        assert info["plans"] and {"name", "sessions_included", "price"} <= set(info["plans"][0])
+        assert "email" in info

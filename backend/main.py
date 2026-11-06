@@ -1,8 +1,10 @@
+import json
 import os
 import shutil
 import subprocess
 import threading
 import time
+import urllib.request
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
@@ -74,12 +76,19 @@ def _bridge_log_thread(proc):
 
 
 def _bridge_watchdog(app):
-    """Restart the WhatsApp bridge if its process dies."""
+    """Restart the WhatsApp bridge if its process dies or gets stuck."""
+    stuck_since = None
+    bridge_port = int(os.environ.get("WHATSAPP_BRIDGE_PORT", "8020"))
+    status_url = f"http://127.0.0.1:{bridge_port}/status"
+    reset_url = f"http://127.0.0.1:{bridge_port}/reset"
     while not _bridge_stop_event.is_set():
         with _bridge_lock:
             proc = getattr(app.state, "whatsapp_bridge", None)
+
+        # Case 1: bridge process died
         if proc is not None and proc.poll() is not None:
             print(f"[whatsapp-bridge] process exited with code {proc.returncode}; restarting in 5s")
+            stuck_since = None
             time.sleep(5)
             if _bridge_stop_event.is_set():
                 break
@@ -91,6 +100,37 @@ def _bridge_watchdog(app):
                 BRIDGE_REASON["reason"] = None
             else:
                 BRIDGE_REASON["reason"] = "bridge restart failed (see earlier log)"
+            time.sleep(25)
+            continue
+
+        # Case 2: bridge is alive but stuck in a bad state
+        try:
+            with urllib.request.urlopen(status_url, timeout=5) as resp:
+                data = json.loads(resp.read().decode())
+                status = data.get("status", "unknown")
+                if status in ("ready", "authenticated", "awaiting_qr"):
+                    stuck_since = None
+                elif status in ("initializing", "auth_failure", "disconnected"):
+                    if stuck_since is None:
+                        stuck_since = time.time()
+                    elif time.time() - stuck_since > 180:
+                        print(f"[whatsapp-bridge] bridge stuck in '{status}' for >3m; calling /reset")
+                        try:
+                            urllib.request.urlopen(reset_url, timeout=10).read()
+                        except Exception as e:
+                            print(f"[whatsapp-bridge] /reset failed: {e}; will restart process")
+                            _stop_bridge(proc)
+                        stuck_since = None
+                else:
+                    stuck_since = None
+        except Exception as e:
+            # HTTP endpoint not up yet; if it stays down too long, treat as stuck
+            if stuck_since is None:
+                stuck_since = time.time()
+            elif time.time() - stuck_since > 300:
+                print(f"[whatsapp-bridge] status endpoint unreachable for >5m; restarting process")
+                _stop_bridge(proc)
+                stuck_since = None
         time.sleep(30)
 
 

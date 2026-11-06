@@ -1,4 +1,4 @@
-/* Monthly expense tracker — grouped by day, multiple expenses per day */
+/* Monthly expense tracker — calendar month view with day detail */
 const EXP_ICONS = {
   'rent': '🏠', 'housing': '🏠', 'mortgage': '🏠',
   'food': '🍔', 'fast food': '🍔', 'groceries': '🛒', 'restaurant': '🍽️',
@@ -10,18 +10,14 @@ const EXP_ICONS = {
   'education': '📚', 'travel': '✈️', 'gift': '🎁', 'other': '📝'
 };
 let EXPENSES = [];
+let FILTERED_EXPENSES = [];
 let EXPENSE_CATS = [];
-let EDITING = null; // {id, field}
+let EDITING = null;
+let SELECTED_DAY = null;
 
 function expIcon(cat) {
   const key = String(cat).toLowerCase();
   return EXP_ICONS[key] || EXP_ICONS[Object.keys(EXP_ICONS).find(k => key.includes(k))] || '📝';
-}
-
-function parseISODate(key) {
-  // key is YYYY-MM-DD in app timezone; build a Date that renders the same local components
-  const [y, m, d] = key.split('-').map(Number);
-  return new Date(y, m - 1, d);
 }
 
 function initExpenseMonth() {
@@ -42,68 +38,133 @@ async function loadExpenses() {
   EXPENSE_CATS = cats;
   $('exp-month-label').textContent = new Date(y, m - 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
   $('exp-export').href = `/api/expenses/export.csv?year=${y}&month=${m}&token=${S.token}`;
-  renderExpenseFilter();
-  renderExpenseCats(summary.by_category);
-  renderMethodBreakdown(EXPENSES);
+  const today = dateKey(new Date());
+  if (!SELECTED_DAY || !EXPENSES.some(e => dateKey(parseISO(e.date)) === SELECTED_DAY)) {
+    SELECTED_DAY = EXPENSES.some(e => dateKey(parseISO(e.date)) === today) ? today : null;
+  }
+  applyFilters(summary.by_category);
+}
+
+function applyFilters(categorySummary) {
+  const q = (val('exp-search') || '').toLowerCase();
+  FILTERED_EXPENSES = q
+    ? EXPENSES.filter(e =>
+        (e.category || '').toLowerCase().includes(q) ||
+        (e.payment_method || '').toLowerCase().includes(q) ||
+        (e.notes || '').toLowerCase().includes(q) ||
+        String(e.amount).includes(q)
+      )
+    : [...EXPENSES];
+  const [y, m] = val('exp-month').split('-').map(Number);
+  renderCalendar(y, m);
+  renderDayDetail();
+  const total = FILTERED_EXPENSES.reduce((a, e) => a + e.amount, 0);
+  $('exp-grand').textContent = `Total: ${money(total)}${q ? ` · ${FILTERED_EXPENSES.length} result${FILTERED_EXPENSES.length === 1 ? '' : 's'}` : ''}`;
+  if (categorySummary !== undefined) renderExpenseCats(categorySummary);
+  else {
+    const totals = FILTERED_EXPENSES.reduce((acc, e) => {
+      const c = e.category || 'Other';
+      if (!acc[c]) acc[c] = { total: 0, count: 0 };
+      acc[c].total += e.amount;
+      acc[c].count += 1;
+      return acc;
+    }, {});
+    renderExpenseCats(Object.entries(totals).map(([k, v]) => ({ category: k, ...v })));
+  }
+  renderMethodBreakdown(FILTERED_EXPENSES);
 }
 
 function expensesByDay(list) {
+  const source = list || FILTERED_EXPENSES;
   const groups = {};
-  for (const e of list) {
+  for (const e of source) {
     const key = dateKey(parseISO(e.date));
     if (!groups[key]) groups[key] = [];
     groups[key].push(e);
   }
   Object.values(groups).forEach(l => l.sort((a, b) => b.id - a.id));
-  return Object.keys(groups).sort().reverse().map(key => ({ key, date: parseISODate(key), items: groups[key] }));
+  return groups;
 }
 
-function renderExpenseFilter() {
-  const q = (val('exp-search') || '').toLowerCase();
-  let filtered = EXPENSES;
-  if (q) {
-    filtered = EXPENSES.filter(e =>
-      (e.category || '').toLowerCase().includes(q) ||
-      (e.payment_method || '').toLowerCase().includes(q) ||
-      (e.notes || '').toLowerCase().includes(q) ||
-      String(e.amount).includes(q)
-    );
+function daysInMonth(y, m) {
+  return new Date(y, m, 0).getDate();
+}
+
+function renderCalendar(y, m) {
+  const groups = expensesByDay();
+  const firstDay = new Date(y, m - 1, 1).getDay(); // 0 = Sun
+  const totalDays = daysInMonth(y, m);
+  const todayKeyStr = dateKey(new Date());
+
+  const headerDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  let html = `<div class="exp-cal"><div class="exp-cal-header">` +
+    headerDays.map(d => `<div class="exp-cal-hday">${d}</div>`).join('') +
+    `</div><div class="exp-cal-grid">`;
+
+  // empty cells before the 1st
+  for (let i = 0; i < firstDay; i++) {
+    html += `<div class="exp-cal-cell empty"></div>`;
   }
-  const days = expensesByDay(filtered);
-  renderDayList(days, q);
-  const total = filtered.reduce((a, e) => a + e.amount, 0);
-  $('exp-grand').textContent = `Total: ${money(total)}${q ? ` · ${filtered.length} result${filtered.length === 1 ? '' : 's'}` : ''}`;
+
+  for (let d = 1; d <= totalDays; d++) {
+    const key = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const items = groups[key] || [];
+    const total = items.reduce((a, e) => a + e.amount, 0);
+    const isToday = key === todayKeyStr;
+    const isSelected = key === SELECTED_DAY;
+    html += `<div class="exp-cal-cell ${isToday ? 'today' : ''} ${isSelected ? 'selected' : ''} ${items.length ? 'has-data' : ''}" data-day="${key}" onclick="selectDay('${key}')">
+      <div class="exp-cal-date">${d}</div>
+      <div class="exp-cal-total">${total > 0 ? money(total) : ''}</div>
+      ${items.length ? `<div class="exp-cal-dot"></div>` : ''}
+    </div>`;
+  }
+  html += `</div></div>`;
+  $('exp-list').innerHTML = html;
 }
 
-function renderDayList(days, searching) {
-  const box = $('exp-list');
-  if (!days.length) {
-    box.innerHTML = `<div class="card empty">No expenses for this month. Click <strong>+ Add day</strong> to start.</div>`;
+function selectDay(key) {
+  SELECTED_DAY = key;
+  renderCalendar(+key.split('-')[0], +key.split('-')[1]);
+  renderDayDetail();
+}
+
+function renderDayDetail() {
+  let box = $('exp-day-detail');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'exp-day-detail';
+    box.className = 'mt';
+    $('page-expenses').appendChild(box);
+  }
+  if (!SELECTED_DAY) {
+    box.innerHTML = `<div class="card empty">Select a day from the calendar above to view or add expenses.</div>`;
     return;
   }
-  box.innerHTML = days.map(d => {
-    const dayTotal = d.items.reduce((a, e) => a + e.amount, 0);
-    const dayLabel = d.date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
-    return `<div class="day-card" data-day="${d.key}">
-      <div class="day-header">
-        <div class="day-title"><span class="day-date">${esc(dayLabel)}</span><span class="day-count">${d.items.length} expense${d.items.length === 1 ? '' : 's'}</span></div>
-        <div class="day-total">${money(dayTotal)}</div>
-      </div>
-      <div class="day-body">
-        <table class="day-table"><tbody>` +
-      d.items.map(e => `<tr data-id="${e.id}">
-        <td class="ico">${expIcon(e.category)}</td>
-        <td>${cell(e.id, 'category', e.category)}</td>
-        <td>${cell(e.id, 'payment_method', e.payment_method || 'Card')}</td>
-        <td>${cell(e.id, 'notes', e.notes || '')}</td>
-        <td class="num bold">${cell(e.id, 'amount', money(e.amount).replace(/^AED\s*/, ''), 'right')}</td>
-        <td class="num"><button class="btn btn-ghost btn-xs" style="color:var(--bad)" onclick="deleteExpense(${e.id})">×</button></td>
-      </tr>`).join('') +
-      `</tbody></table>
-        <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="addExpenseToDay('${d.key}')">+ Add expense to this day</button>
-      </div>
-    </div>`;
-  }).join('');
+  const groups = expensesByDay();
+  const items = groups[SELECTED_DAY] || [];
+  const dayTotal = items.reduce((a, e) => a + e.amount, 0);
+  const d = new Date(SELECTED_DAY + 'T00:00:00');
+  const label = d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+
+  box.innerHTML = `<div class="card">
+    <div class="day-header">
+      <div class="day-title"><span class="day-date">${esc(label)}</span><span class="day-count">${items.length} expense${items.length === 1 ? '' : 's'}</span></div>
+      <div class="day-total">${money(dayTotal)}</div>
+    </div>
+    <div class="day-body">
+      ${items.length ? `<table class="day-table"><tbody>` +
+        items.map(e => `<tr data-id="${e.id}">
+          <td class="ico">${expIcon(e.category)}</td>
+          <td>${cell(e.id, 'category', e.category)}</td>
+          <td>${cell(e.id, 'payment_method', e.payment_method || 'Card')}</td>
+          <td>${cell(e.id, 'notes', e.notes || '')}</td>
+          <td class="num bold">${cell(e.id, 'amount', money(e.amount).replace(/^AED\s*/, ''), 'right')}</td>
+          <td class="num"><button class="btn btn-ghost btn-xs" style="color:var(--bad)" onclick="deleteExpense(${e.id})">×</button></td>
+        </tr>`).join('') +
+        `</tbody></table>` : `<div class="empty small" style="padding:20px 0">No expenses for this day.</div>`}
+      <button class="btn btn-primary btn-sm" style="margin-top:12px" onclick="addExpenseToDay('${SELECTED_DAY}')">+ Add expense to this day</button>
+    </div>
+  </div>`;
   attachCellHandlers();
 }
 
@@ -114,7 +175,6 @@ function cell(id, field, text, align = '') {
 function attachCellHandlers() {
   document.querySelectorAll('.sheet-cell').forEach(c => {
     c.addEventListener('click', startEditCell);
-    c.addEventListener('focus', startEditCell);
   });
 }
 
@@ -130,18 +190,17 @@ function startEditCell(e) {
 
   if (field === 'amount') {
     el.innerHTML = `<input type="number" step="0.01" class="input input-sm" style="text-align:right" value="${expense.amount}" onblur="finishEdit()" onkeydown="editKey(event)">`;
-    el.querySelector('input').focus();
   } else if (field === 'category') {
     const opts = EXPENSE_CATS.map(c => `<option value="${esc(c)}">`).join('');
     el.innerHTML = `<input list="exp-cat-dl" class="input input-sm" value="${esc(expense.category)}" onblur="finishEdit()" onkeydown="editKey(event)"><datalist id="exp-cat-dl">${opts}</datalist>`;
-    el.querySelector('input').focus();
   } else if (field === 'payment_method') {
     el.innerHTML = `<select class="input input-sm" onblur="finishEdit()" onkeydown="editKey(event)"><option value="Card" ${(expense.payment_method || 'Card') === 'Card' ? 'selected' : ''}>Card</option><option value="Cash" ${(expense.payment_method || 'Card') === 'Cash' ? 'selected' : ''}>Cash</option></select>`;
-    el.querySelector('select').focus();
   } else {
     el.innerHTML = `<input type="text" class="input input-sm" value="${esc(expense.notes || '')}" onblur="finishEdit()" onkeydown="editKey(event)">`;
-    el.querySelector('input').focus();
   }
+  const input = el.querySelector('input, select');
+  input.focus();
+  if (input.select) input.select();
 }
 
 function editKey(e) {
@@ -191,19 +250,13 @@ function cancelEdit() {
 }
 
 async function addExpenseRow() {
-  const [y, m] = val('exp-month').split('-').map(Number);
-  const today = new Date();
-  let day;
-  if (today.getFullYear() === y && today.getMonth() + 1 === m) {
-    day = today;
-  } else {
-    day = new Date(y, m - 1, 1);
-  }
-  await createExpense(dateKey(day), true);
+  const today = dateKey(new Date());
+  SELECTED_DAY = today;
+  await createExpense(today, true);
 }
 
 async function addExpenseToDay(dayKeyStr) {
-  await createExpense(dayKeyStr, false);
+  await createExpense(dayKeyStr, true);
 }
 
 async function createExpense(dayKeyStr, focusAmount) {
@@ -216,7 +269,8 @@ async function createExpense(dayKeyStr, focusAmount) {
   };
   const created = await api('POST', '/expenses/', payload);
   EXPENSES.unshift(created);
-  renderExpenseFilter();
+  SELECTED_DAY = dayKeyStr;
+  loadExpenses();
   setTimeout(() => {
     const cell = document.querySelector(`.sheet-cell[data-id="${created.id}"][data-field="${focusAmount ? 'amount' : 'category'}"]`);
     if (cell) cell.click();
@@ -227,14 +281,7 @@ async function deleteExpense(id) {
   if (!confirm('Delete this expense?')) return;
   await api('DELETE', `/expenses/${id}`);
   EXPENSES = EXPENSES.filter(e => e.id !== id);
-  renderExpenseFilter();
-  renderExpenseCats(EXPENSES.reduce((acc, e) => {
-    const existing = acc.find(x => x.category === e.category);
-    if (existing) { existing.total += e.amount; existing.count += 1; }
-    else acc.push({ category: e.category, total: e.amount, count: 1 });
-    return acc;
-  }, []));
-  renderMethodBreakdown(EXPENSES);
+  loadExpenses();
   toast('Deleted');
 }
 

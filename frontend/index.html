@@ -147,15 +147,15 @@
           <div><h2>Monthly Tracker</h2><div class="sub" id="exp-month-label"></div></div>
           <div class="actions">
             <a class="btn btn-secondary" id="exp-export" href="#" target="_blank">Export CSV</a>
-            <button class="btn btn-primary" onclick="addExpenseRow()">+ Add day</button>
+            <button class="btn btn-primary" onclick="addExpenseRow()">+ Add today</button>
           </div>
         </div>
         <div class="toolbar">
           <input type="month" id="exp-month" class="input input-sm" onchange="loadExpenses()">
-          <input type="text" id="exp-search" class="input input-sm" placeholder="Search spending..." oninput="debounce(renderExpenseFilter, 200)()" style="min-width:220px">
+          <input type="text" id="exp-search" class="input input-sm" placeholder="Search spending..." oninput="debounce(applyFilters, 200)()" style="min-width:220px">
           <span class="bold" id="exp-grand" style="margin-left:auto;font-size:1.1rem"></span>
         </div>
-        <div class="card mt"><div id="exp-list" class="table-wrap"></div></div>
+        <div class="card mt"><div id="exp-list"></div></div>
         <div class="grid grid-2 mt">
           <div class="card"><div class="card-title">By category</div><div id="exp-cats"></div></div>
           <div class="card"><div class="card-title">Payment methods</div><div id="exp-methods"></div></div>

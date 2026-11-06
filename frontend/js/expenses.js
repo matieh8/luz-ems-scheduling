@@ -1,4 +1,4 @@
-/* Monthly expense tracker — spreadsheet-like inline editing */
+/* Monthly expense tracker — grouped by day, multiple expenses per day */
 const EXP_ICONS = {
   'rent': '🏠', 'housing': '🏠', 'mortgage': '🏠',
   'food': '🍔', 'fast food': '🍔', 'groceries': '🛒', 'restaurant': '🍽️',
@@ -18,6 +18,12 @@ function expIcon(cat) {
   return EXP_ICONS[key] || EXP_ICONS[Object.keys(EXP_ICONS).find(k => key.includes(k))] || '📝';
 }
 
+function parseISODate(key) {
+  // key is YYYY-MM-DD in app timezone; build a Date that renders the same local components
+  const [y, m, d] = key.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
 function initExpenseMonth() {
   if (!val('exp-month')) {
     const now = new Date();
@@ -34,7 +40,6 @@ async function loadExpenses() {
   ]);
   EXPENSES = summary.expenses || [];
   EXPENSE_CATS = cats;
-  EXPENSES.sort((a, b) => new Date(b.date) - new Date(a.date));
   $('exp-month-label').textContent = new Date(y, m - 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
   $('exp-export').href = `/api/expenses/export.csv?year=${y}&month=${m}&token=${S.token}`;
   renderExpenseFilter();
@@ -42,46 +47,63 @@ async function loadExpenses() {
   renderMethodBreakdown(EXPENSES);
 }
 
-function renderExpenseFilter() {
-  const q = (val('exp-search') || '').toLowerCase();
-  const list = q
-    ? EXPENSES.filter(e =>
-        (e.category || '').toLowerCase().includes(q) ||
-        (e.payment_method || '').toLowerCase().includes(q) ||
-        (e.notes || '').toLowerCase().includes(q) ||
-        String(e.amount).includes(q)
-      )
-    : EXPENSES;
-  renderExpenseList(list);
-  const total = list.reduce((a, e) => a + e.amount, 0);
-  $('exp-grand').textContent = `Total: ${money(total)}${q ? ` · ${list.length} result${list.length === 1 ? '' : 's'}` : ''}`;
+function expensesByDay(list) {
+  const groups = {};
+  for (const e of list) {
+    const key = dateKey(parseISO(e.date));
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(e);
+  }
+  Object.values(groups).forEach(l => l.sort((a, b) => b.id - a.id));
+  return Object.keys(groups).sort().reverse().map(key => ({ key, date: parseISODate(key), items: groups[key] }));
 }
 
-function renderExpenseList(list) {
+function renderExpenseFilter() {
+  const q = (val('exp-search') || '').toLowerCase();
+  let filtered = EXPENSES;
+  if (q) {
+    filtered = EXPENSES.filter(e =>
+      (e.category || '').toLowerCase().includes(q) ||
+      (e.payment_method || '').toLowerCase().includes(q) ||
+      (e.notes || '').toLowerCase().includes(q) ||
+      String(e.amount).includes(q)
+    );
+  }
+  const days = expensesByDay(filtered);
+  renderDayList(days, q);
+  const total = filtered.reduce((a, e) => a + e.amount, 0);
+  $('exp-grand').textContent = `Total: ${money(total)}${q ? ` · ${filtered.length} result${filtered.length === 1 ? '' : 's'}` : ''}`;
+}
+
+function renderDayList(days, searching) {
   const box = $('exp-list');
-  if (!list.length && !EXPENSES.length) {
-    box.innerHTML = `<table class="expense-sheet"><thead><tr><th>Date</th><th>Category</th><th>Type</th><th>Item / Notes</th><th class="num">Amount</th><th></th></tr></thead><tbody><tr><td colspan="6" class="empty">No expenses yet. Click <strong>+ Add row</strong>.</td></tr></tbody></table>`;
+  if (!days.length) {
+    box.innerHTML = `<div class="card empty">No expenses for this month. Click <strong>+ Add day</strong> to start.</div>`;
     return;
   }
-  box.innerHTML = `<table class="expense-sheet"><thead><tr>
-    <th>Date</th>
-    <th style="width:38px"></th>
-    <th>Category</th>
-    <th>Type</th>
-    <th>Item / Notes</th>
-    <th class="num">Amount</th>
-    <th style="width:60px"></th>
-  </tr></thead><tbody>` +
-    list.map(e => `<tr data-id="${e.id}">
-      <td>${cell(e.id, 'date', fmtDate(e.date))}</td>
-      <td class="ico">${expIcon(e.category)}</td>
-      <td>${cell(e.id, 'category', e.category)}</td>
-      <td>${cell(e.id, 'payment_method', e.payment_method || 'Card')}</td>
-      <td>${cell(e.id, 'notes', e.notes || '')}</td>
-      <td class="num bold">${cell(e.id, 'amount', money(e.amount).replace(/^AED\s*/, ''), 'right')}</td>
-      <td class="num"><button class="btn btn-ghost btn-xs" style="color:var(--bad)" onclick="deleteExpense(${e.id})">×</button></td>
-    </tr>`).join('') +
-    '</tbody></table>';
+  box.innerHTML = days.map(d => {
+    const dayTotal = d.items.reduce((a, e) => a + e.amount, 0);
+    const dayLabel = d.date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+    return `<div class="day-card" data-day="${d.key}">
+      <div class="day-header">
+        <div class="day-title"><span class="day-date">${esc(dayLabel)}</span><span class="day-count">${d.items.length} expense${d.items.length === 1 ? '' : 's'}</span></div>
+        <div class="day-total">${money(dayTotal)}</div>
+      </div>
+      <div class="day-body">
+        <table class="day-table"><tbody>` +
+      d.items.map(e => `<tr data-id="${e.id}">
+        <td class="ico">${expIcon(e.category)}</td>
+        <td>${cell(e.id, 'category', e.category)}</td>
+        <td>${cell(e.id, 'payment_method', e.payment_method || 'Card')}</td>
+        <td>${cell(e.id, 'notes', e.notes || '')}</td>
+        <td class="num bold">${cell(e.id, 'amount', money(e.amount).replace(/^AED\s*/, ''), 'right')}</td>
+        <td class="num"><button class="btn btn-ghost btn-xs" style="color:var(--bad)" onclick="deleteExpense(${e.id})">×</button></td>
+      </tr>`).join('') +
+      `</tbody></table>
+        <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="addExpenseToDay('${d.key}')">+ Add expense to this day</button>
+      </div>
+    </div>`;
+  }).join('');
   attachCellHandlers();
 }
 
@@ -106,10 +128,7 @@ function startEditCell(e) {
   if (!expense) return;
   EDITING = { id, field, el, original: el.textContent };
 
-  if (field === 'date') {
-    el.innerHTML = `<input type="date" class="input input-sm" value="${dateKey(parseISO(expense.date))}" onblur="finishEdit()" onkeydown="editKey(event)">`;
-    el.querySelector('input').focus();
-  } else if (field === 'amount') {
+  if (field === 'amount') {
     el.innerHTML = `<input type="number" step="0.01" class="input input-sm" style="text-align:right" value="${expense.amount}" onblur="finishEdit()" onkeydown="editKey(event)">`;
     el.querySelector('input').focus();
   } else if (field === 'category') {
@@ -141,10 +160,7 @@ async function finishEdit() {
   if (!expense) return;
 
   let payload = {};
-  if (field === 'date') {
-    if (!value) { el.textContent = original; return; }
-    payload.date = zonedToDate(value, '12:00').toISOString();
-  } else if (field === 'amount') {
+  if (field === 'amount') {
     const amt = parseFloat(value);
     if (isNaN(amt) || amt < 0) { el.textContent = original; return; }
     payload.amount = amt;
@@ -176,9 +192,23 @@ function cancelEdit() {
 
 async function addExpenseRow() {
   const [y, m] = val('exp-month').split('-').map(Number);
-  const today = new Date(y, m - 1, 1);
+  const today = new Date();
+  let day;
+  if (today.getFullYear() === y && today.getMonth() + 1 === m) {
+    day = today;
+  } else {
+    day = new Date(y, m - 1, 1);
+  }
+  await createExpense(dateKey(day), true);
+}
+
+async function addExpenseToDay(dayKeyStr) {
+  await createExpense(dayKeyStr, false);
+}
+
+async function createExpense(dayKeyStr, focusAmount) {
   const payload = {
-    date: zonedToDate(dateKey(today), '12:00').toISOString(),
+    date: zonedToDate(dayKeyStr, '12:00').toISOString(),
     category: 'Other',
     payment_method: 'Card',
     amount: 0,
@@ -188,13 +218,13 @@ async function addExpenseRow() {
   EXPENSES.unshift(created);
   renderExpenseFilter();
   setTimeout(() => {
-    const cell = document.querySelector(`.sheet-cell[data-id="${created.id}"][data-field="amount"]`);
+    const cell = document.querySelector(`.sheet-cell[data-id="${created.id}"][data-field="${focusAmount ? 'amount' : 'category'}"]`);
     if (cell) cell.click();
   }, 50);
 }
 
 async function deleteExpense(id) {
-  if (!confirm('Delete this row?')) return;
+  if (!confirm('Delete this expense?')) return;
   await api('DELETE', `/expenses/${id}`);
   EXPENSES = EXPENSES.filter(e => e.id !== id);
   renderExpenseFilter();
@@ -204,6 +234,7 @@ async function deleteExpense(id) {
     else acc.push({ category: e.category, total: e.amount, count: 1 });
     return acc;
   }, []));
+  renderMethodBreakdown(EXPENSES);
   toast('Deleted');
 }
 

@@ -36,7 +36,7 @@ async function loadSettings() {
         ${tog('demo_mode', 'Demo mode', 'Messages are logged in the Messages page but not actually sent. Turn off when you go live.')}
         <div class="form-group mt"><label>WhatsApp provider</label><select id="st-whatsapp_provider" class="input" onchange="stProvider()"><option value="demo" ${s.whatsapp_provider === 'demo' ? 'selected' : ''}>None (demo)</option><option value="whatsapp_web" ${s.whatsapp_provider === 'whatsapp_web' ? 'selected' : ''}>WhatsApp Web (free, your own number)</option><option value="twilio" ${s.whatsapp_provider === 'twilio' ? 'selected' : ''}>Twilio WhatsApp Business API</option></select></div>
         ${tog('whatsapp_enabled', 'WhatsApp enabled')}
-        <div id="st-wa-web" style="display:${s.whatsapp_provider === 'whatsapp_web' ? 'block' : 'none'};padding:14px;background:var(--bg);border-radius:12px;margin:10px 0"><strong>WhatsApp Web pairing</strong><p class="small muted">Scan with the business phone: WhatsApp → Linked devices → Link a device.</p><div id="whatsapp-qr" style="text-align:center"><em class="small">Loading status…</em></div></div>
+        <div id="st-wa-web" style="display:${s.whatsapp_provider === 'whatsapp_web' ? 'block' : 'none'};padding:14px;background:var(--bg);border-radius:12px;margin:10px 0"><strong>WhatsApp Web pairing</strong><p class="small muted">Scan with the business phone: WhatsApp → Linked devices → Link a device.</p><div id="whatsapp-qr" style="text-align:center"><em class="small">Loading status…</em></div><button class="btn btn-secondary btn-sm mt" onclick="resetWhatsApp()">Reset WhatsApp session</button></div>
         <div id="st-twilio" style="display:${s.whatsapp_provider === 'twilio' || s.sms_enabled ? 'block' : 'none'}">
           <div class="form-row">${row('twilio_account_sid', 'Twilio Account SID')}${row('twilio_auth_token', 'Twilio Auth Token', '', 'password')}</div>
           ${row('twilio_phone_number', 'Twilio WhatsApp sender', 'e.g. whatsapp:+14155238886')}
@@ -71,6 +71,11 @@ async function loadWhatsAppStatus() {
     else { const label = { initializing: 'Starting WhatsApp and restoring the saved session… no need to scan again unless a QR code appears.', authenticated: 'Session restored, connecting…', disconnected: 'Phone disconnected, reconnecting…', auth_failure: 'Saved session was rejected by WhatsApp. A new QR code will appear shortly.' }[st.status] || `Waiting… (${esc(st.status)})`;
       box.innerHTML = `<em class="small">${label}</em>`; if (st.status !== 'bridge_offline') setTimeout(loadWhatsAppStatus, 3000); else box.innerHTML = `<div style="color:var(--bad);font-weight:600">WhatsApp bridge is offline</div><p class="small muted">${esc(st.reason || 'Node bridge not running')}</p><p class="small muted">Until it is running, WhatsApp messages will fail. Turn on <strong>Demo mode</strong> to log messages without sending, or use the Twilio provider.</p>`; }
   } catch (e) { box.innerHTML = '<em class="small">Status unavailable.</em>'; }
+}
+async function resetWhatsApp() {
+  if (!confirm('Reset the WhatsApp session? You will need to scan the QR code again.')) return;
+  try { await api('POST', '/notifications/whatsapp-reset'); toast('WhatsApp session reset; a new QR code will appear shortly'); loadWhatsAppStatus(); }
+  catch (e) { toast('Reset failed: ' + (e.message || e), true); }
 }
 async function saveSettings() {
   guard(async () => {

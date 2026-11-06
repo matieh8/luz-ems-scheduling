@@ -224,6 +224,16 @@ textarea.input { min-height: 80px; resize: vertical; }
 .progress { height: 8px; background: var(--bg); border-radius: 999px; overflow: hidden; }
 .progress > div { height: 100%; background: var(--accent); border-radius: 999px; }
 
+/* Expense spreadsheet */
+.expense-sheet { border-collapse: separate; border-spacing: 0; }
+.expense-sheet th { position: sticky; top: 0; z-index: 2; }
+.expense-sheet td { padding: 6px 10px; border-bottom: 1px solid var(--border); }
+.expense-sheet td.ico { text-align: center; font-size: 1.1rem; padding: 0; }
+.expense-sheet td.num { font-variant-numeric: tabular-nums; }
+.sheet-cell { padding: 5px 8px; border-radius: 6px; min-height: 30px; cursor: text; border: 1px solid transparent; }
+.sheet-cell:hover { background: var(--bg); border-color: var(--border); }
+.sheet-cell .input { padding: 4px 6px; font-size: .82rem; border-radius: 6px; }
+
 @media (max-width: 900px) {
   .sidebar { width: 100%; top: auto; bottom: 0; height: 62px; flex-direction: row; border-right: none; border-top: 1px solid var(--border); }
   .brand, .sidebar-footer, .nav .nav-label { display: none; }

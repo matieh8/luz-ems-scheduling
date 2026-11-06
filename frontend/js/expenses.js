@@ -1,5 +1,22 @@
-/* Monthly expense tracker */
+/* Monthly expense tracker — spreadsheet-like inline editing */
+const EXP_ICONS = {
+  'rent': '🏠', 'housing': '🏠', 'mortgage': '🏠',
+  'food': '🍔', 'fast food': '🍔', 'groceries': '🛒', 'restaurant': '🍽️',
+  'fuel': '⛽', 'petrol': '⛽', 'car': '🚗', 'transport': '🚕', 'taxi': '🚕',
+  'utilities': '💡', 'electricity': '💡', 'internet': '🌐', 'phone': '📱',
+  'shopping': '🛍️', 'clothes': '👕',
+  'health': '💊', 'gym': '💪', 'medical': '🏥',
+  'subscriptions': '📺', 'entertainment': '🎬',
+  'education': '📚', 'travel': '✈️', 'gift': '🎁', 'other': '📝'
+};
+let EXPENSES = [];
 let EXPENSE_CATS = [];
+let EDITING = null; // {id, field}
+
+function expIcon(cat) {
+  const key = String(cat).toLowerCase();
+  return EXP_ICONS[key] || EXP_ICONS[Object.keys(EXP_ICONS).find(k => key.includes(k))] || '📝';
+}
 
 function initExpenseMonth() {
   if (!val('exp-month')) {
@@ -15,91 +32,182 @@ async function loadExpenses() {
     api('GET', `/expenses/summary?year=${y}&month=${m}`),
     api('GET', '/expenses/categories')
   ]);
+  EXPENSES = summary.expenses || [];
   EXPENSE_CATS = cats;
-  renderExpenseList(summary.expenses);
-  renderExpenseCats(summary.by_category, summary.grand_total);
+  EXPENSES.sort((a, b) => new Date(b.date) - new Date(a.date));
   $('exp-month-label').textContent = new Date(y, m - 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
-  $('exp-grand').textContent = `Total: ${money(summary.grand_total)}`;
+  $('exp-export').href = `/api/expenses/export.csv?year=${y}&month=${m}&token=${S.token}`;
+  renderExpenseFilter();
+  renderExpenseCats(summary.by_category);
+  renderMethodBreakdown(EXPENSES);
+}
+
+function renderExpenseFilter() {
+  const q = (val('exp-search') || '').toLowerCase();
+  const list = q
+    ? EXPENSES.filter(e =>
+        (e.category || '').toLowerCase().includes(q) ||
+        (e.notes || '').toLowerCase().includes(q) ||
+        String(e.amount).includes(q)
+      )
+    : EXPENSES;
+  renderExpenseList(list);
+  const total = list.reduce((a, e) => a + e.amount, 0);
+  $('exp-grand').textContent = `Total: ${money(total)}${q ? ` · ${list.length} result${list.length === 1 ? '' : 's'}` : ''}`;
 }
 
 function renderExpenseList(list) {
   const box = $('exp-list');
-  if (!list.length) { box.innerHTML = '<div class="card empty">No expenses this month.</div>'; return; }
-  box.innerHTML = `<table><thead><tr><th>Date</th><th>Category</th><th>Notes</th><th class="num">Amount</th><th></th></tr></thead><tbody>` +
-    list.map(e => `<tr>
-      <td class="mono">${fmtDate(e.date)}</td>
-      <td><span class="chip">${esc(e.category)}</span></td>
-      <td class="small muted">${esc(e.notes || '')}</td>
-      <td class="num bold">${money(e.amount)}</td>
-      <td class="num"><button class="btn btn-ghost btn-xs" onclick="editExpense(${e.id})">Edit</button><button class="btn btn-ghost btn-xs" style="color:var(--bad)" onclick="deleteExpense(${e.id})">Delete</button></td>
-    </tr>`).join('') + '</tbody></table>';
-}
-
-function renderExpenseCats(cats, grand) {
-  const box = $('exp-cats');
-  if (!cats.length) { box.innerHTML = '<div class="empty small">No spending yet.</div>'; return; }
-  box.innerHTML = `<table><thead><tr><th>Category</th><th class="num">Total</th></tr></thead><tbody>` +
-    cats.map(c => `<tr>
-      <td><span class="chip">${esc(c.category)}</span></td>
-      <td class="num bold">${money(c.total)}</td>
+  if (!list.length && !EXPENSES.length) {
+    box.innerHTML = `<table class="expense-sheet"><thead><tr><th>Date</th><th>Category</th><th>Item / Notes</th><th class="num">Amount</th><th></th></tr></thead><tbody><tr><td colspan="5" class="empty">No expenses yet. Click <strong>+ Add row</strong>.</td></tr></tbody></table>`;
+    return;
+  }
+  box.innerHTML = `<table class="expense-sheet"><thead><tr>
+    <th>Date</th>
+    <th style="width:38px"></th>
+    <th>Category</th>
+    <th>Item / Notes</th>
+    <th class="num">Amount</th>
+    <th style="width:60px"></th>
+  </tr></thead><tbody>` +
+    list.map(e => `<tr data-id="${e.id}">
+      <td>${cell(e.id, 'date', fmtDate(e.date))}</td>
+      <td class="ico">${expIcon(e.category)}</td>
+      <td>${cell(e.id, 'category', e.category)}</td>
+      <td>${cell(e.id, 'notes', e.notes || '')}</td>
+      <td class="num bold">${cell(e.id, 'amount', money(e.amount).replace(/^AED\s*/, ''), 'right')}</td>
+      <td class="num"><button class="btn btn-ghost btn-xs" style="color:var(--bad)" onclick="deleteExpense(${e.id})">×</button></td>
     </tr>`).join('') +
-    `<tr style="border-top:2px solid var(--border);font-weight:700"><td>Total</td><td class="num">${money(grand)}</td></tr>` +
     '</tbody></table>';
+  attachCellHandlers();
 }
 
-function openExpenseModal() {
-  $('expense-modal-title').textContent = 'Add expense';
-  setVal('expense-id', '');
-  setVal('expense-date', todayKey());
-  setVal('expense-amount', '');
-  setVal('expense-category', '');
-  setVal('expense-notes', '');
-  updateExpenseCatOptions();
-  openModal('expense-modal');
+function cell(id, field, text, align = '') {
+  return `<div class="sheet-cell ${align}" data-id="${id}" data-field="${field}" tabindex="0">${esc(text)}</div>`;
 }
 
-async function editExpense(id) {
-  const list = await api('GET', `/expenses/?year=${val('exp-month').split('-')[0]}&month=${val('exp-month').split('-')[1]}`);
-  const e = list.find(x => x.id === id);
-  if (!e) return toast('Expense not found', true);
-  $('expense-modal-title').textContent = 'Edit expense';
-  setVal('expense-id', e.id);
-  setVal('expense-date', dateKey(parseISO(e.date)));
-  setVal('expense-amount', e.amount);
-  setVal('expense-category', e.category);
-  setVal('expense-notes', e.notes || '');
-  updateExpenseCatOptions();
-  openModal('expense-modal');
-}
-
-function updateExpenseCatOptions() {
-  const dl = $('expense-cat-options');
-  dl.innerHTML = EXPENSE_CATS.map(c => `<option value="${esc(c)}">`).join('');
-}
-
-async function saveExpense() {
-  guard(async () => {
-    const id = val('expense-id');
-    const date = val('expense-date');
-    const amount = parseFloat(val('expense-amount'));
-    const category = val('expense-category').trim();
-    const notes = val('expense-notes').trim() || null;
-    if (!date) throw new Error('Date is required');
-    if (!category) throw new Error('Category is required');
-    if (!amount || amount <= 0) throw new Error('Enter a positive amount');
-    const payload = { date: zonedToDate(date, '12:00').toISOString(), category, amount, notes };
-    if (id) await api('PUT', `/expenses/${id}`, payload);
-    else await api('POST', '/expenses/', payload);
-    closeModal('expense-modal');
-    toast(id ? 'Expense updated' : 'Expense added');
-    loadExpenses();
+function attachCellHandlers() {
+  document.querySelectorAll('.sheet-cell').forEach(c => {
+    c.addEventListener('click', startEditCell);
+    c.addEventListener('focus', startEditCell);
   });
 }
 
-function deleteExpense(id) {
-  confirmBox('Delete expense', '<p>Delete this expense?</p>', 'Delete', async () => {
-    await api('DELETE', `/expenses/${id}`);
-    toast('Expense deleted');
+function startEditCell(e) {
+  const el = e.currentTarget;
+  if (EDITING && EDITING.el === el) return;
+  if (EDITING) finishEdit();
+  const id = +el.dataset.id;
+  const field = el.dataset.field;
+  const expense = EXPENSES.find(x => x.id === id);
+  if (!expense) return;
+  EDITING = { id, field, el, original: el.textContent };
+
+  if (field === 'date') {
+    el.innerHTML = `<input type="date" class="input input-sm" value="${dateKey(parseISO(expense.date))}" onblur="finishEdit()" onkeydown="editKey(event)">`;
+    el.querySelector('input').focus();
+  } else if (field === 'amount') {
+    el.innerHTML = `<input type="number" step="0.01" class="input input-sm" style="text-align:right" value="${expense.amount}" onblur="finishEdit()" onkeydown="editKey(event)">`;
+    el.querySelector('input').focus();
+  } else if (field === 'category') {
+    const opts = EXPENSE_CATS.map(c => `<option value="${esc(c)}">`).join('');
+    el.innerHTML = `<input list="exp-cat-dl" class="input input-sm" value="${esc(expense.category)}" onblur="finishEdit()" onkeydown="editKey(event)"><datalist id="exp-cat-dl">${opts}</datalist>`;
+    el.querySelector('input').focus();
+  } else {
+    el.innerHTML = `<input type="text" class="input input-sm" value="${esc(expense.notes || '')}" onblur="finishEdit()" onkeydown="editKey(event)">`;
+    el.querySelector('input').focus();
+  }
+}
+
+function editKey(e) {
+  if (e.key === 'Enter') { e.preventDefault(); finishEdit(); }
+  if (e.key === 'Escape') { e.preventDefault(); cancelEdit(); }
+}
+
+async function finishEdit() {
+  if (!EDITING) return;
+  const { id, field, el, original } = EDITING;
+  const input = el.querySelector('input');
+  let value = input.value.trim();
+  EDITING = null;
+
+  const expense = EXPENSES.find(x => x.id === id);
+  if (!expense) return;
+
+  let payload = {};
+  if (field === 'date') {
+    if (!value) { el.textContent = original; return; }
+    payload.date = zonedToDate(value, '12:00').toISOString();
+  } else if (field === 'amount') {
+    const amt = parseFloat(value);
+    if (isNaN(amt) || amt < 0) { el.textContent = original; return; }
+    payload.amount = amt;
+  } else if (field === 'category') {
+    if (!value) { el.textContent = original; return; }
+    payload.category = value;
+  } else if (field === 'notes') {
+    payload.notes = value || null;
+  }
+
+  try {
+    await api('PUT', `/expenses/${id}`, payload);
+    toast('Saved');
     loadExpenses();
-  }, 'btn-danger');
+  } catch (e) {
+    el.textContent = original;
+    throw e;
+  }
+}
+
+function cancelEdit() {
+  if (!EDITING) return;
+  const { el, original } = EDITING;
+  EDITING = null;
+  el.textContent = original;
+}
+
+async function addExpenseRow() {
+  const [y, m] = val('exp-month').split('-').map(Number);
+  const today = new Date(y, m - 1, 1);
+  const payload = {
+    date: zonedToDate(dateKey(today), '12:00').toISOString(),
+    category: 'Other',
+    amount: 0,
+    notes: ''
+  };
+  const created = await api('POST', '/expenses/', payload);
+  EXPENSES.unshift(created);
+  renderExpenseFilter();
+  setTimeout(() => {
+    const cell = document.querySelector(`.sheet-cell[data-id="${created.id}"][data-field="amount"]`);
+    if (cell) cell.click();
+  }, 50);
+}
+
+async function deleteExpense(id) {
+  if (!confirm('Delete this row?')) return;
+  await api('DELETE', `/expenses/${id}`);
+  EXPENSES = EXPENSES.filter(e => e.id !== id);
+  renderExpenseFilter();
+  renderExpenseCats(EXPENSES.reduce((acc, e) => {
+    const existing = acc.find(x => x.category === e.category);
+    if (existing) { existing.total += e.amount; existing.count += 1; }
+    else acc.push({ category: e.category, total: e.amount, count: 1 });
+    return acc;
+  }, []));
+  toast('Deleted');
+}
+
+function renderExpenseCats(cats) {
+  const box = $('exp-cats');
+  if (!cats || !cats.length) { box.innerHTML = '<div class="empty small">No spending yet.</div>'; return; }
+  const sorted = [...cats].sort((a, b) => b.total - a.total);
+  box.innerHTML = `<table><thead><tr><th>Category</th><th class="num">Total</th></tr></thead><tbody>` +
+    sorted.map(c => `<tr><td><span class="ico">${expIcon(c.category)}</span> ${esc(c.category)}</td><td class="num bold">${money(c.total)}</td></tr>`).join('') +
+    `</tbody></table>`;
+}
+
+function renderMethodBreakdown(expenses) {
+  const box = $('exp-methods');
+  box.innerHTML = '<div class="empty small">Payment method tracking coming soon.</div>';
 }

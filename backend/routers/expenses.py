@@ -1,12 +1,15 @@
 from datetime import datetime, timedelta
 from typing import List, Optional
 from collections import defaultdict
-from fastapi import APIRouter, Depends, HTTPException
+from io import StringIO
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import extract, func
 from backend.database import get_db
 from backend import models, schemas
 from backend.tz import utcnow
+import csv
 
 router = APIRouter(prefix="/api/expenses", tags=["Expenses"])
 
@@ -109,3 +112,25 @@ def delete_expense(expense_id: int, db: Session = Depends(get_db)):
     db.delete(e)
     db.commit()
     return {"detail": "Expense deleted"}
+
+
+@router.get("/export.csv", response_class=PlainTextResponse)
+def export_csv(year: int = Query(...), month: int = Query(...), db: Session = Depends(get_db)):
+    start, end = _month_bounds(year, month)
+    expenses = db.query(models.Expense).filter(
+        models.Expense.date >= start, models.Expense.date < end
+    ).order_by(models.Expense.date.asc(), models.Expense.id.asc()).all()
+
+    out = StringIO()
+    w = csv.writer(out)
+    w.writerow(["Date", "Category", "Item / Notes", "Amount"])
+    for e in expenses:
+        w.writerow([e.date.strftime("%Y-%m-%d"), e.category, e.notes or "", f"{e.amount:.2f}"])
+    total = sum(e.amount for e in expenses)
+    w.writerow(["", "", "Total", f"{total:.2f}"])
+
+    return PlainTextResponse(
+        content=out.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=expenses-{year}-{month:02d}.csv"}
+    )

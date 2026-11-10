@@ -21,7 +21,7 @@ DEFAULT_TEMPLATES = {
         "body": (
             "Hi {client_name},\n\n"
             "Your *{service_name}* session at *{business_name}* is confirmed.\n\n"
-            "📅 {date}\n⏰ {time}\n⏱ {duration} minutes{staff_line}{price_line}\n\n"
+            "📅 {date}\n⏰ {time}\n⏱ {duration} minutes{staff_line}\n\n"
             "Need to change it? Manage your booking here: {manage_link}\n\n"
             "You'll get a reminder {reminder_hours} hours before. See you soon!\n{business_name}"
         ),
@@ -113,11 +113,20 @@ PLACEHOLDERS = [
 ]
 
 
+CLIENT_PRICE_FREE_KEYS = {"booking_confirmation", "reminder", "reschedule", "cancellation", "follow_up"}
+
+
 def ensure_templates(db: Session):
-    existing = {t.key for t in db.query(models.MessageTemplate).all()}
+    templates = {t.key: t for t in db.query(models.MessageTemplate).all()}
     for key, t in DEFAULT_TEMPLATES.items():
-        if key not in existing:
+        if key not in templates:
             db.add(models.MessageTemplate(key=key, name=t["name"], subject=t["subject"], body=t["body"], enabled=True))
+    # Client-facing session messages never mention prices (one-time cleanup of templates saved before this rule).
+    for key, t in templates.items():
+        if key in CLIENT_PRICE_FREE_KEYS and t.body and ("{price_line}" in t.body or "{price}" in t.body):
+            t.body = t.body.replace("{price_line}", "").replace("{price}", "")
+            if t.subject:
+                t.subject = t.subject.replace("{price_line}", "").replace("{price}", "")
     db.commit()
 
 

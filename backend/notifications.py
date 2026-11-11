@@ -95,6 +95,14 @@ DEFAULT_TEMPLATES = {
             "Book them here before they expire: {booking_link}\n\n{business_name}"
         ),
     },
+    "admin_session_reminder": {
+        "name": "Owner reminder: upcoming session",
+        "subject": "Upcoming session {time_relative}: {client_full_name}",
+        "body": (
+            "⏰ Session {time_relative} at {business_name}\n\n"
+            "👤 {client_full_name} ({client_phone})\n✨ {service_name}\n📅 {date} at {time}{staff_line}"
+        ),
+    },
     "admin_new_booking": {
         "name": "Admin alert: new online booking",
         "subject": "New online booking: {client_name} - {service_name}",
@@ -106,7 +114,7 @@ DEFAULT_TEMPLATES = {
 }
 
 PLACEHOLDERS = [
-    "client_name", "client_phone", "business_name", "business_phone", "business_address", "service_name",
+    "client_name", "client_full_name", "client_phone", "business_name", "business_phone", "business_address", "service_name",
     "date", "time", "datetime", "duration", "staff_name", "staff_line", "price", "price_line", "currency",
     "manage_link", "booking_link", "reminder_hours", "time_relative", "reason_line", "plan_name",
     "sessions_total", "sessions_remaining", "sessions_remaining_line", "expiry_date", "amount",
@@ -367,7 +375,8 @@ def channels_for(settings: models.Setting, client: models.Client) -> List[str]:
 def send(db: Session, key: str, client: models.Client, appointment: Optional[models.Appointment] = None,
          subscription: Optional[models.Subscription] = None, extra: Optional[dict] = None,
          channels: Optional[List[str]] = None, raw_body: Optional[str] = None, raw_subject: Optional[str] = None,
-         recipient_override: Optional[dict] = None, sync: bool = False) -> List[models.NotificationLog]:
+         recipient_override: Optional[dict] = None, sync: bool = False,
+         append: Optional[str] = None) -> List[models.NotificationLog]:
     """Render template `key` for the client and send on every channel they accept."""
     settings = get_settings(db)
     if raw_body is not None:
@@ -376,6 +385,8 @@ def send(db: Session, key: str, client: models.Client, appointment: Optional[mod
         subject, body = render(db, key, build_context(db, client, appointment, subscription, extra))
         if body is None:  # template disabled
             return []
+    if append:
+        body = f"{body}\n\n{append}"
     chans = channels if channels is not None else channels_for(settings, client)
     logs: List[models.NotificationLog] = []
     for channel in chans:
@@ -415,8 +426,31 @@ def send(db: Session, key: str, client: models.Client, appointment: Optional[mod
 
 
 # ---------------------------------------------------------------- high-level events
-def send_booking_confirmation(db, appointment):
-    return send(db, "booking_confirmation", appointment.client, appointment)
+def send_booking_confirmation(db, appointment, append=None, sync=False):
+    return send(db, "booking_confirmation", appointment.client, appointment, append=append, sync=sync)
+
+
+def explain_result(db, key: str, client: models.Client, logs: List[models.NotificationLog]) -> List[dict]:
+    """Plain-language outcome of a send, so the UI can say what really happened."""
+    settings = get_settings(db)
+    if logs:
+        out = []
+        for log in logs:
+            db.refresh(log)
+            out.append({"channel": log.channel, "status": log.status, "detail": log.external_response or ""})
+        return out
+    tpl = db.query(models.MessageTemplate).filter(models.MessageTemplate.key == key).first()
+    if tpl and not tpl.enabled:
+        why = "the message template is switched off (Messages → Templates)"
+    elif not (client.notify_whatsapp or client.notify_sms or client.notify_email):
+        why = "this client has all notifications switched off"
+    elif client.notify_whatsapp and not (settings.whatsapp_enabled or settings.demo_mode):
+        why = "WhatsApp is not enabled in Settings → Messaging"
+    elif not client.phone:
+        why = "the client has no phone number"
+    else:
+        why = "no channel is enabled for this client (check Settings → Messaging and the client's notification choices)"
+    return [{"channel": None, "status": "skipped", "detail": why}]
 
 
 def send_reminder(db, appointment):
@@ -469,6 +503,52 @@ def notify_admin_new_booking(db, appointment):
         chans.append("email")
     return send(db, "admin_new_booking", admin, appointment, channels=chans, raw_body=body, raw_subject=subject,
                 recipient_override={"phone": settings.business_phone, "email": settings.business_email})
+
+
+def notify_admin_upcoming(db, appointment):
+    """Heads-up to the owner (business phone / email) before a session."""
+    settings = get_settings(db)
+    if not (settings.business_phone or settings.business_email):
+        return []
+    hours = max(int(round((appointment.start_time - utcnow()).total_seconds() / 3600)), 0)
+    rel = "starting now" if hours < 1 else ("in 1 hour" if hours == 1 else f"in {hours} hours")
+    ctx = build_context(db, appointment.client, appointment, extra={"time_relative": rel})
+    subject, body = render(db, "admin_session_reminder", ctx)
+    if body is None:
+        return []
+    admin = models.Client(name=settings.business_name, phone=settings.business_phone or "",
+                          email=settings.business_email, notify_whatsapp=True, notify_sms=False,
+                          notify_email=bool(settings.business_email))
+    chans = []
+    if settings.business_phone and (settings.whatsapp_enabled or settings.demo_mode):
+        chans.append("whatsapp")
+    if settings.business_email and (settings.email_enabled or settings.demo_mode):
+        chans.append("email")
+    return send(db, "admin_session_reminder", admin, appointment, channels=chans, raw_body=body, raw_subject=subject,
+                recipient_override={"phone": settings.business_phone, "email": settings.business_email})
+
+
+def run_admin_reminder_job(db: Session):
+    settings = get_settings(db)
+    hours = settings.admin_reminder_hours or 0
+    if hours <= 0:
+        return
+    now = utcnow()
+    due = (
+        db.query(models.Appointment)
+        .filter(models.Appointment.status.in_(("scheduled", "confirmed")))
+        .filter(models.Appointment.admin_reminder_sent_at.is_(None))
+        .filter(models.Appointment.start_time <= now + timedelta(hours=hours))
+        .filter(models.Appointment.start_time >= now)
+        .all()
+    )
+    for a in due:
+        try:
+            notify_admin_upcoming(db, a)
+        except Exception as e:
+            print(f"[jobs] owner reminder failed for appointment {a.id}: {e}")
+        a.admin_reminder_sent_at = now
+    db.commit()
 
 
 # ---------------------------------------------------------------- background jobs
@@ -556,6 +636,7 @@ def run_all_jobs(db: Session):
     """Called every minute by the scheduler."""
     run_auto_complete_job(db)
     run_reminder_job(db)
+    run_admin_reminder_job(db)
     run_follow_up_job(db)
     run_retry_job(db)
     settings = get_settings(db)

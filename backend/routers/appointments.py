@@ -5,7 +5,8 @@ from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend import models, schemas, notifications
 from backend.scheduling import check_conflicts, within_business_hours, availability, get_settings
-from backend.tz import to_utc_naive, utcnow
+import secrets
+from backend.tz import to_utc_naive, utcnow, to_local, local_to_utc, fmt_date
 
 router = APIRouter(prefix="/api/appointments", tags=["Appointments"])
 
@@ -106,10 +107,15 @@ def create_appointment(body: schemas.AppointmentCreate, db: Session = Depends(ge
             raise HTTPException(status_code=400, detail="Client has no active package with sessions left")
     price = body.price if body.price is not None else (0.0 if sub else float(service.price or 0))
 
+    # Repeat booking: same weekday and local time, every N weeks.
+    interval = max(int(body.repeat_interval_weeks or 0), 0)
+    count = min(max(int(body.repeat_count or 1), 1), 52) if interval else 1
+    series_id = secrets.token_urlsafe(8) if count > 1 else None
+
     appt = models.Appointment(
         client_id=client.id, service_id=service.id, staff_id=body.staff_id,
         subscription_id=sub.id if sub else None, start_time=start, end_time=end,
-        status="scheduled", price=price, notes=body.notes, source="admin",
+        status="scheduled", price=price, notes=body.notes, source="admin", series_id=series_id,
     )
     if sub:
         sub.sessions_used += 1
@@ -117,12 +123,85 @@ def create_appointment(body: schemas.AppointmentCreate, db: Session = Depends(ge
     db.commit()
     db.refresh(appt)
 
+    created, skipped, last_start = 1, [], start
+    if count > 1:
+        tz = get_settings(db).timezone
+        local0 = to_local(start, tz).replace(tzinfo=None)
+        for i in range(1, count):
+            s_i = local_to_utc(local0 + timedelta(weeks=i * interval), tz)
+            e_i = s_i + timedelta(minutes=service.duration_minutes)
+            try:
+                validate_slot(db, s_i, e_i, service, body.staff_id, body.force)
+            except HTTPException as ex:
+                skipped.append({"date": fmt_date(s_i, tz), "reason": str(ex.detail)})
+                continue
+            sub_i = find_active_subscription(db, client.id, s_i) if body.use_subscription is not False else None
+            price_i = 0.0 if sub_i else (float(body.price) if body.price else float(service.price or 0))
+            db.add(models.Appointment(
+                client_id=client.id, service_id=service.id, staff_id=body.staff_id,
+                subscription_id=sub_i.id if sub_i else None, start_time=s_i, end_time=e_i,
+                status="scheduled", price=price_i, notes=body.notes, source="admin", series_id=series_id,
+            ))
+            if sub_i:
+                sub_i.sessions_used += 1
+            db.commit()
+            created += 1
+            last_start = s_i
+        db.refresh(appt)
+
+    notify_result = None
     if body.send_notification:
+        append = None
+        if created > 1:
+            tz = get_settings(db).timezone
+            every = "every week" if interval == 1 else f"every {interval} weeks"
+            append = f"🔁 This repeats {every} at the same time: {created} sessions in total, until {fmt_date(last_start, tz)}."
         try:
-            notifications.send_booking_confirmation(db, appt)
+            logs = notifications.send_booking_confirmation(db, appt, append=append, sync=True)
+            notify_result = notifications.explain_result(db, "booking_confirmation", client, logs)
         except Exception as e:
             print(f"[notify] confirmation failed: {e}")
+            notify_result = [{"channel": None, "status": "failed", "detail": str(e)}]
+    appt.notify_result = notify_result
+    appt.series_created = created if count > 1 else None
+    appt.series_skipped = skipped if count > 1 else None
     return appt
+
+
+class SeriesCancel(schemas.BaseModel):
+    reason: Optional[str] = None
+    send_notification: bool = True
+
+
+@router.post("/{appointment_id}/cancel-series")
+def cancel_series(appointment_id: int, body: SeriesCancel, db: Session = Depends(get_db)):
+    """Cancel this session and every later open session of the same repeat booking."""
+    appt = db.query(models.Appointment).filter(models.Appointment.id == appointment_id).first()
+    if not appt:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+    if not appt.series_id:
+        raise HTTPException(status_code=400, detail="This session is not part of a repeat booking")
+    now = utcnow()
+    rows = (db.query(models.Appointment)
+            .filter(models.Appointment.series_id == appt.series_id,
+                    models.Appointment.start_time >= appt.start_time,
+                    models.Appointment.status.in_(("scheduled", "confirmed")))
+            .order_by(models.Appointment.start_time).all())
+    for a in rows:
+        a.status = "cancelled"
+        a.cancelled_at = now
+        a.cancel_reason = body.reason
+        a.cancelled_by = "admin"
+        if a.subscription and a.subscription.sessions_used > 0:
+            a.subscription.sessions_used -= 1
+    db.commit()
+    if rows and body.send_notification:
+        try:
+            extra = f"This also cancels the {len(rows) - 1} following repeat session(s)." if len(rows) > 1 else None
+            notifications.send(db, "cancellation", rows[0].client, rows[0], append=extra)
+        except Exception as e:
+            print(f"[notify] series cancellation failed: {e}")
+    return {"detail": "Series cancelled", "cancelled": len(rows)}
 
 
 @router.get("/{appointment_id}", response_model=schemas.AppointmentResponse)

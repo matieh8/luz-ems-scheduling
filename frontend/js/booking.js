@@ -13,6 +13,7 @@ async function openBookingModal(appointmentId, prefill = {}) {
   setVal('booking-client', BK.clientId ? clientLabel(S.clients.find(c => c.id === BK.clientId)) : '');
   setVal('booking-date', prefill.date || CAL.anchor || todayKey()); setVal('booking-time', prefill.time || '10:00');
   $('booking-notify').checked = true; $('booking-conflict').style.display = 'none';
+  setVal('booking-repeat', '0'); setVal('booking-repeat-count', 8); $('booking-repeat-group').style.display = appointmentId ? 'none' : ''; bookingRepeatChanged();
   $('booking-client-group').style.display = ''; $('booking-title').textContent = 'Book session'; $('booking-save').textContent = 'Book session';
   if (appointmentId) {
     const a = await api('GET', `/appointments/${appointmentId}`);
@@ -61,12 +62,32 @@ async function bookingLoadSlots() {
 }
 function pickSlot(t) { setVal('booking-time', t); document.querySelectorAll('#booking-slots .slot').forEach(b => b.classList.toggle('selected', b.textContent.trim() === fmtTime(zonedToDate(val('booking-date'), t).toISOString()))); }
 
+function bookingRepeatChanged() {
+  if (BK.editing) return;
+  const every = +val('booking-repeat'), n = Math.min(Math.max(parseInt(val('booking-repeat-count')) || 2, 2), 52);
+  $('booking-repeat-count-group').style.display = every ? '' : 'none';
+  $('booking-save').textContent = every ? `Book ${n} sessions` : 'Book session';
+  if (every && val('booking-date')) $('booking-repeat-help').textContent = `Last session: ${fmtKeyLong(addDays(val('booking-date'), (n - 1) * every * 7))}`;
+}
+$('booking-date').addEventListener('change', bookingRepeatChanged);
+
+/* Says what really happened to the confirmation message, instead of always claiming it was sent. */
+function notifySummary(res) {
+  const r = res.notify_result;
+  if (!r || !r.length) return { text: '', bad: false };
+  const ok = r.filter(x => x.status === 'sent'), bad = r.filter(x => x.status !== 'sent');
+  if (!bad.length) return { text: ` Confirmation sent via ${ok.map(x => x.channel).join(', ')}.`, bad: false };
+  const why = bad.map(x => `${x.channel ? x.channel + ': ' : ''}${(x.detail || x.status).replace(/^(whatsapp|sms|email): /, '')}`).join(' · ');
+  return { text: `${ok.length ? ` Sent via ${ok.map(x => x.channel).join(', ')}.` : ''} Confirmation NOT sent — ${why}`, bad: true };
+}
+
 async function saveBooking(force = false) {
   const date = val('booking-date'), time = val('booking-time');
   if (!date || !time) return toast('Pick a date and time', true);
   const payload = { service_id: +val('booking-service'), staff_id: val('booking-staff') ? +val('booking-staff') : null,
     start_time: zonedToDate(date, time).toISOString(), notes: val('booking-notes') || null, price: parseFloat(val('booking-price')) || 0,
     send_notification: $('booking-notify').checked, force };
+  if (!BK.editing && +val('booking-repeat') > 0) { payload.repeat_interval_weeks = +val('booking-repeat'); payload.repeat_count = Math.min(Math.max(parseInt(val('booking-repeat-count')) || 2, 2), 52); }
   try {
     if (BK.editing) {
       await api('PUT', `/appointments/${BK.editing.id}`, payload);
@@ -76,8 +97,12 @@ async function saveBooking(force = false) {
       else { payload.client_name = val('booking-client').trim(); payload.client_phone = val('booking-client-phone').trim(); payload.client_email = val('booking-client-email').trim() || null;
         if (!payload.client_name || !payload.client_phone) return toast('Enter the new client name and phone', true); }
       payload.use_subscription = BK.sub ? $('booking-use-sub').checked : false;
-      await api('POST', '/appointments/', payload);
-      toast('Session booked' + (payload.send_notification ? '. Confirmation sent.' : ''));
+      const btn = $('booking-save'); btn.disabled = true; let res;
+      try { res = await api('POST', '/appointments/', payload); } finally { btn.disabled = false; }
+      const n = notifySummary(res), skipped = res.series_skipped || [];
+      let msg = res.series_created ? `${res.series_created} sessions booked.` : 'Session booked.';
+      if (skipped.length) msg += ` ${skipped.length} skipped (${skipped.map(x => x.date.replace(/^\w+, /, '').replace(/ \d{4}$/, '')).join(', ')}: not free).`;
+      toast(msg + n.text, n.bad || skipped.length > 0);
     }
     closeModal('booking-modal'); await refreshLookups(); refreshCurrent();
   } catch (e) {
@@ -101,6 +126,7 @@ async function openAppointment(id) {
       <dt>When</dt><dd>${fmtDateShort(a.start_time)}, ${fmtTime(a.start_time)} – ${fmtTime(a.end_time)}<div class="tiny muted">${relTime(a.start_time)} · ${a.service.duration_minutes} min</div></dd>
       <dt>Trainer</dt><dd>${a.staff ? esc(a.staff.name) : '<span class="muted">Unassigned</span>'}</dd>
       <dt>Price</dt><dd>${a.subscription_id ? '<span class="chip">Covered by package</span>' : money(a.price)}${!a.subscription_id && a.price > 0 ? ` · paid ${money(a.paid_amount)}${a.balance_due > 0 ? ` · <span style="color:var(--bad)">due ${money(a.balance_due)}</span>` : ' · <span style="color:var(--good)">settled</span>'}` : ''}</dd>
+      ${a.series_id ? `<dt>Repeat</dt><dd><span class="chip">🔁 Part of a repeat booking</span></dd>` : ''}
       <dt>Booked via</dt><dd>${a.source === 'online' ? 'Online booking page' : 'Admin'} · ${fmtDate(a.created_at)}</dd>
       ${a.notes ? `<dt>Notes</dt><dd>${esc(a.notes)}</dd>` : ''}
       ${a.cancel_reason || a.cancelled_by ? `<dt>Cancelled</dt><dd>by ${esc(a.cancelled_by || 'admin')}${a.cancel_reason ? ': ' + esc(a.cancel_reason) : ''}</dd>` : ''}
@@ -111,7 +137,8 @@ async function openAppointment(id) {
       <button class="btn btn-primary btn-sm" onclick="completeFlow(${a.id})">Complete</button>
       <button class="btn btn-warn btn-sm" onclick="setStatus(${a.id}, 'no_show')">No-show</button>
       <button class="btn btn-secondary btn-sm" onclick="closeDrawer();openBookingModal(${a.id})">Reschedule</button>
-      <button class="btn btn-danger btn-sm" onclick="cancelFlow(${a.id})">Cancel</button></div>` : ''}
+      <button class="btn btn-danger btn-sm" onclick="cancelFlow(${a.id})">Cancel</button>
+      ${a.series_id ? `<button class="btn btn-danger btn-sm" onclick="cancelSeriesFlow(${a.id})">Cancel this + all following</button>` : ''}</div>` : ''}
     ${a.status === 'completed' && a.balance_due > 0 ? `<div class="mt"><button class="btn btn-primary btn-sm" onclick="openPaymentModal({client_id:${a.client_id}, appointment_id:${a.id}, amount:${a.balance_due}, label:'${esc(a.service.name)} on ${fmtDateShort(a.start_time)}'})">Record payment ${money(a.balance_due)}</button></div>` : ''}
     ${a.status === 'cancelled' || a.status === 'no_show' ? `<div class="mt"><button class="btn btn-secondary btn-sm" onclick="setStatus(${a.id}, 'scheduled')">Re-open as scheduled</button></div>` : ''}
     <div class="mt" style="display:flex;gap:6px;flex-wrap:wrap">
@@ -137,6 +164,10 @@ function completeFlow(id) {
 function cancelFlow(id) {
   confirmBox('Cancel session', `<div class="form-group"><label>Reason (included in the client's message)</label><input id="cx-reason" class="input" placeholder="Optional"></div><label class="check"><input type="checkbox" id="cx-notify" checked> Notify client</label><p class="small muted mt">If this session used a package, the session is returned to the client's balance.</p>`,
     'Cancel session', async () => { await api('POST', `/appointments/${id}/status`, { status: 'cancelled', reason: val('cx-reason') || null, send_notification: $('cx-notify').checked }); toast('Session cancelled'); await openAppointment(id); refreshCurrent(); }, 'btn-danger');
+}
+function cancelSeriesFlow(id) {
+  confirmBox('Cancel repeat booking', `<p>Cancels this session and every later session of the same repeat booking. Earlier sessions are kept.</p><div class="form-group"><label>Reason (included in the client's message)</label><input id="cs-reason" class="input" placeholder="Optional"></div><label class="check"><input type="checkbox" id="cs-notify" checked> Notify client (one message)</label>`,
+    'Cancel sessions', async () => { const r = await api('POST', `/appointments/${id}/cancel-series`, { reason: val('cs-reason') || null, send_notification: $('cs-notify').checked }); toast(`${r.cancelled} session(s) cancelled`); await openAppointment(id); refreshCurrent(); }, 'btn-danger');
 }
 function deleteAppointment(id) { confirmBox('Delete session', '<p>Delete this session permanently? Prefer <strong>Cancel</strong> to keep history.</p>', 'Delete', async () => { await api('DELETE', `/appointments/${id}`); closeDrawer(); toast('Deleted'); refreshCurrent(); }, 'btn-danger'); }
 async function sendReminder(id) { await guard(async () => { const r = await api('POST', `/notifications/${id}/reminder`); toast(r.length ? `Reminder sent via ${r.map(l => l.channel).join(', ')}` : 'No channel enabled for this client'); openAppointment(id); }); }

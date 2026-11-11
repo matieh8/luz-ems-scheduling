@@ -220,8 +220,19 @@ app.post('/send', async (req, res) => {
     return res.status(400).json({ error: 'Missing to or message' });
   }
   const digits = normalizePhone(to);
-  const chatId = `${digits}@c.us`;
   try {
+    // Resolve the number first: newer WhatsApp accounts are addressed by an internal id, and a plain
+    // "<digits>@c.us" send to someone you never chatted with can fail or silently go nowhere.
+    let chatId = `${digits}@c.us`;
+    try {
+      const numberId = await client.getNumberId(digits);
+      if (!numberId) {
+        return res.status(422).json({ error: `+${digits} is not registered on WhatsApp` });
+      }
+      chatId = numberId._serialized;
+    } catch (e) {
+      console.error('[whatsapp-web] Number lookup failed, sending directly:', e.message);
+    }
     await client.sendMessage(chatId, message);
     res.json({ success: true, to: digits });
   } catch (e) {

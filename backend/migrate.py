@@ -90,6 +90,31 @@ def run_migrations():
                 conn.execute(text("DROP TABLE notification_logs"))
                 conn.execute(text("ALTER TABLE notification_logs_new RENAME TO notification_logs"))
                 added.append("notification_logs.appointment_id nullable")
+    _normalize_expense_categories()
     if added:
         print(f"[migrate] added columns: {', '.join(added)}")
     return added
+
+
+EXPENSE_CATEGORY_RENAMES = {"coffee shop": "Coffee", "somke": "Smoke"}
+
+
+def clean_category(name: str) -> str:
+    """Category names are plain text: the app draws the icon itself, so emoji typed into the name
+    (which ends up on the wrong side of the label) are stripped, and known typos are corrected."""
+    import re
+    s = re.sub(r"[\U0001F000-\U0001FAFF\u2600-\u27BF\u2B00-\u2BFF\uFE0F\u200D]", "", name or "")
+    s = re.sub(r"\s+", " ", s).strip()
+    return EXPENSE_CATEGORY_RENAMES.get(s.lower(), s)
+
+
+def _normalize_expense_categories():
+    inspector = inspect(engine)
+    if "expenses" not in inspector.get_table_names():
+        return
+    with engine.begin() as conn:
+        for (cat,) in conn.execute(text("SELECT DISTINCT category FROM expenses")).fetchall():
+            fixed = clean_category(cat)
+            if fixed and fixed != cat:
+                conn.execute(text("UPDATE expenses SET category = :new WHERE category = :old"), {"new": fixed, "old": cat})
+                print(f"[migrate] expense category {cat!r} -> {fixed!r}")

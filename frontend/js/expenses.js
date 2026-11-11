@@ -1,14 +1,15 @@
 /* Monthly expense tracker — one card per day, every field is a live input that saves in place.
    Nothing is re-rendered while you type, so inputs never lose focus or "freeze". */
 const EXP_ICONS = {
-  'rent': '🏠', 'coffee': '☕', 'food': '🍔', 'groceries': '🛒', 'restaurant': '🍽️',
+  'rent': '🏠', 'coffee': '☕', 'smoke': '🚬', 'tabby': '💳', 'darb': '🛣️', 'toll': '🛣️', 'salik': '🛣️', 'family': '👨‍👩‍👧',
+  'food': '🍔', 'groceries': '🛒', 'restaurant': '🍽️',
   'fuel': '⛽', 'petrol': '⛽', 'car': '🚗', 'transport': '🚕', 'taxi': '🚕',
   'electricity': '💡', 'water': '💧', 'internet': '🌐', 'phone': '📱', 'utilities': '🔌',
   'salar': '👥', 'equipment': '🏋️', 'marketing': '📣', 'clean': '🧽', 'maintenance': '🛠️',
   'shopping': '🛍️', 'health': '💊', 'medical': '🏥', 'subscription': '📺', 'entertainment': '🎬',
   'education': '📚', 'travel': '✈️', 'gift': '🎁', 'other': '📝'
 };
-const PRESET_CATS = ['Rent', 'Electricity', 'Water', 'Internet', 'Phone', 'Utilities', 'Coffee shop', 'Salaries', 'Equipment', 'Marketing',
+const PRESET_CATS = ['Rent', 'Electricity', 'Water', 'Internet', 'Phone', 'Utilities', 'Coffee', 'Salaries', 'Equipment', 'Marketing',
   'Cleaning', 'Maintenance', 'Subscriptions', 'Groceries', 'Fast food', 'Fuel', 'Transport', 'Shopping', 'Health', 'Entertainment', 'Education', 'Travel', 'Gift', 'Other'];
 const EXP_METHODS = ['Card', 'Cash', 'Transfer'];
 let EXPENSES = [];
@@ -65,7 +66,6 @@ function expRowHTML(e) {
     <select class="input input-sm exp-cat" aria-label="Category" onchange="expChange(${e.id}, 'category', this)">
       ${cats.map(c => `<option value="${esc(c)}" ${c === e.category ? 'selected' : ''}>${expIcon(c)} ${esc(c)}</option>`).join('')}
       <option value="__new__">➕ New category…</option></select>
-    <input type="text" class="input input-sm exp-notes" aria-label="Details" placeholder="Details, e.g. DEWA bill for October" value="${esc(e.notes || '')}" onchange="expChange(${e.id}, 'notes', this)">
     <select class="input input-sm exp-method" aria-label="Payment method" onchange="expChange(${e.id}, 'payment_method', this)">
       ${[...new Set([...EXP_METHODS, e.payment_method || 'Card'])].map(m => `<option ${m === (e.payment_method || 'Card') ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select>
     <input type="text" inputmode="decimal" autocomplete="off" class="input input-sm exp-amount" aria-label="Amount" placeholder="0" value="${e.amount ? e.amount : ''}" onfocus="this.select()" onchange="expChange(${e.id}, 'amount', this)" onkeydown="if(event.key==='Enter')this.blur()">
@@ -133,7 +133,7 @@ async function expChange(id, field, el) {
   else if (field === 'category') {
     value = el.value;
     if (value === '__new__') {
-      const name = (prompt('New category name') || '').trim();
+      const name = (prompt('New category name') || '').replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}\u{200D}]/gu, '').replace(/\s+/g, ' ').trim();
       if (!name) { el.value = e.category; return; }
       value = name;
       if (![...el.options].some(o => o.value === name)) el.insertBefore(new Option(`${expIcon(name)} ${name}`, name), el.options[el.options.length - 1]);

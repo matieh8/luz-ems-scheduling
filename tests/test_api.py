@@ -309,3 +309,22 @@ def test_owner_reminder_and_unpaid_bills(client):
     s = client.get(f"/api/expenses/summary?year={now.year}&month={now.month}").json()
     assert s["unpaid_count"] >= 1 and s["unpaid_total"] >= 420
     assert client.put(f"/api/expenses/{e['id']}", json={"paid": True}).json()["paid"] is True
+
+
+def test_expense_category_cleanup(client):
+    from backend.migrate import clean_category, run_migrations
+    assert clean_category("Somke") == "Smoke" and clean_category("coffee shop") == "Coffee"
+    assert clean_category("Smoke 🚬") == "Smoke" and clean_category("🚬 Tabby ") == "Tabby"
+    now = datetime.now(timezone.utc)
+    e = client.post("/api/expenses/", json={"date": now.isoformat(), "category": "Somke 🚬", "amount": 20}).json()
+    assert e["category"] == "Smoke"
+    from backend.database import SessionLocal
+    from backend import models
+    db = SessionLocal()
+    try:
+        db.add(models.Expense(date=datetime.utcnow(), category="Coffee shop", amount=15)); db.commit()
+    finally:
+        db.close()
+    run_migrations()
+    cats = client.get("/api/expenses/categories").json()
+    assert "Coffee" in cats and "Coffee shop" not in cats and "Somke" not in cats

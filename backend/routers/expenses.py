@@ -9,6 +9,7 @@ from sqlalchemy import extract, func
 from backend.database import get_db
 from backend import models, schemas
 from backend.tz import utcnow
+from backend.migrate import clean_category
 import csv
 
 router = APIRouter(prefix="/api/expenses", tags=["Expenses"])
@@ -81,7 +82,7 @@ def list_categories(db: Session = Depends(get_db)):
 def create_expense(body: schemas.ExpenseCreate, db: Session = Depends(get_db)):
     e = models.Expense(
         date=body.date,
-        category=body.category.strip(),
+        category=clean_category(body.category) or "Other",
         payment_method=(body.payment_method or "Card").strip(),
         amount=body.amount,
         notes=body.notes,
@@ -100,7 +101,7 @@ def update_expense(expense_id: int, body: schemas.ExpenseUpdate, db: Session = D
         raise HTTPException(status_code=404, detail="Expense not found")
     data = body.model_dump(exclude_unset=True)
     if "category" in data and data["category"]:
-        data["category"] = data["category"].strip()
+        data["category"] = clean_category(data["category"]) or "Other"
     if "payment_method" in data and data["payment_method"]:
         data["payment_method"] = data["payment_method"].strip()
     for k, v in data.items():

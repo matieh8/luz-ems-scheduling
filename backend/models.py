@@ -81,6 +81,8 @@ class Appointment(Base):
     source = Column(String, nullable=False, default="admin")  # admin | online
     public_token = Column(String, nullable=True, unique=True, default=_token)
     reminder_sent_at = Column(DateTime, nullable=True)
+    admin_reminder_sent_at = Column(DateTime, nullable=True)
+    series_id = Column(String, nullable=True, index=True)  # shared by all sessions of one repeat booking
     follow_up_sent_at = Column(DateTime, nullable=True)
     confirmed_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
@@ -252,6 +254,7 @@ class Setting(Base):
 
     demo_mode = Column(Boolean, default=True)
     reminder_hours_before = Column(Integer, nullable=False, default=12)
+    admin_reminder_hours = Column(Integer, nullable=False, default=12)  # owner heads-up before each session; 0 = off
     follow_up_enabled = Column(Boolean, default=True)
     follow_up_hours_after = Column(Integer, nullable=False, default=2)
     subscription_low_threshold = Column(Integer, nullable=False, default=2)
@@ -273,6 +276,7 @@ class Expense(Base):
     payment_method = Column(String, nullable=True, default="Card")
     amount = Column(Float, nullable=False)
     notes = Column(Text, nullable=True)
+    paid = Column(Boolean, nullable=False, default=True)  # False = bill still to pay
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -299,3 +303,8 @@ Appointment.paid_amount = property(_appt_paid_amount)
 Appointment.balance_due = property(_appt_balance_due)
 Subscription.sessions_remaining = property(_sub_remaining)
 Subscription.paid_amount = property(_sub_paid)
+
+# Transient, per-request extras returned by the booking endpoint (never stored).
+Appointment.notify_result = None
+Appointment.series_created = None
+Appointment.series_skipped = None

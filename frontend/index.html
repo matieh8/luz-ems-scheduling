@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LUZ EMS - Scheduling</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/app.css?v=4">
+  <link rel="stylesheet" href="/css/app.css?v=5b">
 </head>
 <body>
   <div class="login-overlay" id="login">
@@ -144,15 +144,16 @@
       <!-- Expenses -->
       <section id="page-expenses" class="page">
         <div class="header">
-          <div><h2>Monthly Tracker</h2><div class="sub" id="exp-month-label"></div></div>
+          <div><h2>Expenses</h2><div class="sub" id="exp-month-label"></div></div>
           <div class="actions">
             <a class="btn btn-secondary" id="exp-export" href="#" target="_blank">Export CSV</a>
           </div>
         </div>
         <div class="toolbar">
-          <input type="month" id="exp-month" class="input input-sm" onchange="loadExpenses()">
+          <input type="month" id="exp-month" class="input input-sm" onchange="EXP_LOADED_MONTH=null;loadExpenses()">
           <input type="text" id="exp-search" class="input input-sm" placeholder="Search spending..." oninput="debounce(applyFilters, 200)()" style="min-width:220px">
           <button class="btn btn-primary btn-sm" onclick="addExpenseRow()">+ Add today</button>
+          <label class="check small" style="margin:0"><input type="checkbox" id="exp-unpaid-only" onchange="applyFilters()"> Unpaid only</label>
           <span class="bold" id="exp-grand" style="margin-left:auto;font-size:1.1rem"></span>
         </div>
         <div class="card mt exp-day-list"><div id="exp-list"></div></div>
@@ -266,6 +267,10 @@
       <div class="form-row">
         <div class="form-group"><label>Date</label><input type="date" id="booking-date" class="input" onchange="bookingLoadSlots()"></div>
         <div class="form-group"><label>Time</label><input type="time" id="booking-time" class="input" step="300"></div>
+      </div>
+      <div class="form-row" id="booking-repeat-group">
+        <div class="form-group"><label>Repeat</label><select id="booking-repeat" class="input" onchange="bookingRepeatChanged()"><option value="0">Does not repeat</option><option value="1">Every week, same day and time</option><option value="2">Every 2 weeks, same day and time</option></select></div>
+        <div class="form-group" id="booking-repeat-count-group" style="display:none"><label>Number of sessions</label><input type="number" id="booking-repeat-count" class="input" min="2" max="52" step="1" value="8" oninput="bookingRepeatChanged()"><div class="tiny muted" id="booking-repeat-help"></div></div>
       </div>
       <div class="form-group"><label>Available slots <span class="muted" id="booking-slots-info"></span></label><div class="slots" id="booking-slots"><span class="muted small">Pick a service and date</span></div></div>
       <div class="form-row">
@@ -444,12 +449,12 @@
 
   <script src="/js/core.js?v=2"></script>
   <script src="/js/calendar.js?v=3"></script>
-  <script src="/js/booking.js?v=2"></script>
+  <script src="/js/booking.js?v=3"></script>
   <script src="/js/clients.js?v=3"></script>
   <script src="/js/money.js?v=2"></script>
-  <script src="/js/expenses.js?v=1"></script>
+  <script src="/js/expenses.js?v=2b"></script>
   <script src="/js/messages.js?v=2"></script>
-  <script src="/js/settings.js?v=4"></script>
+  <script src="/js/settings.js?v=5"></script>
   <script src="/js/dashboard.js?v=3"></script>
   <script>boot();</script>
 </body>

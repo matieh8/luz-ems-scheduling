@@ -237,6 +237,8 @@ class AppointmentCreate(BaseModel):
     price: Optional[float] = None  # override service price
     send_notification: bool = True
     force: bool = False  # admin override for conflicts / outside hours
+    repeat_interval_weeks: int = 0  # 0 = single booking, 1 = weekly, 2 = every two weeks
+    repeat_count: int = 1  # total number of sessions including the first
 
 
 class AppointmentUpdate(BaseModel):
@@ -272,6 +274,10 @@ class AppointmentResponse(BaseModel):
     source: str
     public_token: Optional[str] = None
     reminder_sent_at: Optional[datetime] = None
+    series_id: Optional[str] = None
+    notify_result: Optional[List[Dict[str, Any]]] = None
+    series_created: Optional[int] = None
+    series_skipped: Optional[List[Dict[str, Any]]] = None
     follow_up_sent_at: Optional[datetime] = None
     confirmed_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
@@ -401,6 +407,7 @@ class SettingsResponse(BaseModel):
     smtp_from: Optional[str] = None
     demo_mode: bool
     reminder_hours_before: int
+    admin_reminder_hours: int = 12
     follow_up_enabled: bool
     follow_up_hours_after: int
     subscription_low_threshold: int
@@ -440,6 +447,7 @@ class SettingsUpdate(BaseModel):
     smtp_from: Optional[str] = None
     demo_mode: Optional[bool] = None
     reminder_hours_before: Optional[int] = None
+    admin_reminder_hours: Optional[int] = None
     follow_up_enabled: Optional[bool] = None
     follow_up_hours_after: Optional[int] = None
     subscription_low_threshold: Optional[int] = None
@@ -485,6 +493,7 @@ class ExpenseBase(BaseModel):
     payment_method: Optional[str] = "Card"
     amount: float
     notes: Optional[str] = None
+    paid: bool = True
 
 
 class ExpenseCreate(ExpenseBase):
@@ -497,6 +506,7 @@ class ExpenseUpdate(BaseModel):
     payment_method: Optional[str] = None
     amount: Optional[float] = None
     notes: Optional[str] = None
+    paid: Optional[bool] = None
 
 
 class ExpenseResponse(ExpenseBase):
@@ -517,3 +527,5 @@ class ExpenseMonthSummary(BaseModel):
     expenses: List[ExpenseResponse]
     by_category: List[ExpenseSummary]
     grand_total: float
+    unpaid_total: float = 0.0
+    unpaid_count: int = 0

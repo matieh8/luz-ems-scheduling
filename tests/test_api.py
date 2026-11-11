@@ -242,3 +242,70 @@ def test_public_pages_and_landing_data():
         info = c.get("/api/public/info").json()
         assert info["plans"] and {"name", "sessions_included", "price"} <= set(info["plans"][0])
         assert "email" in info
+
+
+def test_repeat_booking_series_and_cancel(client):
+    svc = client.get("/api/services/").json()[0]
+    c = client.post("/api/clients/", json={"name": "Weekly Client", "phone": "0507770001"}).json()
+    start = next_weekday_at(15, days_ahead=20)
+    # Occupy week 3 with other clients on every machine so the series has to skip it
+    settings = client.get("/api/settings/").json()
+    for i in range(settings["max_concurrent_sessions"]):
+        o = client.post("/api/clients/", json={"name": f"Blocker {i}", "phone": f"05088800{i:02d}"}).json()
+        r = client.post("/api/appointments/", json={"client_id": o["id"], "service_id": svc["id"], "send_notification": False,
+                                                     "start_time": (start + timedelta(weeks=2)).isoformat()})
+        assert r.status_code == 200, r.text
+    r = client.post("/api/appointments/", json={"client_id": c["id"], "service_id": svc["id"], "start_time": start.isoformat(),
+                                                 "repeat_interval_weeks": 1, "repeat_count": 8})
+    assert r.status_code == 200, r.text
+    a = r.json()
+    assert a["series_id"] and a["series_created"] == 7 and len(a["series_skipped"]) == 1
+    assert a["notify_result"] and a["notify_result"][0]["status"] == "sent"   # demo mode logs it as sent
+    mine = [x for x in client.get(f"/api/appointments/?client_id={c['id']}").json()]
+    assert len(mine) == 7 and len({x["series_id"] for x in mine}) == 1
+    # Same local time each week
+    assert len({x["start_time"][11:16] for x in mine}) == 1
+    log = [l for l in client.get(f"/api/notifications/logs?client_id={c['id']}").json() if l["type"] == "booking_confirmation"]
+    assert len(log) == 1 and "repeats every week" in log[0]["content"] and "7 sessions" in log[0]["content"]
+    # Cancel from the 3rd session on: 5 cancelled, first 2 kept
+    third = sorted(mine, key=lambda x: x["start_time"])[2]
+    r = client.post(f"/api/appointments/{third['id']}/cancel-series", json={"reason": "travelling"})
+    assert r.status_code == 200 and r.json()["cancelled"] == 5
+    statuses = [x["status"] for x in sorted(client.get(f"/api/appointments/?client_id={c['id']}").json(), key=lambda x: x["start_time"])]
+    assert statuses == ["scheduled"] * 2 + ["cancelled"] * 5
+
+
+def test_confirmation_result_explains_why_nothing_was_sent(client):
+    svc = client.get("/api/services/").json()[0]
+    c = client.post("/api/clients/", json={"name": "Silent Client", "phone": "0507770002", "notify_whatsapp": False, "notify_email": False}).json()
+    r = client.post("/api/appointments/", json={"client_id": c["id"], "service_id": svc["id"], "start_time": next_weekday_at(8, days_ahead=30).isoformat()})
+    res = r.json()["notify_result"]
+    assert res[0]["status"] == "skipped" and "notifications switched off" in res[0]["detail"]
+
+
+def test_owner_reminder_and_unpaid_bills(client):
+    from backend.database import SessionLocal
+    from backend import notifications, models
+    from backend.tz import utcnow
+    client.put("/api/settings/", json={"business_phone": "0501234567", "admin_reminder_hours": 12})
+    svc = client.get("/api/services/").json()[0]
+    c = client.post("/api/clients/", json={"name": "Soon Client", "phone": "0507770003"}).json()
+    soon = datetime.now(timezone.utc) + timedelta(hours=5)
+    a = client.post("/api/appointments/", json={"client_id": c["id"], "service_id": svc["id"], "start_time": soon.isoformat(),
+                                                "force": True, "send_notification": False}).json()
+    db = SessionLocal()
+    try:
+        notifications.run_admin_reminder_job(db)
+        notifications.run_admin_reminder_job(db)  # second run must not send again
+        logs = db.query(models.NotificationLog).filter(models.NotificationLog.appointment_id == a["id"],
+                                                       models.NotificationLog.type == "admin_session_reminder").all()
+        assert len(logs) == 1 and logs[0].recipient == "971501234567" and "Soon Client" in logs[0].content
+    finally:
+        db.close()
+
+    now = datetime.now(timezone.utc)
+    e = client.post("/api/expenses/", json={"date": now.isoformat(), "category": "Electricity", "amount": 420, "notes": "DEWA October", "paid": False}).json()
+    assert e["paid"] is False
+    s = client.get(f"/api/expenses/summary?year={now.year}&month={now.month}").json()
+    assert s["unpaid_count"] >= 1 and s["unpaid_total"] >= 420
+    assert client.put(f"/api/expenses/{e['id']}", json={"paid": True}).json()["paid"] is True

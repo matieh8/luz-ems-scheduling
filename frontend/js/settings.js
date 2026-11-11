@@ -27,7 +27,8 @@ async function loadSettings() {
         ${tog('notify_admin_online_booking', 'Alert me on new online bookings', 'Sent to the business phone / email')}
       </div>
       <div class="card"><div class="card-title">Automations</div>
-        ${row('reminder_hours_before', 'Reminder hours before session', '0 disables reminders', 'number')}
+        ${row('reminder_hours_before', 'Client reminder: hours before session', '0 disables reminders', 'number')}
+        ${row('admin_reminder_hours', 'My reminder: hours before session', 'Sent to the business phone / email. 0 = off', 'number')}
         ${tog('follow_up_enabled', 'Send follow-up after sessions', 'Thank-you message with remaining package sessions')}
         ${row('follow_up_hours_after', 'Follow-up hours after session', '', 'number')}
         <div class="form-row">${row('subscription_low_threshold', 'Package low alert at (sessions)', '', 'number')}${row('subscription_expiry_notice_days', 'Package expiry notice (days)', '', 'number')}</div>
@@ -79,7 +80,7 @@ async function resetWhatsApp() {
 }
 async function saveSettings() {
   guard(async () => {
-    const ids = ['business_name', 'business_phone', 'business_email', 'business_address', 'timezone', 'currency', 'public_base_url', 'slot_interval_minutes', 'max_concurrent_sessions', 'online_min_notice_hours', 'online_max_days_ahead', 'online_allow_cancel_hours', 'reminder_hours_before', 'follow_up_hours_after', 'subscription_low_threshold', 'subscription_expiry_notice_days', 'whatsapp_provider', 'twilio_account_sid', 'twilio_auth_token', 'twilio_phone_number', 'twilio_sms_number', 'smtp_host', 'smtp_port', 'smtp_username', 'smtp_password', 'smtp_from'];
+    const ids = ['business_name', 'business_phone', 'business_email', 'business_address', 'timezone', 'currency', 'public_base_url', 'slot_interval_minutes', 'max_concurrent_sessions', 'online_min_notice_hours', 'online_max_days_ahead', 'online_allow_cancel_hours', 'reminder_hours_before', 'admin_reminder_hours', 'follow_up_hours_after', 'subscription_low_threshold', 'subscription_expiry_notice_days', 'whatsapp_provider', 'twilio_account_sid', 'twilio_auth_token', 'twilio_phone_number', 'twilio_sms_number', 'smtp_host', 'smtp_port', 'smtp_username', 'smtp_password', 'smtp_from'];
     const toggles = ['auto_complete_past', 'online_booking_enabled', 'notify_admin_online_booking', 'follow_up_enabled', 'demo_mode', 'whatsapp_enabled', 'sms_enabled', 'email_enabled'];
     const payload = {};
     ids.forEach(i => { const el = $('st-' + i); let v = el.value; if (el.type === 'number') v = v === '' ? null : +v; else v = v.trim() || null; payload[i] = v; });

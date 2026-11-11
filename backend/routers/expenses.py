@@ -65,7 +65,9 @@ def expense_summary(year: Optional[int] = None, month: Optional[int] = None, db:
         year=year, month=month,
         expenses=expenses,
         by_category=by_category,
-        grand_total=grand
+        grand_total=grand,
+        unpaid_total=sum(e.amount for e in expenses if e.paid is False),
+        unpaid_count=len([e for e in expenses if e.paid is False]),
     )
 
 
@@ -82,7 +84,8 @@ def create_expense(body: schemas.ExpenseCreate, db: Session = Depends(get_db)):
         category=body.category.strip(),
         payment_method=(body.payment_method or "Card").strip(),
         amount=body.amount,
-        notes=body.notes
+        notes=body.notes,
+        paid=body.paid,
     )
     db.add(e)
     db.commit()
@@ -126,11 +129,12 @@ def export_csv(year: int = Query(...), month: int = Query(...), db: Session = De
 
     out = StringIO()
     w = csv.writer(out)
-    w.writerow(["Date", "Category", "Type", "Item / Notes", "Amount"])
+    w.writerow(["Date", "Category", "Type", "Details", "Amount", "Paid"])
     for e in expenses:
-        w.writerow([e.date.strftime("%Y-%m-%d"), e.category, e.payment_method or "Card", e.notes or "", f"{e.amount:.2f}"])
+        w.writerow([e.date.strftime("%Y-%m-%d"), e.category, e.payment_method or "Card", e.notes or "", f"{e.amount:.2f}",
+                    "no" if e.paid is False else "yes"])
     total = sum(e.amount for e in expenses)
-    w.writerow(["", "", "", "Total", f"{total:.2f}"])
+    w.writerow(["", "", "", "Total", f"{total:.2f}", ""])
 
     return PlainTextResponse(
         content=out.getvalue(),

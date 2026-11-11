@@ -270,7 +270,7 @@ textarea.input { min-height: 80px; resize: vertical; }
 
 /* Expense rows: live inputs, no click-to-edit */
 .exp-rows { display: flex; flex-direction: column; gap: 6px; }
-.exp-row { display: grid; grid-template-columns: minmax(140px, 1.1fr) minmax(140px, 1.8fr) 104px 110px 92px 30px; gap: 6px; align-items: center; padding: 4px; border-radius: 10px; }
+.exp-row { display: grid; grid-template-columns: minmax(160px, 1fr) 120px 130px 92px 30px; gap: 6px; align-items: center; padding: 4px; border-radius: 10px; }
 .exp-row .input { width: 100%; min-width: 0; height: 36px; padding: 6px 10px; font-size: .86rem; }
 .exp-row .exp-amount { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
 .exp-row.unpaid { background: var(--bad-bg); }
@@ -281,8 +281,8 @@ textarea.input { min-height: 80px; resize: vertical; }
 .exp-due-pill { display: inline-block; margin-left: 8px; padding: 3px 10px; border-radius: 999px; background: var(--bad-bg); color: var(--bad); font-size: .8rem; font-weight: 700; cursor: pointer; vertical-align: middle; }
 .day-card { scroll-margin-top: 12px; }
 @media (max-width: 760px) {
-  .exp-row { grid-template-columns: 1fr 110px; grid-template-areas: "cat amount" "notes notes" "method paid"; border: 1px solid var(--border); padding: 8px; position: relative; }
-  .exp-row .exp-cat { grid-area: cat; } .exp-row .exp-amount { grid-area: amount; } .exp-row .exp-notes { grid-area: notes; }
+  .exp-row { grid-template-columns: 1fr 110px; grid-template-areas: "cat amount" "method paid"; border: 1px solid var(--border); padding: 8px; position: relative; }
+  .exp-row .exp-cat { grid-area: cat; } .exp-row .exp-amount { grid-area: amount; }
   .exp-row .exp-method { grid-area: method; } .exp-row .exp-paid { grid-area: paid; justify-content: flex-end; padding-right: 34px; }
   .exp-row .exp-del { position: absolute; right: 4px; bottom: 8px; }
   .exp-row .input { height: 42px; font-size: 16px; }  /* 16px stops iPhone zooming into the field */

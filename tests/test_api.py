@@ -374,6 +374,7 @@ def test_phone_notifications(client, monkeypatch):
         assert anon.get("/sw.js").status_code == 200 and "showNotification" in anon.get("/sw.js").text
         assert anon.get("/manifest.webmanifest").json()["display"] == "standalone"
         assert anon.get("/icons/apple-touch-icon.png").status_code == 200
+        assert anon.get("/favicon.ico").status_code == 200 and 'rel="icon"' in anon.get("/book").text
     cfg = client.get("/api/push/config").json()
     assert cfg["available"] and len(push.b64u_decode(cfg["public_key"])) == 65 and cfg["devices"] == []
 

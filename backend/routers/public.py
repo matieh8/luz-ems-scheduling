@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from backend.database import get_db
-from backend import models, notifications
+from backend import models, notifications, push
 from backend.scheduling import availability, check_conflicts, within_business_hours, get_settings
 from backend.tz import to_utc_naive, utcnow, fmt_date, fmt_time, local_today
 from backend.routers.appointments import find_active_subscription
@@ -135,6 +135,8 @@ def book(body: PublicBooking, db: Session = Depends(get_db)):
         notifications.notify_admin_new_booking(db, appt)
     except Exception as e:
         print(f"[notify] online booking notification failed: {e}")
+    push.notify(db, "booking", "New online booking", notifications.push_line(appt, s), url="/admin#calendar",
+                tag=f"booking-{appt.id}")
     return _appt_view(appt, s)
 
 
@@ -151,11 +153,14 @@ def confirm_appointment(token: str, db: Session = Depends(get_db)):
     a = db.query(models.Appointment).filter(models.Appointment.public_token == token).first()
     if not a:
         raise HTTPException(status_code=404, detail="Booking not found")
+    s = get_settings(db)
     if a.status == "scheduled":
         a.status = "confirmed"
         a.confirmed_at = utcnow()
         db.commit()
-    return _appt_view(a, get_settings(db))
+        push.notify(db, "booking", f"{a.client.name} confirmed", notifications.push_line(a, s, with_client=False),
+                    url="/admin#calendar", tag=f"booking-{a.id}")
+    return _appt_view(a, s)
 
 
 @router.post("/appointments/{token}/cancel")
@@ -179,4 +184,7 @@ def cancel_appointment(token: str, body: CancelBody, db: Session = Depends(get_d
         notifications.send_cancellation(db, a)
     except Exception as e:
         print(f"[notify] cancellation failed: {e}")
+    reason = f" Reason: {body.reason.strip()}" if (body.reason or "").strip() else ""
+    push.notify(db, "booking", f"{a.client.name} cancelled", notifications.push_line(a, s, with_client=False) + reason,
+                url="/admin#calendar", tag=f"booking-{a.id}")
     return _appt_view(a, s)

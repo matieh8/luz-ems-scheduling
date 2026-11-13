@@ -44,3 +44,4 @@ data-staging/
 # Runtime data
 data/whatsapp_session.bak.*/
 data/secret.key
+data/vapid.json

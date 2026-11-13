@@ -45,6 +45,7 @@ async function boot() {
     pill.textContent = h.env || 'local'; pill.classList.toggle('live', h.env === 'live');
     await refreshLookups();
     go(location.hash.replace('#', '') || 'dashboard');
+    if (typeof pushSync === 'function') pushSync();
   } catch (e) { if (e.message !== 'Please sign in') toast(e.message, true); }
 }
 

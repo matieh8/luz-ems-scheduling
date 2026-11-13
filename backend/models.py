@@ -261,10 +261,33 @@ class Setting(Base):
     subscription_expiry_notice_days = Column(Integer, nullable=False, default=7)
     notify_admin_online_booking = Column(Boolean, default=True)
 
+    # Phone notifications (web push) for the admin app
+    push_bookings = Column(Boolean, default=True)            # new online booking, client confirmed / cancelled
+    push_session_reminders = Column(Boolean, default=True)   # heads-up before each session (uses admin_reminder_hours)
+    push_failed_messages = Column(Boolean, default=True)     # a client message could not be delivered
+    push_daily_summary = Column(Boolean, default=True)       # morning digest
+    push_summary_hour = Column(Integer, nullable=False, default=8)  # local hour, 0-23
+    last_push_summary_on = Column(String, nullable=True)     # local date (YYYY-MM-DD) of the last digest
+
     admin_password_hash = Column(String, nullable=True)
     last_daily_job_at = Column(DateTime, nullable=True)
     alerts_dismissed = Column(Text, nullable=True)  # JSON {alert_key: iso utc timestamp}
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class PushSubscription(Base):
+    """One phone or browser that has turned on notifications for the admin app."""
+    __tablename__ = "push_subscriptions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    endpoint = Column(Text, nullable=False, unique=True)
+    p256dh = Column(String, nullable=False)
+    auth = Column(String, nullable=False)
+    device = Column(String, nullable=True)   # e.g. "iPhone", "Mac · Safari"
+    origin = Column(String, nullable=True)   # site address the device subscribed from
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_success_at = Column(DateTime, nullable=True)
+    last_error = Column(Text, nullable=True)
 
 
 class Expense(Base):

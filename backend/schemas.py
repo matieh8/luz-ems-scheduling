@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # ---------- Clients ----------
@@ -413,6 +413,11 @@ class SettingsResponse(BaseModel):
     subscription_low_threshold: int
     subscription_expiry_notice_days: int
     notify_admin_online_booking: bool
+    push_bookings: bool = True
+    push_session_reminders: bool = True
+    push_failed_messages: bool = True
+    push_daily_summary: bool = True
+    push_summary_hour: int = 8
     updated_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
@@ -453,6 +458,11 @@ class SettingsUpdate(BaseModel):
     subscription_low_threshold: Optional[int] = None
     subscription_expiry_notice_days: Optional[int] = None
     notify_admin_online_booking: Optional[bool] = None
+    push_bookings: Optional[bool] = None
+    push_session_reminders: Optional[bool] = None
+    push_failed_messages: Optional[bool] = None
+    push_daily_summary: Optional[bool] = None
+    push_summary_hour: Optional[int] = Field(default=None, ge=0, le=23)
 
 
 class PasswordChange(BaseModel):

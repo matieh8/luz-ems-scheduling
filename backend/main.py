@@ -16,7 +16,7 @@ from backend.auth import require_auth, ensure_admin_password
 from backend.database import DATA_DIR, ROOT_DIR, SessionLocal
 from backend.migrate import run_migrations
 from backend.routers import (appointments, auth, clients, dashboard, expenses, notifications, payments, public,
-                             reports, services, settings, staff, subscriptions)
+                             push, reports, services, settings, staff, subscriptions)
 from backend.seed import seed_data
 
 FRONTEND_DIR = os.path.join(ROOT_DIR, "frontend")
@@ -188,13 +188,32 @@ protected = [Depends(require_auth)]
 app.include_router(expenses.router, dependencies=protected)
 for r in (clients.router, staff.router, services.router, appointments.router, appointments.blocked_router,
           settings.router, dashboard.router, notifications.router, subscriptions.router, payments.router,
-          reports.router):
+          reports.router, push.router):
     app.include_router(r, dependencies=protected)
 
 
 @app.get("/api/health")
 def health():
     return {"status": "ok", "env": os.environ.get("LUZ_ENV", "local")}
+
+
+# The admin app is the site root here; /admin is the same page, and is where the home screen app starts.
+@app.get("/admin")
+def admin_page():
+    return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
+
+
+@app.get("/sw.js")
+def service_worker():
+    # Always revalidated so a new version of the worker is picked up straight away.
+    return FileResponse(os.path.join(FRONTEND_DIR, "sw.js"), media_type="text/javascript",
+                        headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"})
+
+
+@app.get("/manifest.webmanifest")
+def web_manifest():
+    return FileResponse(os.path.join(FRONTEND_DIR, "manifest.webmanifest"), media_type="application/manifest+json",
+                        headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/book")

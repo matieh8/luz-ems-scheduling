@@ -26,6 +26,15 @@ async function loadSettings() {
         <div class="form-row-3 mt">${row('online_min_notice_hours', 'Min notice (h)', '', 'number')}${row('online_max_days_ahead', 'Max days ahead', '', 'number')}${row('online_allow_cancel_hours', 'Cancel up to (h) before', '', 'number')}</div>
         ${tog('notify_admin_online_booking', 'Alert me on new online bookings', 'Sent to the business phone / email')}
       </div>
+      <div class="card"><div class="card-title">Phone notifications</div>
+        <div id="push-status"><span class="muted small">Checking this device…</span></div>
+        <div class="tiny muted" style="margin:16px 0 2px">What to send (applies to every device)</div>
+        ${tog('push_bookings', 'Bookings', 'New online booking, and when a client confirms or cancels')}
+        ${tog('push_session_reminders', 'Session reminders', 'A heads-up before each session, using "My reminder: hours before session" below')}
+        ${tog('push_failed_messages', 'Failed messages', 'When a client message could not be delivered')}
+        ${tog('push_daily_summary', 'Morning summary', "Today's sessions, unconfirmed bookings, unpaid balances and packages running low")}
+        ${row('push_summary_hour', 'Morning summary time (hour, 0 to 23)', 'In the business time zone. 8 means 8 am.', 'number', 'min="0" max="23" step="1"')}
+      </div>
       <div class="card"><div class="card-title">Automations</div>
         ${row('reminder_hours_before', 'Client reminder: hours before session', '0 disables reminders', 'number')}
         ${row('admin_reminder_hours', 'My reminder: hours before session', 'Sent to the business phone / email. 0 = off', 'number')}
@@ -62,6 +71,7 @@ async function loadSettings() {
       </div>
     </div>`;
   if (s.whatsapp_provider === 'whatsapp_web') loadWhatsAppStatus();
+  renderPushCard();
 }
 function stProvider() { const p = val('st-whatsapp_provider'); $('st-wa-web').style.display = p === 'whatsapp_web' ? 'block' : 'none'; $('st-twilio').style.display = p === 'twilio' || $('st-sms_enabled').checked ? 'block' : 'none'; if (p === 'whatsapp_web') loadWhatsAppStatus(); }
 async function loadWhatsAppStatus() {
@@ -80,8 +90,8 @@ async function resetWhatsApp() {
 }
 async function saveSettings() {
   guard(async () => {
-    const ids = ['business_name', 'business_phone', 'business_email', 'business_address', 'timezone', 'currency', 'public_base_url', 'slot_interval_minutes', 'max_concurrent_sessions', 'online_min_notice_hours', 'online_max_days_ahead', 'online_allow_cancel_hours', 'reminder_hours_before', 'admin_reminder_hours', 'follow_up_hours_after', 'subscription_low_threshold', 'subscription_expiry_notice_days', 'whatsapp_provider', 'twilio_account_sid', 'twilio_auth_token', 'twilio_phone_number', 'twilio_sms_number', 'smtp_host', 'smtp_port', 'smtp_username', 'smtp_password', 'smtp_from'];
-    const toggles = ['auto_complete_past', 'online_booking_enabled', 'notify_admin_online_booking', 'follow_up_enabled', 'demo_mode', 'whatsapp_enabled', 'sms_enabled', 'email_enabled'];
+    const ids = ['business_name', 'business_phone', 'business_email', 'business_address', 'timezone', 'currency', 'public_base_url', 'slot_interval_minutes', 'max_concurrent_sessions', 'online_min_notice_hours', 'online_max_days_ahead', 'online_allow_cancel_hours', 'reminder_hours_before', 'admin_reminder_hours', 'follow_up_hours_after', 'subscription_low_threshold', 'subscription_expiry_notice_days', 'whatsapp_provider', 'twilio_account_sid', 'twilio_auth_token', 'twilio_phone_number', 'twilio_sms_number', 'smtp_host', 'smtp_port', 'smtp_username', 'smtp_password', 'smtp_from', 'push_summary_hour'];
+    const toggles = ['auto_complete_past', 'online_booking_enabled', 'notify_admin_online_booking', 'follow_up_enabled', 'demo_mode', 'whatsapp_enabled', 'sms_enabled', 'email_enabled', 'push_bookings', 'push_session_reminders', 'push_failed_messages', 'push_daily_summary'];
     const payload = {};
     ids.forEach(i => { const el = $('st-' + i); let v = el.value; if (el.type === 'number') v = v === '' ? null : +v; else v = v.trim() || null; payload[i] = v; });
     ['business_name', 'timezone', 'currency'].forEach(k => { if (!payload[k]) throw new Error(`${k.replace('_', ' ')} is required`); });

@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from backend import models
 from backend.database import DATA_DIR, SessionLocal
-from backend.tz import fmt_date, fmt_time, fmt_datetime, utcnow, to_local
+from backend.tz import fmt_date, fmt_time, fmt_datetime, utcnow, to_local, local_day_bounds, local_today
 
 # ---------------------------------------------------------------- templates
 DEFAULT_TEMPLATES = {
@@ -304,6 +304,17 @@ def _send_email(settings: models.Setting, to_email: str, subject: str, body: str
     return "smtp: accepted"
 
 
+def push_line(appointment, settings, with_client=True) -> str:
+    """One-line description of a session for a phone notification."""
+    when = to_local(appointment.start_time, settings.timezone)
+    parts = [appointment.client.name] if with_client else []
+    parts.append(appointment.service.name)
+    parts.append(f"{when.strftime('%a %d %b')}, {when.strftime('%I:%M %p').lstrip('0')}")
+    if appointment.staff:
+        parts.append(f"with {appointment.staff.name}")
+    return " · ".join(parts)
+
+
 RETRY_MAX_ATTEMPTS = 6
 RETRY_INTERVAL = timedelta(minutes=10)
 RETRY_WINDOW = timedelta(hours=3)
@@ -357,6 +368,12 @@ def _deliver(log_id: int):
             else:
                 log.next_retry_at = None
         db.commit()
+        if log.status == "failed" and log.next_retry_at is None:  # gave up: tell the owner
+            from backend import push
+            who = log.client.name if getattr(log, "client", None) else (log.recipient or "a client")
+            push.notify(db, "failed", "Message not delivered",
+                        f"{log.channel.capitalize()} to {who} failed. Open Messages to retry.",
+                        url="/admin#messages", tag="failed-messages")
     finally:
         db.close()
 
@@ -542,13 +559,67 @@ def run_admin_reminder_job(db: Session):
         .filter(models.Appointment.start_time >= now)
         .all()
     )
+    from backend import push
     for a in due:
         try:
             notify_admin_upcoming(db, a)
         except Exception as e:
             print(f"[jobs] owner reminder failed for appointment {a.id}: {e}")
+        mins = max(int((a.start_time - now).total_seconds() // 60), 0)
+        rel = "now" if mins < 5 else (f"in {mins} min" if mins < 90 else f"in {round(mins / 60)} hours")
+        push.notify(db, "reminder", f"Session {rel}", push_line(a, settings), url="/admin#calendar", tag=f"reminder-{a.id}")
         a.admin_reminder_sent_at = now
     db.commit()
+
+
+def daily_summary(db: Session):
+    """(title, body) of the morning digest, or None when there is nothing worth a notification."""
+    settings = get_settings(db)
+    now = utcnow()
+    start, end = local_day_bounds(local_today(settings.timezone), settings.timezone)
+    active = ("scheduled", "confirmed")
+    today = (db.query(models.Appointment).filter(models.Appointment.start_time >= start, models.Appointment.start_time < end,
+                                                 models.Appointment.status.in_(active))
+             .order_by(models.Appointment.start_time).all())
+    unconfirmed = (db.query(models.Appointment).filter(models.Appointment.status == "scheduled",
+                                                       models.Appointment.start_time >= now,
+                                                       models.Appointment.start_time < now + timedelta(hours=24)).count())
+    unpaid = sum(1 for a in db.query(models.Appointment).filter(models.Appointment.status == "completed").all() if a.balance_due > 0)
+    subs = db.query(models.Subscription).filter(models.Subscription.status == "active").all()
+    low = sum(1 for s in subs if s.sessions_remaining > 0 and (s.end_date is None or s.end_date >= now) and (
+        s.sessions_remaining <= settings.subscription_low_threshold
+        or (s.end_date and s.end_date <= now + timedelta(days=settings.subscription_expiry_notice_days))))
+    if not (today or unconfirmed or unpaid or low):
+        return None
+    n = len(today)
+    title = f"Today: {n} session{'' if n == 1 else 's'}" if n else "Today: no sessions booked"
+    lines = []
+    if today:
+        first = today[0]
+        lines.append(f"First at {fmt_time(first.start_time, settings.timezone)}: {first.client.name}")
+    if unconfirmed:
+        lines.append(f"{unconfirmed} not confirmed in the next 24h")
+    if unpaid:
+        lines.append(f"{unpaid} unpaid session{'' if unpaid == 1 else 's'}")
+    if low:
+        lines.append(f"{low} package{'' if low == 1 else 's'} running low or expiring")
+    return title, " · ".join(lines)
+
+
+def run_daily_summary_job(db: Session):
+    settings = get_settings(db)
+    if not settings.push_daily_summary:
+        return
+    local_now = to_local(utcnow(), settings.timezone)
+    today = local_now.date().isoformat()
+    if settings.last_push_summary_on == today or local_now.hour < (settings.push_summary_hour or 0):
+        return
+    settings.last_push_summary_on = today
+    db.commit()
+    summary = daily_summary(db)
+    if summary:
+        from backend import push
+        push.notify(db, "summary", summary[0], summary[1], url="/admin#dashboard", tag="daily-summary")
 
 
 # ---------------------------------------------------------------- background jobs
@@ -637,6 +708,7 @@ def run_all_jobs(db: Session):
     run_auto_complete_job(db)
     run_reminder_job(db)
     run_admin_reminder_job(db)
+    run_daily_summary_job(db)
     run_follow_up_job(db)
     run_retry_job(db)
     settings = get_settings(db)

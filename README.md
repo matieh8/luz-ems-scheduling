@@ -8,6 +8,7 @@ A complete scheduling and client-care app for the LUZ EMS studio: calendar and b
 - Week, day and agenda calendar in the studio's time zone (Asia/Dubai). Click an empty slot to book, click a session to manage it.
 - Opening hours per weekday, blocked time (holidays, breaks), trainer resources, and a "machines / rooms" limit. Double bookings and out-of-hours bookings are rejected (with an admin override).
 - Session lifecycle: scheduled → confirmed → completed / no-show / cancelled, plus reschedule. Each step can notify the client.
+- Phone notifications (web push) for the admin app: new online bookings, client confirmations and cancellations, session reminders, failed messages and a morning summary. Turn on per device in Settings → Phone notifications. Needs HTTPS; on iPhone (iOS 16.4+) the app must be opened from its home screen icon. The server key pair is created on first use in `<data dir>/vapid.json`; keep that file, or every device has to turn notifications on again.
 - Public booking page at `/book`: clients pick a service, trainer, date and a free slot. Each booking gets a private link (`/a/<token>`) where the client can confirm or cancel.
 
 **Notifications to clients** (templates are editable in *Messages → Templates*)

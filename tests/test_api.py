@@ -317,3 +317,146 @@ def test_expense_category_cleanup(client):
     run_migrations()
     cats = client.get("/api/expenses/categories").json()
     assert "Coffee" in cats and "Coffee shop" not in cats and "Somke" not in cats
+
+
+def _fake_device():
+    """A stand-in for a phone: its key pair and auth secret, as a browser would hand them over."""
+    import os as _os
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from backend import push
+    priv = ec.generate_private_key(ec.SECP256R1())
+    pub = priv.public_key().public_bytes(serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint)
+    auth = _os.urandom(16)
+    return priv, push.b64u(pub), push.b64u(auth), auth
+
+
+def _decrypt_like_a_phone(body, priv, auth_secret):
+    """RFC 8291 receiver side, written independently of backend.push.encrypt."""
+    import struct
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+    salt, rs, idlen = body[:16], struct.unpack(">I", body[16:20])[0], body[20]
+    sender_raw, ciphertext = body[21:21 + idlen], body[21 + idlen:]
+    assert rs == 4096 and idlen == 65
+    sender = ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), sender_raw)
+    my_raw = priv.public_key().public_bytes(serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint)
+    shared = priv.exchange(ec.ECDH(), sender)
+    kdf = lambda s, ikm, info, n: HKDF(algorithm=hashes.SHA256(), length=n, salt=s, info=info).derive(ikm)
+    ikm = kdf(auth_secret, shared, b"WebPush: info\x00" + my_raw + sender_raw, 32)
+    plain = AESGCM(kdf(salt, ikm, b"Content-Encoding: aes128gcm\x00", 16)).decrypt(kdf(salt, ikm, b"Content-Encoding: nonce\x00", 12), ciphertext, None)
+    assert plain.endswith(b"\x02")
+    return plain[:-1]
+
+
+def test_phone_notifications(client, monkeypatch):
+    import base64, json
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
+    from backend import push
+
+    with TestClient(app) as anon:
+        assert anon.get("/api/push/config").status_code == 401
+        assert anon.get("/sw.js").status_code == 200 and "showNotification" in anon.get("/sw.js").text
+        assert anon.get("/manifest.webmanifest").json()["display"] == "standalone"
+        assert anon.get("/icons/apple-touch-icon.png").status_code == 200
+    cfg = client.get("/api/push/config").json()
+    assert cfg["available"] and len(push.b64u_decode(cfg["public_key"])) == 65 and cfg["devices"] == []
+
+    priv, p256dh, auth, auth_raw = _fake_device()
+    endpoint = "https://web.push.apple.com/fake-device-token"
+    assert client.post("/api/push/subscribe", json={"endpoint": "http://x", "p256dh": p256dh, "auth": auth}).status_code == 400
+    assert client.post("/api/push/subscribe", json={"endpoint": endpoint, "p256dh": "AAAA", "auth": auth}).status_code == 400
+    r = client.post("/api/push/subscribe", json={"endpoint": endpoint, "p256dh": p256dh, "auth": auth, "device": "iPhone · home screen app",
+                                                 "origin": "https://app.luz.example"})
+    assert r.status_code == 200
+    client.post("/api/push/subscribe", json={"endpoint": endpoint, "p256dh": p256dh, "auth": auth, "device": "iPhone"})  # same phone again
+    assert len(client.get("/api/push/config").json()["devices"]) == 1
+
+    sent = []
+
+    class Res:
+        status_code, text = 201, ""
+
+    def fake_post(url, data=None, headers=None, timeout=None):
+        sent.append((url, data, headers))
+        return Res()
+    monkeypatch.setattr(push.requests, "post", fake_post)
+
+    # Test notification: decrypts on the "phone" and carries a valid VAPID signature
+    r = client.post("/api/push/test", json={"endpoint": endpoint})
+    assert r.status_code == 200 and r.json()["sent"] == 1
+    url, body, headers = sent[-1]
+    msg = json.loads(_decrypt_like_a_phone(body, priv, auth_raw))
+    assert url == endpoint and "notifications are on" in msg["title"] and msg["url"] == "/admin#settings"
+    assert headers["Content-Encoding"] == "aes128gcm" and headers["TTL"]
+    token, key = headers["Authorization"].removeprefix("vapid t=").split(", k=")
+    assert key == cfg["public_key"]
+    h, c, sig = token.split(".")
+    claims = json.loads(push.b64u_decode(c))
+    assert claims["aud"] == "https://web.push.apple.com" and claims["sub"] == "https://app.luz.example" and claims["exp"] > 0
+    raw = push.b64u_decode(sig)
+    server_pub = ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), push.b64u_decode(key))
+    server_pub.verify(encode_dss_signature(int.from_bytes(raw[:32], "big"), int.from_bytes(raw[32:], "big")),
+                      f"{h}.{c}".encode(), ec.ECDSA(hashes.SHA256()))
+
+    # A new online booking pushes an alert; the client confirming and cancelling do too
+    def next_msg(n_before):
+        import time
+        for _ in range(100):
+            if len(sent) > n_before: break
+            time.sleep(0.02)
+        assert len(sent) > n_before, "no push was sent"
+        return json.loads(_decrypt_like_a_phone(sent[-1][1], priv, auth_raw))
+
+    svc = client.get("/api/services/").json()[0]
+    with TestClient(app) as anon:
+        n = len(sent)
+        start = next_weekday_at(15, days_ahead=6)
+        b = anon.post("/api/public/book", json={"name": "Push Client", "phone": "0507771234", "service_id": svc["id"],
+                                                "start_time": start.isoformat()})
+        assert b.status_code == 200, b.text
+        m = next_msg(n)
+        assert m["title"] == "New online booking" and "Push Client" in m["body"] and svc["name"] in m["body"] and m["url"] == "/admin#calendar"
+        token = b.json()["token"]
+        n = len(sent); anon.post(f"/api/public/appointments/{token}/confirm")
+        assert next_msg(n)["title"] == "Push Client confirmed"
+        n = len(sent); anon.post(f"/api/public/appointments/{token}/confirm")  # already confirmed: no second alert
+        n2 = len(sent); assert n2 == n
+        assert anon.post(f"/api/public/appointments/{token}/cancel", json={"reason": "travelling"}).status_code == 200
+        m = next_msg(n2)
+        assert m["title"] == "Push Client cancelled" and "travelling" in m["body"]
+
+    # Switching a category off stops those alerts
+    client.put("/api/settings/", json={"push_bookings": False})
+    with TestClient(app) as anon:
+        n = len(sent)
+        anon.post("/api/public/book", json={"name": "Quiet Client", "phone": "0507775678", "service_id": svc["id"],
+                                            "start_time": next_weekday_at(16, days_ahead=6).isoformat()})
+        import time; time.sleep(0.3)
+        assert len(sent) == n
+    client.put("/api/settings/", json={"push_bookings": True})
+    assert client.put("/api/settings/", json={"push_summary_hour": 30}).status_code == 422
+
+    # Morning summary goes out once a day
+    from backend.database import SessionLocal
+    from backend import notifications, models
+    db = SessionLocal()
+    try:
+        s = db.query(models.Setting).first(); s.push_summary_hour = 0; s.last_push_summary_on = None; db.commit()
+        assert notifications.daily_summary(db) is not None
+        n = len(sent); notifications.run_daily_summary_job(db)
+        assert next_msg(n)["title"].startswith("Today:")
+        n = len(sent); notifications.run_daily_summary_job(db); time.sleep(0.2)
+        assert len(sent) == n
+    finally:
+        db.close()
+
+    # A phone that dropped its subscription (410 Gone) is forgotten
+    Res.status_code = 410
+    assert client.post("/api/push/test", json={"endpoint": endpoint}).status_code == 502
+    assert client.get("/api/push/config").json()["devices"] == []
+    assert client.post("/api/push/test").status_code == 404

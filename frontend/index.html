@@ -12,14 +12,14 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="LUZ EMS">
-  <meta name="theme-color" content="#7c3aed">
+  <meta name="theme-color" content="#f4f6f5">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/app.css?v=7">
+  <link rel="stylesheet" href="/css/app.css?v=9">
 </head>
 <body>
   <div class="login-overlay" id="login">
     <form class="login-card" onsubmit="return doLogin(event)">
-      <h1>LUZ <span>EMS</span></h1>
+      <div class="wordmark lg" aria-label="LUZ EMS">LUZ<small>EMS</small></div>
       <p class="muted" style="margin:0 0 22px">Sign in to manage your studio</p>
       <div class="form-group"><label>Password</label><input type="password" id="login-password" class="input" autofocus autocomplete="current-password"></div>
       <div id="login-error" class="small" style="color:var(--bad);min-height:18px;margin-bottom:8px"></div>
@@ -30,23 +30,23 @@
   <div class="app" id="app" style="display:none">
     <aside class="sidebar">
       <div class="brand">
-        <h1>LUZ <span>EMS</span></h1>
+        <div class="wordmark" aria-label="LUZ EMS">LUZ<small>EMS</small></div>
         <p id="brand-sub">Scheduling &amp; Client Care</p>
         <span class="env-pill" id="env-pill">staging</span>
       </div>
       <nav class="nav">
-        <button data-page="dashboard" onclick="go('dashboard')"><span class="ico">📊</span> Dashboard</button>
-        <button data-page="calendar" onclick="go('calendar')"><span class="ico">📅</span> Calendar</button>
-        <button data-page="clients" onclick="go('clients')"><span class="ico">👥</span> Clients</button>
-        <button data-page="subscriptions" onclick="go('subscriptions')"><span class="ico">🎟️</span> Packages</button>
+        <button data-page="dashboard" onclick="go('dashboard')"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg> Dashboard</button>
+        <button data-page="calendar" onclick="go('calendar')"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg> Calendar</button>
+        <button data-page="clients" onclick="go('clients')"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg> Clients</button>
+        <button data-page="subscriptions" onclick="go('subscriptions')"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2M13 17v2M13 11v2"/></svg> Packages</button>
         <div class="nav-label">Money</div>
-        <button data-page="payments" onclick="go('payments')"><span class="ico">💳</span> Payments</button>
-        <button data-page="expenses" onclick="go('expenses')"><span class="ico">🧾</span> Expenses</button>
-        <button data-page="reports" onclick="go('reports')"><span class="ico">📈</span> Revenue</button>
+        <button data-page="payments" onclick="go('payments')"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg> Payments</button>
+        <button data-page="expenses" onclick="go('expenses')"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg> Expenses</button>
+        <button data-page="reports" onclick="go('reports')"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m22 7-8.5 8.5-5-5L2 17"/><path d="M16 7h6v6"/></svg> Revenue</button>
         <div class="nav-label">Setup</div>
-        <button data-page="messages" onclick="go('messages')"><span class="ico">💬</span> Messages</button>
-        <button data-page="catalog" onclick="go('catalog')"><span class="ico">✨</span> Services &amp; Team</button>
-        <button data-page="settings" onclick="go('settings')"><span class="ico">⚙️</span> Settings</button>
+        <button data-page="messages" onclick="go('messages')"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg> Messages</button>
+        <button data-page="catalog" onclick="go('catalog')"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2Z"/></svg> Services &amp; Team</button>
+        <button data-page="settings" onclick="go('settings')"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg> Settings</button>
       </nav>
       <div class="sidebar-footer">
         <a href="/book" target="_blank">Booking page ↗</a>
@@ -57,18 +57,29 @@
     <main class="main">
       <!-- Dashboard -->
       <section id="page-dashboard" class="page">
-        <div class="header">
-          <div><h2>Dashboard</h2><div class="sub" id="dash-date"></div></div>
+        <div class="header dash-head">
+          <div><h2 id="dash-greeting">Dashboard</h2><div class="sub" id="dash-date"></div></div>
           <div class="actions">
-            <button class="btn btn-secondary" onclick="openSubscriptionModal()">Sell package</button>
             <button class="btn btn-primary" onclick="openBookingModal()">+ Book session</button>
+            <button class="btn btn-secondary" onclick="openClientModal()">Add client</button>
+            <button class="btn btn-secondary" onclick="openPaymentModal()">Record payment</button>
+            <button class="btn btn-secondary" onclick="openSubscriptionModal()">Sell package</button>
           </div>
         </div>
         <div id="dash-alerts"></div>
-        <div class="grid grid-4" id="dash-stats"></div>
-        <div class="grid grid-2 mt">
-          <div class="card"><div class="card-title">Today's schedule <span class="muted small" id="dash-today-count"></span></div><div id="dash-today"></div></div>
-          <div class="card"><div class="card-title">Revenue, last 14 days <span class="muted small">collected</span></div><div id="dash-chart" class="chart"></div></div>
+        <div class="kpis" id="dash-stats"></div>
+        <div class="dash-row mt">
+          <div class="card"><div class="card-title">Revenue &amp; profit <span class="legend" style="margin:0"><span style="--c:var(--series-1)">Revenue</span><span style="--c:var(--series-2)">Expenses</span><span style="--c:var(--text)">Profit</span></span></div><div id="dash-chart" class="chart"></div><div class="tiny muted" id="dash-chart-note"></div></div>
+          <div class="card"><div class="card-title">Today's schedule <a href="#" class="small" onclick="go('calendar');return false">Calendar →</a></div><div id="dash-today"></div></div>
+        </div>
+        <div class="dash-row mt">
+          <div class="card"><div class="card-title">Recent payments <a href="#" class="small" onclick="go('payments');return false">All payments →</a></div><div id="dash-payments"></div></div>
+          <div class="card"><div class="card-title">Packages</div><div id="dash-packages"></div></div>
+        </div>
+        <div class="grid grid-3 mt dash-three">
+          <div class="card"><div class="card-title">Top services <span class="muted small">this month</span></div><div id="dash-top-services"></div></div>
+          <div class="card"><div class="card-title">Top packages <span class="muted small">sold this month</span></div><div id="dash-top-plans"></div></div>
+          <div class="card"><div class="card-title">Money &amp; sessions owed</div><div id="dash-owed"></div></div>
         </div>
         <div class="card mt"><div class="card-title">Upcoming sessions</div><div id="dash-upcoming"></div></div>
       </section>
@@ -465,7 +476,7 @@
   <script src="/js/messages.js?v=2"></script>
   <script src="/js/push.js?v=1"></script>
   <script src="/js/settings.js?v=6"></script>
-  <script src="/js/dashboard.js?v=3"></script>
+  <script src="/js/dashboard.js?v=5"></script>
   <script>boot();</script>
 </body>
 </html>

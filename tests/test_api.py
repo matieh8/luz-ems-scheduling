@@ -472,3 +472,34 @@ def test_phone_notifications(client, monkeypatch):
     assert client.post("/api/push/test", json={"endpoint": endpoint}).status_code == 502
     assert client.get("/api/push/config").json()["devices"] == []
     assert client.post("/api/push/test").status_code == 404
+
+
+def test_dashboard_overview(client):
+    """The owner dashboard: month-to-date KPIs vs the same days last month, a 6-month trend,
+    package health, top services/plans and recent payments."""
+    before = client.get("/api/dashboard/overview")
+    assert before.status_code == 200, before.text
+    b = before.json()
+    for key in ("revenue", "expenses", "profit", "active_clients", "sessions"):
+        assert {"value", "prev", "change_pct"} <= set(b["kpis"][key]), key
+    assert len(b["months"]) == 6 and {"period", "revenue", "expenses", "profit", "sessions"} <= set(b["months"][-1])
+    assert {"active", "expiring", "ended"} <= set(b["packages"])
+
+    cid = client.post("/api/clients/", json={"name": "Overview Client", "phone": "0509990001"}).json()["id"]
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    client.post("/api/payments/", json={"client_id": cid, "amount": 700, "method": "card", "paid_at": now.isoformat()})
+    client.post("/api/expenses/", json={"date": now.isoformat(), "category": "Rent", "amount": 250})
+    plan = client.get("/api/subscriptions/plans").json()[0]
+    client.post("/api/subscriptions/", json={"client_id": cid, "plan_id": plan["id"], "payment_method": "cash"})
+
+    a = client.get("/api/dashboard/overview").json()
+    paid_for_plan = plan["price"]
+    assert a["kpis"]["revenue"]["value"] == b["kpis"]["revenue"]["value"] + 700 + paid_for_plan
+    assert a["kpis"]["expenses"]["value"] == b["kpis"]["expenses"]["value"] + 250
+    assert a["kpis"]["profit"]["value"] == a["kpis"]["revenue"]["value"] - a["kpis"]["expenses"]["value"]
+    assert a["months"][-1]["revenue"] == a["kpis"]["revenue"]["value"]
+    assert a["packages"]["active"] + a["packages"]["expiring"] == b["packages"]["active"] + b["packages"]["expiring"] + 1
+    assert a["sessions_remaining"] >= plan["sessions_included"]
+    assert a["recent_payments"][0]["client_name"] == "Overview Client"
+    assert any(p["name"] == plan["name"] for p in a["top_plans"])
+    assert "amount" in a["due"] and "count" in a["due"]

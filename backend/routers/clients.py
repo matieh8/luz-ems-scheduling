@@ -1,7 +1,11 @@
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException
+import os
+import secrets
+from datetime import datetime
+from typing import List, Optional
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
-from backend.database import get_db
+from backend.database import DATA_DIR, get_db
 from backend import models, schemas
 from backend.tz import to_utc_naive, utcnow
 
@@ -74,6 +78,8 @@ def list_clients(q: str = "", include_inactive: bool = False, db: Session = Depe
 @router.post("/", response_model=schemas.ClientResponse)
 def create_client(client: schemas.ClientCreate, db: Session = Depends(get_db)):
     db_client = models.Client(**client.model_dump())
+    if db_client.photo_consent:
+        db_client.photo_consent_at = utcnow()
     db.add(db_client)
     db.commit()
     db.refresh(db_client)
@@ -110,7 +116,9 @@ def client_history(client_id: int, db: Session = Depends(get_db)):
         "measurements": [schemas.MeasurementResponse.model_validate(m)
                          for m in sorted(client.measurements, key=lambda m: m.measured_at, reverse=True)],
         "notes": [schemas.ClientNoteResponse.model_validate(n)
-                  for n in sorted(client.client_notes, key=lambda n: n.created_at, reverse=True)],
+                  for n in sorted(client.client_notes, key=lambda n: (n.created_at, n.id), reverse=True)],
+        "photos": [schemas.PhotoResponse.model_validate(p)
+                   for p in sorted(client.photos, key=lambda p: (p.taken_at, p.id), reverse=True)],
     }
 
 
@@ -153,11 +161,87 @@ def delete_measurement(measurement_id: int, db: Session = Depends(get_db)):
     return {"detail": "deleted"}
 
 
+PHOTO_TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/heic": ".heic", "image/heif": ".heif"}
+PHOTO_POSES = ("front", "side", "back", "other")
+PHOTO_MAX_BYTES = 12 * 1024 * 1024
+
+
+def _photo_dir(client_id: int) -> str:
+    return os.path.join(DATA_DIR, "photos", str(int(client_id)))
+
+
+def _photo_path(p: models.ProgressPhoto) -> str:
+    return os.path.join(_photo_dir(p.client_id), os.path.basename(p.filename))
+
+
+def _remove_photo_file(p: models.ProgressPhoto):
+    try:
+        os.remove(_photo_path(p))
+    except FileNotFoundError:
+        pass
+
+
+@router.get("/{client_id}/photos", response_model=List[schemas.PhotoResponse])
+def list_photos(client_id: int, db: Session = Depends(get_db)):
+    _client_or_404(db, client_id)
+    return (db.query(models.ProgressPhoto).filter(models.ProgressPhoto.client_id == client_id)
+            .order_by(models.ProgressPhoto.taken_at.desc(), models.ProgressPhoto.id.desc()).all())
+
+
+@router.post("/{client_id}/photos", response_model=schemas.PhotoResponse)
+async def upload_photo(client_id: int, file: UploadFile = File(...), pose: str = Form("front"),
+                       taken_at: Optional[datetime] = Form(None), notes: Optional[str] = Form(None),
+                       db: Session = Depends(get_db)):
+    client = _client_or_404(db, client_id)
+    if not client.photo_consent:
+        raise HTTPException(status_code=409, detail="Record the client's consent to progress photos first")
+    if pose not in PHOTO_POSES:
+        raise HTTPException(status_code=422, detail="Pose must be front, side, back or other")
+    ext = PHOTO_TYPES.get((file.content_type or "").lower())
+    if not ext:
+        raise HTTPException(status_code=422, detail="Upload a JPG, PNG, WEBP or HEIC photo")
+    data = await file.read(PHOTO_MAX_BYTES + 1)
+    if len(data) > PHOTO_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="Photo is larger than 12 MB")
+    if not data:
+        raise HTTPException(status_code=422, detail="The file is empty")
+    os.makedirs(_photo_dir(client_id), exist_ok=True)
+    name = f"{secrets.token_hex(12)}{ext}"
+    with open(os.path.join(_photo_dir(client_id), name), "wb") as fh:
+        fh.write(data)
+    p = models.ProgressPhoto(client_id=client_id, pose=pose, filename=name, content_type=file.content_type.lower(),
+                             notes=(notes or "").strip() or None,
+                             taken_at=to_utc_naive(taken_at) if taken_at else utcnow())
+    db.add(p)
+    db.commit()
+    db.refresh(p)
+    return p
+
+
+@router.get("/photos/{photo_id}/file")
+def photo_file(photo_id: int, db: Session = Depends(get_db)):
+    p = db.query(models.ProgressPhoto).filter(models.ProgressPhoto.id == photo_id).first()
+    if not p or not os.path.exists(_photo_path(p)):
+        raise HTTPException(status_code=404, detail="Photo not found")
+    return FileResponse(_photo_path(p), media_type=p.content_type, headers={"Cache-Control": "private, no-store"})
+
+
+@router.delete("/photos/{photo_id}")
+def delete_photo(photo_id: int, db: Session = Depends(get_db)):
+    p = db.query(models.ProgressPhoto).filter(models.ProgressPhoto.id == photo_id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Photo not found")
+    _remove_photo_file(p)
+    db.delete(p)
+    db.commit()
+    return {"detail": "deleted"}
+
+
 @router.get("/{client_id}/notes", response_model=List[schemas.ClientNoteResponse])
 def list_notes(client_id: int, db: Session = Depends(get_db)):
     _client_or_404(db, client_id)
     return (db.query(models.ClientNote).filter(models.ClientNote.client_id == client_id)
-            .order_by(models.ClientNote.created_at.desc()).all())
+            .order_by(models.ClientNote.created_at.desc(), models.ClientNote.id.desc()).all())
 
 
 @router.post("/{client_id}/notes", response_model=schemas.ClientNoteResponse)
@@ -185,7 +269,17 @@ def update_client(client_id: int, client: schemas.ClientUpdate, db: Session = De
     db_client = db.query(models.Client).filter(models.Client.id == client_id).first()
     if not db_client:
         raise HTTPException(status_code=404, detail="Client not found")
-    for key, value in client.model_dump(exclude_unset=True).items():
+    changes = client.model_dump(exclude_unset=True)
+    if "photo_consent" in changes and bool(changes["photo_consent"]) != bool(db_client.photo_consent):
+        if changes["photo_consent"]:
+            db_client.photo_consent_at = utcnow()
+        else:
+            # Consent withdrawn: the photos must go, files included
+            for p in list(db_client.photos):
+                _remove_photo_file(p)
+                db.delete(p)
+            db_client.photo_consent_at = None
+    for key, value in changes.items():
         setattr(db_client, key, value)
     db.commit()
     db.refresh(db_client)
@@ -198,6 +292,8 @@ def delete_client(client_id: int, db: Session = Depends(get_db)):
     if not db_client:
         raise HTTPException(status_code=404, detail="Client not found")
     db.query(models.NotificationLog).filter(models.NotificationLog.client_id == client_id).delete()
+    for p in db_client.photos:
+        _remove_photo_file(p)
     db.delete(db_client)
     db.commit()
     return {"detail": "Client deleted"}

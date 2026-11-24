@@ -56,7 +56,7 @@ async function openClientDetail(id, tab) {
     <dl class="kv mb"><dt>Phone</dt><dd>${esc(c.phone)}</dd><dt>Email</dt><dd>${esc(c.email || '—')}</dd><dt>Client since</dt><dd>${fmtDate(c.created_at)}${c.source ? ' · ' + esc(c.source) : ''}</dd><dt>Notifications</dt><dd>${[c.notify_whatsapp && 'WhatsApp', c.notify_sms && 'SMS', c.notify_email && 'Email'].filter(Boolean).join(', ') || 'none'}</dd>${c.date_of_birth ? `<dt>Birthday</dt><dd>${esc(c.date_of_birth)}</dd>` : ''}${c.notes ? `<dt>Notes</dt><dd>${esc(c.notes)}</dd>` : ''}</dl>
     <div class="tabs tabs-scroll">
       <button class="tab" data-t="appts" onclick="cdTab('appts', this)">Sessions (${h.appointments.length})</button>
-      <button class="tab" data-t="progress" onclick="cdTab('progress', this)">Progress (${h.measurements.length})</button>
+      <button class="tab" data-t="progress" onclick="cdTab('progress', this)">Progress (${h.measurements.length + (h.photos || []).length})</button>
       <button class="tab" data-t="notes" onclick="cdTab('notes', this)">Notes &amp; contact (${h.notes.length})</button>
       <button class="tab" data-t="subs" onclick="cdTab('subs', this)">Packages (${h.subscriptions.length})</button>
       <button class="tab" data-t="pays" onclick="cdTab('pays', this)">Payments (${h.payments.length})</button>
@@ -70,14 +70,13 @@ async function openClientDetail(id, tab) {
     <div id="cd-msgs" class="subpanel">${messagesTable(h.messages, true)}</div>`;
   const start = document.querySelector(`#cd-body .tab[data-t="${tab || 'appts'}"]`);
   cdTab(tab || 'appts', start);
-  if ((tab || 'appts') === 'progress') drawProgressChart();
   $('cd-footer').innerHTML = `<div class="left"><button class="btn btn-secondary btn-sm" onclick="editClient(${c.id})">Edit</button><button class="btn btn-danger btn-sm" onclick="deleteClient(${c.id}, '${esc(c.name).replace(/'/g, "\\'")}')">Delete</button><button class="btn btn-secondary btn-sm" onclick="closeModal('client-detail-modal');openCustomMessageModal(${c.id})">Message</button><button class="btn btn-secondary btn-sm" onclick="closeModal('client-detail-modal');openPaymentModal({client_id:${c.id}})">Record payment</button><button class="btn btn-secondary btn-sm" onclick="closeModal('client-detail-modal');openSubscriptionModal(null, ${c.id})">Sell package</button></div><button class="btn btn-primary" onclick="closeModal('client-detail-modal');openBookingModal(null, {clientId:${c.id}})">Book session</button>`;
   openModal('client-detail-modal');
 }
 function cdTab(t, el) {
   document.querySelectorAll('#cd-body .tab').forEach(x => x.classList.remove('active')); if (el) el.classList.add('active');
   document.querySelectorAll('#cd-body .subpanel').forEach(p => p.classList.toggle('active', p.id === 'cd-' + t));
-  if (t === 'progress') drawProgressChart();
+  if (t === 'progress') { drawProgressChart(); loadPhotos(); }
 }
 
 function fmtNum(v, unit) { return v === null || v === undefined ? '<span class="muted">—</span>' : `${Number(v).toLocaleString('en', { maximumFractionDigits: 1 })}<span class="tiny muted"> ${unit}</span>`; }
@@ -105,7 +104,65 @@ function progressPanel(h) {
   const table = ms.length ? `<div class="table-wrap mt"><table><thead><tr><th>Date</th>${MEASURE_FIELDS.map(([, l]) => `<th class="num">${l}</th>`).join('')}<th></th></tr></thead><tbody>${
     ms.map(m => `<tr><td>${fmtDate(m.measured_at)}${m.notes ? `<div class="tiny muted">${esc(m.notes)}</div>` : ''}</td>${MEASURE_FIELDS.map(([k, , u]) => `<td class="num">${fmtNum(m[k], u)}</td>`).join('')}
       <td class="num"><button class="btn btn-ghost btn-xs" title="Delete" aria-label="Delete measurement" onclick="deleteMeasurement(${m.id}, ${h.client.id})">✕</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty small">No measurements yet. Add the first check-in to start tracking progress.</div>';
-  return summary + form + table;
+  return summary + form + table + photosSection(h);
+}
+
+/* ---------- before / after photos (only with the client's consent) ---------- */
+const POSES = { front: 'Front', side: 'Side', back: 'Back', other: 'Other' };
+function photosSection(h) {
+  const c = h.client, ph = h.photos || [];
+  const head = `<div class="card-title mt" style="margin-bottom:8px">Before &amp; after photos</div>`;
+  if (!c.photo_consent) return head + `<div class="consent-box"><p><strong>No consent recorded.</strong> Photos can only be kept once the client agrees. Ask them first, then tick the box.</p>
+    <label class="check"><input type="checkbox" onchange="if(this.checked) setPhotoConsent(${c.id}, true)"> The client agreed to progress photos being taken and kept privately in this app</label></div>`;
+  // Compare the earliest and latest photo of the same pose
+  const pairs = Object.keys(POSES).map(k => { const list = ph.filter(p => p.pose === k); return list.length > 1 ? [k, list[list.length - 1], list[0]] : null; }).filter(Boolean);
+  const compare = pairs.length ? `<div class="compare">${pairs.map(([k, before, after]) => `<div class="compare-pair"><div class="tiny muted bold">${POSES[k]}</div><div class="compare-imgs">
+      <figure><img data-photo="${before.id}" alt="${POSES[k]} before, ${fmtDate(before.taken_at)}"><figcaption>Before · ${fmtDate(before.taken_at)}</figcaption></figure>
+      <figure><img data-photo="${after.id}" alt="${POSES[k]} latest, ${fmtDate(after.taken_at)}"><figcaption>Latest · ${fmtDate(after.taken_at)}</figcaption></figure></div></div>`).join('')}</div>` : '';
+  const upload = `<details class="add-box" ${ph.length ? '' : 'open'}><summary>+ Add photo</summary><div class="measure-grid">
+      <div class="form-group"><label>Photo</label><input type="file" id="ph-file" class="input" accept="image/jpeg,image/png,image/webp,image/heic,image/heif"></div>
+      <div class="form-group"><label>Pose</label><select id="ph-pose" class="input">${Object.entries(POSES).map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></div>
+      <div class="form-group"><label>Date</label><input type="date" id="ph-date" class="input" value="${todayKey()}"></div></div>
+      <div class="form-group"><label>Notes</label><input type="text" id="ph-notes" class="input" placeholder="e.g. Week 1, morning, same lighting"></div>
+      <button class="btn btn-primary btn-sm" id="ph-save" onclick="uploadPhoto(${c.id})">Upload photo</button></details>`;
+  const grid = ph.length ? `<div class="photo-grid">${ph.map(p => `<figure class="photo"><img data-photo="${p.id}" alt="${POSES[p.pose] || p.pose}, ${fmtDate(p.taken_at)}" loading="lazy">
+      <figcaption><span>${POSES[p.pose] || p.pose} · ${fmtDate(p.taken_at)}</span><button class="btn btn-ghost btn-xs" aria-label="Delete photo" title="Delete" onclick="deletePhoto(${p.id}, ${c.id})">✕</button></figcaption>${p.notes ? `<div class="tiny muted">${esc(p.notes)}</div>` : ''}</figure>`).join('')}</div>`
+    : '<div class="empty small">No photos yet.</div>';
+  const consent = `<div class="tiny muted mt">Consent recorded ${c.photo_consent_at ? fmtDate(c.photo_consent_at) : ''}. <a href="#" onclick="setPhotoConsent(${c.id}, false);return false">Withdraw consent and delete all photos</a></div>`;
+  return head + compare + upload + grid + consent;
+}
+
+const _photoURLs = {};
+async function loadPhotos() {
+  for (const img of document.querySelectorAll('#cd-body img[data-photo]')) {
+    const id = img.dataset.photo;
+    try {
+      if (!_photoURLs[id]) { const r = await fetch(`${API}/clients/photos/${id}/file`, { headers: { Authorization: `Bearer ${S.token}` } }); if (!r.ok) continue; _photoURLs[id] = URL.createObjectURL(await r.blob()); }
+      img.src = _photoURLs[id];
+    } catch (e) { /* leave the frame empty */ }
+  }
+}
+async function uploadPhoto(clientId) {
+  guard(async () => {
+    const f = $('ph-file').files[0]; if (!f) throw new Error('Choose a photo first');
+    const fd = new FormData(); fd.append('file', f); fd.append('pose', val('ph-pose'));
+    const d = val('ph-date'); if (d) fd.append('taken_at', zonedToDate(d, '09:00').toISOString());
+    if (val('ph-notes').trim()) fd.append('notes', val('ph-notes').trim());
+    $('ph-save').disabled = true;
+    try {
+      const r = await fetch(`${API}/clients/${clientId}/photos`, { method: 'POST', headers: { Authorization: `Bearer ${S.token}` }, body: fd });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || 'Upload failed');
+    } finally { $('ph-save').disabled = false; }
+    toast('Photo saved'); openClientDetail(clientId, 'progress');
+  });
+}
+async function deletePhoto(id, clientId) {
+  if (!confirm('Delete this photo? It is removed for good.')) return;
+  guard(async () => { await api('DELETE', `/clients/photos/${id}`); openClientDetail(clientId, 'progress'); });
+}
+async function setPhotoConsent(clientId, on) {
+  if (!on && !confirm('Withdraw consent? All of this client\'s progress photos will be deleted for good.')) return;
+  guard(async () => { await api('PUT', `/clients/${clientId}`, { photo_consent: on }); toast(on ? 'Consent recorded' : 'Consent withdrawn, photos deleted'); openClientDetail(clientId, 'progress'); });
 }
 
 function drawProgressChart() {

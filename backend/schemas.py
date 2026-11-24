@@ -12,6 +12,7 @@ class ClientBase(BaseModel):
     date_of_birth: Optional[str] = None
     source: Optional[str] = None
     health_notes: Optional[str] = None
+    photo_consent: bool = False
     notify_whatsapp: bool = True
     notify_sms: bool = False
     notify_email: bool = True
@@ -63,13 +64,24 @@ class ClientUpdate(BaseModel):
     date_of_birth: Optional[str] = None
     source: Optional[str] = None
     health_notes: Optional[str] = None
+    photo_consent: Optional[bool] = None
     notify_whatsapp: Optional[bool] = None
     notify_sms: Optional[bool] = None
     notify_email: Optional[bool] = None
     active: Optional[bool] = None
 
 
+class PhotoResponse(BaseModel):
+    id: int
+    client_id: int
+    taken_at: datetime
+    pose: str
+    notes: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
+
+
 class ClientResponse(ClientBase):
+    photo_consent_at: Optional[datetime] = None
     id: int
     created_at: datetime
     updated_at: datetime

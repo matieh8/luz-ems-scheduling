@@ -20,6 +20,8 @@ class Client(Base):
     date_of_birth = Column(String, nullable=True)
     source = Column(String, nullable=True)  # walk-in / instagram / referral / online
     health_notes = Column(Text, nullable=True)  # injuries, medical conditions, training restrictions
+    photo_consent = Column(Boolean, default=False)  # client agreed to before/after photos being kept
+    photo_consent_at = Column(DateTime, nullable=True)
     notify_whatsapp = Column(Boolean, default=True)
     notify_sms = Column(Boolean, default=False)
     notify_email = Column(Boolean, default=True)
@@ -32,6 +34,7 @@ class Client(Base):
     payments = relationship("Payment", back_populates="client", cascade="all, delete-orphan")
     measurements = relationship("BodyMeasurement", back_populates="client", cascade="all, delete-orphan")
     client_notes = relationship("ClientNote", back_populates="client", cascade="all, delete-orphan")
+    photos = relationship("ProgressPhoto", back_populates="client", cascade="all, delete-orphan")
 
 
 class BodyMeasurement(Base):
@@ -67,6 +70,22 @@ class ClientNote(Base):
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
     client = relationship("Client", back_populates="client_notes")
+
+
+class ProgressPhoto(Base):
+    """A before/after body photo. The image file lives in <data dir>/photos/<client id>/, never in a public folder."""
+    __tablename__ = "progress_photos"
+
+    id = Column(Integer, primary_key=True, index=True)
+    client_id = Column(Integer, ForeignKey("clients.id"), nullable=False, index=True)
+    taken_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    pose = Column(String, nullable=False, default="front")  # front | side | back | other
+    filename = Column(String, nullable=False)
+    content_type = Column(String, nullable=False)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    client = relationship("Client", back_populates="photos")
 
 
 class Staff(Base):

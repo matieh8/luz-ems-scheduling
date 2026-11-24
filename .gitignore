@@ -45,3 +45,6 @@ data-staging/
 data/whatsapp_session.bak.*/
 data/secret.key
 data/vapid.json
+# Private client data: database backups and progress photos never go into git
+data/backups/
+data/photos/

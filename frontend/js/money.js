@@ -37,6 +37,7 @@ async function loadSubscriptions() {
   if (SUBS.tab === 'plans') return loadPlans();
   if (SUBS.tab === 'codes') return loadCodes();
   if (SUBS.tab === 'gifts') return loadGifts();
+  if (SUBS.tab === 'lapsed') return loadLapsed();
   const subs = await api('GET', `/subscriptions/${SUBS.tab === 'active' ? '?active=true' : ''}`);
   $('sub-' + SUBS.tab).innerHTML = subsTable(subs);
 }
@@ -139,6 +140,26 @@ async function checkSubscriptionCode() {
   const price = parseFloat(val('subscription-price'));
   const r = await api('GET', `/discounts/check?code=${encodeURIComponent(code)}&plan_id=${val('subscription-plan')}${isNaN(price) ? '' : '&price=' + price}`);
   out.innerHTML = r.valid ? `<span style="color:var(--good);font-weight:600">✓ ${esc(r.label)}: client pays ${money(r.final_price)} (saves ${money(r.discount)})</span>` : `<span style="color:var(--bad)">${esc(r.reason)}</span>`;
+}
+
+/* ---------- clients whose package ended without a renewal ---------- */
+async function loadLapsed() {
+  const rows = await api('GET', '/subscriptions/not-renewed');
+  const offer = r => r.offer === 'pending_approval' ? '<span class="badge badge-queued">waiting for your OK</span>' : r.offer === 'sent' ? `<span class="badge badge-sent">offer sent</span>${r.offer_at ? `<div class="tiny muted">${fmtDate(r.offer_at)}</div>` : ''}` : r.offer ? `<span class="badge badge-neutral">${esc(r.offer)}</span>` : '<span class="muted small">not contacted</span>';
+  $('sub-lapsed').innerHTML = `<p class="small muted" style="margin:0 0 12px">Clients whose last package ended in the last 4 months and who haven't bought another one. ${S.settings && S.settings.renewal_offer_auto === false ? 'Automatic renewal offers are off (Settings).' : 'A renewal offer is prepared automatically a few days after a package ends; it waits in Messages until you approve it.'}</p>` +
+    (rows.length ? `<div class="table-wrap"><table><thead><tr><th>Client</th><th>Last package</th><th>Ended</th><th class="num">Spent</th><th>Offer</th><th></th></tr></thead><tbody>${rows.map(r => `<tr>
+      <td><a href="#" onclick="openClientDetail(${r.client_id});return false"><strong>${esc(r.client_name)}</strong></a><div class="tiny muted">${esc(r.client_phone)}</div></td>
+      <td>${esc(r.plan)}<div class="tiny muted">${r.sessions_used}/${r.sessions_total} used · ${esc(r.how_it_ended)}</div></td>
+      <td class="small">${fmtDate(r.ended_on)}<div class="tiny muted">${r.days_since} day(s) ago</div></td>
+      <td class="num">${money(r.total_spent)}</td><td>${offer(r)}</td>
+      <td class="num"><button class="btn btn-success btn-xs" onclick="openSubscriptionModal(null, ${r.client_id})">Sell package</button>${r.offer !== 'sent' ? `<button class="btn btn-ghost btn-xs" onclick="sendRenewalOffer(${r.subscription_id}, '${esc(r.client_name).replace(/'/g, "\\'")}')">Send offer</button>` : ''}</td></tr>`).join('')}</tbody></table></div>`
+      : '<div class="card empty">Everyone with an ended package has renewed. 🎉</div>');
+}
+function sendRenewalOffer(subId, name) {
+  confirmBox('Send renewal offer', `<p>Send the renewal offer to <strong>${esc(name)}</strong> now? You can edit the text in Messages → Templates → "Renewal offer".</p>`, 'Send', async () => {
+    const logs = await api('POST', `/subscriptions/${subId}/renewal-offer`);
+    toast(logs.length ? `Offer sent on ${logs.map(l => l.channel).join(', ')}` : 'No channel available for this client', !logs.length); loadLapsed();
+  });
 }
 
 /* ---------- gift cards ---------- */

@@ -95,6 +95,16 @@ DEFAULT_TEMPLATES = {
             "Book them here before they expire: {booking_link}\n\n{business_name}"
         ),
     },
+    "renewal_offer": {
+        "name": "Renewal offer (package ended)",
+        "subject": "We miss you at {business_name}",
+        "body": (
+            "Hi {client_name},\n\n"
+            "Your *{plan_name}* at *{business_name}* has finished. Great work on the sessions you've done!\n\n"
+            "Ready to keep the results coming? Reply to this message to renew, or book your next session here: {booking_link}\n\n"
+            "{business_name}"
+        ),
+    },
     "admin_session_reminder": {
         "name": "Owner reminder: upcoming session",
         "subject": "Upcoming session {time_relative}: {client_full_name}",
@@ -393,8 +403,10 @@ def send(db: Session, key: str, client: models.Client, appointment: Optional[mod
          subscription: Optional[models.Subscription] = None, extra: Optional[dict] = None,
          channels: Optional[List[str]] = None, raw_body: Optional[str] = None, raw_subject: Optional[str] = None,
          recipient_override: Optional[dict] = None, sync: bool = False,
-         append: Optional[str] = None) -> List[models.NotificationLog]:
-    """Render template `key` for the client and send on every channel they accept."""
+         append: Optional[str] = None, hold: bool = False) -> List[models.NotificationLog]:
+    """Render template `key` for the client and send on every channel they accept.
+
+    hold=True prepares the messages as "pending_approval": nothing goes out until the owner approves them."""
     settings = get_settings(db)
     if raw_body is not None:
         subject, body = raw_subject or settings.business_name, raw_body
@@ -417,29 +429,86 @@ def send(db: Session, key: str, client: models.Client, appointment: Optional[mod
             appointment_id=appointment.id if appointment else None,
             client_id=client.id if client.id else None,
             type=key, channel=channel, recipient=recipient,
-            status="queued", subject=subject if channel == "email" else None, content=body,
+            status="pending_approval" if hold else "queued", subject=subject if channel == "email" else None, content=body,
         )
         db.add(log)
         logs.append(log)
     db.commit()
+    if hold:
+        return logs
     for log in logs:
-        if settings.demo_mode:
-            log.status = "sent"
-            log.external_response = f"DEMO MODE: {log.channel} message logged, not sent"
-            _demo_log(log.channel, log.recipient, key, log.subject, body)
-            db.commit()
-            continue
-        enabled = {"whatsapp": settings.whatsapp_enabled, "sms": settings.sms_enabled, "email": settings.email_enabled}
-        if not enabled.get(log.channel):
-            log.status = "skipped"
-            log.external_response = f"{log.channel} not enabled in settings"
-            db.commit()
-            continue
-        if sync:
-            _deliver(log.id)
-        else:
-            threading.Thread(target=_deliver, args=(log.id,), daemon=True).start()
+        _dispatch(db, settings, log, sync)
     return logs
+
+
+def _dispatch(db: Session, settings: models.Setting, log: models.NotificationLog, sync: bool = False):
+    """Hand one queued message to its channel (or log it in demo mode)."""
+    if settings.demo_mode:
+        log.status = "sent"
+        log.external_response = f"DEMO MODE: {log.channel} message logged, not sent"
+        _demo_log(log.channel, log.recipient, log.type, log.subject, log.content)
+        db.commit()
+        return
+    enabled = {"whatsapp": settings.whatsapp_enabled, "sms": settings.sms_enabled, "email": settings.email_enabled}
+    if not enabled.get(log.channel):
+        log.status = "skipped"
+        log.external_response = f"{log.channel} not enabled in settings"
+        db.commit()
+        return
+    if sync:
+        _deliver(log.id)
+    else:
+        threading.Thread(target=_deliver, args=(log.id,), daemon=True).start()
+
+
+def approve_log(db: Session, log: models.NotificationLog, sync: bool = False):
+    """Owner approved a held message: send it now."""
+    log.status = "queued"
+    log.created_at = utcnow()  # the retry window counts from approval
+    db.commit()
+    _dispatch(db, get_settings(db), log, sync)
+    db.refresh(log)
+    return log
+
+
+def ended_without_renewal(db: Session, within_days: int = 120):
+    """Latest ended package per client, for clients with no usable or newer package."""
+    now = utcnow()
+    subs = db.query(models.Subscription).filter(models.Subscription.status.in_(("expired", "completed"))).all()
+    latest = {}
+    for s in subs:
+        ended = s.end_date if (s.status == "expired" and s.end_date) else (s.updated_at or s.created_at)
+        if ended < now - timedelta(days=within_days):
+            continue
+        if s.client_id not in latest or ended > latest[s.client_id][1]:
+            latest[s.client_id] = (s, ended)
+    out = []
+    for cid, (s, ended) in latest.items():
+        others = db.query(models.Subscription).filter(models.Subscription.client_id == cid, models.Subscription.id != s.id,
+                                                      models.Subscription.status.in_(("active", "renewed"))).all()
+        if any(o.status == "active" and o.sessions_remaining > 0 and (o.end_date is None or o.end_date >= now) for o in others) \
+                or any(o.created_at > s.created_at for o in others):
+            continue
+        if s.client and s.client.active:
+            out.append((s, ended))
+    return sorted(out, key=lambda x: x[1], reverse=True)
+
+
+def run_renewal_offer_job(db: Session):
+    """Prepare a renewal offer for each package that ended N days ago without a renewal. Held for the owner's approval."""
+    settings = get_settings(db)
+    if not getattr(settings, "renewal_offer_auto", True):
+        return 0
+    now, made = utcnow(), 0
+    for s, ended in ended_without_renewal(db):
+        wait = timedelta(days=settings.renewal_offer_days or 0)
+        if s.renewal_offer_at or (wait and now - ended < wait):
+            continue
+        send(db, "renewal_offer", s.client, subscription=s, hold=True)
+        s.renewal_offer_at = now
+        db.commit()
+        made += 1
+    return made
 
 
 # ---------------------------------------------------------------- high-level events
@@ -714,5 +783,9 @@ def run_all_jobs(db: Session):
     settings = get_settings(db)
     if not settings.last_daily_job_at or settings.last_daily_job_at < utcnow() - timedelta(hours=6):
         run_subscription_job(db)
+        try:
+            run_renewal_offer_job(db)
+        except Exception as e:
+            print(f"[jobs] renewal offers failed: {e}")
         settings.last_daily_job_at = utcnow()
         db.commit()

@@ -106,6 +106,46 @@ def create_subscription(sub: schemas.SubscriptionCreate, db: Session = Depends(g
     return db_sub
 
 
+@router.get("/not-renewed")
+def not_renewed(within_days: int = 120, db: Session = Depends(get_db)):
+    """Clients whose last package ended and who have not bought another one."""
+    now = utcnow()
+    out = []
+    for s, ended in notifications.ended_without_renewal(db, within_days):
+        c = s.client
+        offers = (db.query(models.NotificationLog).filter(models.NotificationLog.client_id == c.id,
+                                                          models.NotificationLog.type == "renewal_offer",
+                                                          models.NotificationLog.created_at >= (s.renewal_offer_at or ended) - timedelta(minutes=1))
+                  .order_by(models.NotificationLog.created_at.desc()).all()) if s.renewal_offer_at else []
+        offer = None
+        if offers:
+            statuses = {o.status for o in offers}
+            offer = "pending_approval" if "pending_approval" in statuses else "sent" if statuses & {"sent", "queued"} else offers[0].status
+        last_visit = max((a.start_time for a in c.appointments if a.status == "completed"), default=None)
+        out.append({"subscription_id": s.id, "client_id": c.id, "client_name": c.name, "client_phone": c.phone,
+                    "plan": s.plan.name if s.plan else "", "ended_on": ended, "days_since": max((now - ended).days, 0),
+                    "how_it_ended": "expired" if s.status == "expired" else "used up",
+                    "sessions_used": s.sessions_used, "sessions_total": s.sessions_total,
+                    "total_spent": round(float(sum(p.amount for p in c.payments)), 2), "last_visit": last_visit,
+                    "offer": offer, "offer_at": s.renewal_offer_at})
+    return out
+
+
+@router.post("/{subscription_id}/renewal-offer", response_model=List[schemas.NotificationLogResponse])
+def send_renewal_offer(subscription_id: int, db: Session = Depends(get_db)):
+    """Owner sends the renewal offer by hand (this is the approval), replacing any held copy."""
+    s = db.query(models.Subscription).filter(models.Subscription.id == subscription_id).first()
+    if not s:
+        raise HTTPException(status_code=404, detail="Subscription not found")
+    for held in db.query(models.NotificationLog).filter(models.NotificationLog.client_id == s.client_id,
+                                                         models.NotificationLog.type == "renewal_offer",
+                                                         models.NotificationLog.status == "pending_approval").all():
+        held.status, held.external_response = "discarded", "Replaced by a message sent by the owner"
+    s.renewal_offer_at = utcnow()
+    db.commit()
+    return notifications.send(db, "renewal_offer", s.client, subscription=s)
+
+
 @router.post("/{subscription_id}/renew", response_model=schemas.SubscriptionResponse)
 def renew_subscription(subscription_id: int, body: schemas.SubscriptionRenew, db: Session = Depends(get_db)):
     """Sell the client a new package based on this one, optionally carrying unused sessions over."""

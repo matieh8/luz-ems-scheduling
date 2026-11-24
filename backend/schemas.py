@@ -547,6 +547,8 @@ class SettingsResponse(BaseModel):
     follow_up_hours_after: int
     subscription_low_threshold: int
     subscription_expiry_notice_days: int
+    renewal_offer_auto: bool = True
+    renewal_offer_days: int = 7
     notify_admin_online_booking: bool
     push_bookings: bool = True
     push_session_reminders: bool = True
@@ -593,6 +595,8 @@ class SettingsUpdate(BaseModel):
     follow_up_hours_after: Optional[int] = None
     subscription_low_threshold: Optional[int] = None
     subscription_expiry_notice_days: Optional[int] = None
+    renewal_offer_auto: Optional[bool] = None
+    renewal_offer_days: Optional[int] = Field(None, ge=0, le=120)
     notify_admin_online_booking: Optional[bool] = None
     push_bookings: Optional[bool] = None
     push_session_reminders: Optional[bool] = None

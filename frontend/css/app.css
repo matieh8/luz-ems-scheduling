@@ -475,3 +475,8 @@ table.plain td { padding: 10px 14px; }
   body.printing { background: #fff; }
   .invoice { padding: 0; }
 }
+
+.badge-pending_approval { background: var(--warn-bg); color: var(--warn); }
+.badge-discarded { background: #ececf4; color: #4b4b63; }
+.approval-card { border-color: var(--warn); box-shadow: 0 0 0 3px var(--warn-bg), var(--shadow); }
+.approval-card .card-title .actions { margin-left: auto; }

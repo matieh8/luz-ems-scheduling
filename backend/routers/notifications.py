@@ -57,6 +57,46 @@ def retry(log_id: int, db: Session = Depends(get_db)):
     return log
 
 
+def _held(db: Session, log_id: int) -> models.NotificationLog:
+    log = db.query(models.NotificationLog).filter(models.NotificationLog.id == log_id).first()
+    if not log:
+        raise HTTPException(status_code=404, detail="Message not found")
+    if log.status != "pending_approval":
+        raise HTTPException(status_code=409, detail=f"This message is already {log.status}")
+    return log
+
+
+@router.get("/pending")
+def pending(db: Session = Depends(get_db)):
+    """Messages prepared automatically (e.g. renewal offers) that wait for the owner's OK."""
+    logs = (db.query(models.NotificationLog).filter(models.NotificationLog.status == "pending_approval")
+            .order_by(models.NotificationLog.created_at.desc(), models.NotificationLog.id.desc()).all())
+    return {"count": len(logs), "messages": [schemas.NotificationLogResponse.model_validate(l) for l in logs]}
+
+
+@router.post("/logs/{log_id}/approve", response_model=schemas.NotificationLogResponse)
+def approve(log_id: int, db: Session = Depends(get_db)):
+    return notifications.approve_log(db, _held(db, log_id))
+
+
+@router.post("/logs/{log_id}/discard", response_model=schemas.NotificationLogResponse)
+def discard(log_id: int, db: Session = Depends(get_db)):
+    log = _held(db, log_id)
+    log.status = "discarded"
+    log.external_response = "Discarded by the owner, not sent"
+    db.commit()
+    db.refresh(log)
+    return log
+
+
+@router.post("/approve-all")
+def approve_all(db: Session = Depends(get_db)):
+    logs = db.query(models.NotificationLog).filter(models.NotificationLog.status == "pending_approval").all()
+    for log in logs:
+        notifications.approve_log(db, log)
+    return {"approved": len(logs)}
+
+
 @router.post("/custom", response_model=List[schemas.NotificationLogResponse])
 def send_custom(body: schemas.CustomMessage, db: Session = Depends(get_db)):
     client = db.query(models.Client).filter(models.Client.id == body.client_id).first()

@@ -739,3 +739,52 @@ def test_invoice_for_a_payment(client):
     assert inv["lines"][1] == {"description": "Discount (INV10)", "amount": -10.0}
     assert inv["total"] == pay["amount"] == plan["price"] - 10 and inv["method"] == "card" and inv["currency"]
     assert client.get("/api/payments/999999/invoice").status_code == 404
+
+
+def test_not_renewed_offers_need_approval(client):
+    from backend.database import SessionLocal
+    from backend import notifications, models
+    plan = client.get("/api/subscriptions/plans").json()[0]
+    gone = client.post("/api/clients/", json={"name": "Lapsed Client", "phone": "0509990012"}).json()["id"]
+    back = client.post("/api/clients/", json={"name": "Renewed Client", "phone": "0509990013"}).json()["id"]
+    for cid in (gone, back):
+        client.post("/api/subscriptions/", json={"client_id": cid, "plan_id": plan["id"], "sessions_used": plan["sessions_included"],
+                                                 "send_notification": False, "record_payment": False})
+    client.post("/api/subscriptions/", json={"client_id": back, "plan_id": plan["id"], "send_notification": False, "record_payment": False})
+    db = SessionLocal()
+    try:
+        notifications.run_subscription_job(db)  # used-up packages become "completed"
+    finally:
+        db.close()
+
+    rows = client.get("/api/subscriptions/not-renewed").json()
+    names = [r["client_name"] for r in rows]
+    assert "Lapsed Client" in names and "Renewed Client" not in names
+    row = next(r for r in rows if r["client_name"] == "Lapsed Client")
+    assert row["plan"] == plan["name"] and row["days_since"] >= 0 and row["offer"] is None
+
+    # The automatic job only prepares the offer; nothing goes out until the owner approves
+    client.put("/api/settings/", json={"renewal_offer_days": 0, "renewal_offer_auto": True})
+    db = SessionLocal()
+    try:
+        notifications.run_renewal_offer_job(db)
+        notifications.run_renewal_offer_job(db)  # no duplicates
+    finally:
+        db.close()
+    pending = [l for l in client.get(f"/api/notifications/logs?client_id={gone}").json() if l["type"] == "renewal_offer"]
+    assert pending and all(l["status"] == "pending_approval" for l in pending)
+    assert len(pending) == len({l["channel"] for l in pending})
+    assert "Lapsed Client" in pending[0]["content"] or plan["name"] in pending[0]["content"]
+    assert next(r for r in client.get("/api/subscriptions/not-renewed").json() if r["client_name"] == "Lapsed Client")["offer"] == "pending_approval"
+    assert client.get("/api/notifications/pending").json()["count"] >= len(pending)
+
+    # Approve one, discard the rest
+    ok = client.post(f"/api/notifications/logs/{pending[0]['id']}/approve").json()
+    assert ok["status"] in ("sent", "queued", "skipped")
+    for l in pending[1:]:
+        assert client.post(f"/api/notifications/logs/{l['id']}/discard").json()["status"] == "discarded"
+    assert client.post(f"/api/notifications/logs/{pending[0]['id']}/discard").status_code == 409
+
+    # Sending by hand counts as approved
+    sent = client.post(f"/api/subscriptions/{row['subscription_id']}/renewal-offer").json()
+    assert sent and all(l["status"] != "pending_approval" for l in sent)

@@ -264,6 +264,7 @@ class Subscription(Base):
     renewed_from_id = Column(Integer, ForeignKey("subscriptions.id"), nullable=True)  # the package this one renews
     discount_code = Column(String, nullable=True)
     discount_amount = Column(Float, nullable=True)
+    renewal_offer_at = Column(DateTime, nullable=True)  # when a renewal offer was prepared/sent for this ended package
     low_notified_at = Column(DateTime, nullable=True)
     expiry_notified_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -362,6 +363,8 @@ class Setting(Base):
     follow_up_hours_after = Column(Integer, nullable=False, default=2)
     subscription_low_threshold = Column(Integer, nullable=False, default=2)
     subscription_expiry_notice_days = Column(Integer, nullable=False, default=7)
+    renewal_offer_auto = Column(Boolean, default=True)  # prepare renewal offers (held for approval)
+    renewal_offer_days = Column(Integer, nullable=False, default=7)  # days after a package ends
     notify_admin_online_booking = Column(Boolean, default=True)
 
     # Phone notifications (web push) for the admin app

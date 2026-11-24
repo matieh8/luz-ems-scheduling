@@ -623,3 +623,37 @@ def test_package_renewal(client):
     again = client.post(f"/api/subscriptions/{new['id']}/renew", json={"carry_over": False, "record_payment": False, "send_notification": False}).json()
     assert again["sessions_total"] == plan["sessions_included"]
     assert {s["id"]: s for s in client.get(f"/api/subscriptions/?client_id={cid}").json()}[new["id"]]["status"] == "active"
+
+
+def test_discount_codes(client):
+    plan = client.get("/api/subscriptions/plans").json()[0]
+    # Create: code is normalised to upper case, must be unique, percent capped at 100
+    d = client.post("/api/discounts/", json={"code": " summer20 ", "kind": "percent", "value": 20, "max_uses": 2}).json()
+    assert d["code"] == "SUMMER20" and d["used_count"] == 0
+    assert client.post("/api/discounts/", json={"code": "SUMMER20", "kind": "amount", "value": 5}).status_code == 409
+    assert client.post("/api/discounts/", json={"code": "BAD", "kind": "percent", "value": 150}).status_code == 422
+    client.post("/api/discounts/", json={"code": "OLD", "kind": "amount", "value": 100, "valid_until": "2020-01-01T00:00:00Z"})
+
+    # Check before selling
+    c = client.get(f"/api/discounts/check?code=summer20&plan_id={plan['id']}").json()
+    assert c["valid"] and c["discount"] == round(plan["price"] * .2, 2) and c["final_price"] == round(plan["price"] * .8, 2)
+    assert client.get(f"/api/discounts/check?code=OLD&plan_id={plan['id']}").json() == {"valid": False, "reason": "This code has expired"}
+    assert not client.get(f"/api/discounts/check?code=NOPE&plan_id={plan['id']}").json()["valid"]
+
+    # Applied on a sale: price, payment and usage count all follow
+    cid = client.post("/api/clients/", json={"name": "Discount Client", "phone": "0509990006"}).json()["id"]
+    s = client.post("/api/subscriptions/", json={"client_id": cid, "plan_id": plan["id"], "discount_code": "summer20",
+                                                 "payment_method": "cash", "send_notification": False}).json()
+    assert s["price_paid"] == round(plan["price"] * .8, 2) and s["discount_code"] == "SUMMER20"
+    assert s["discount_amount"] == round(plan["price"] * .2, 2) and s["paid_amount"] == s["price_paid"]
+    assert client.post("/api/subscriptions/", json={"client_id": cid, "plan_id": plan["id"], "discount_code": "OLD",
+                                                    "send_notification": False}).status_code == 400
+    # ...and on a renewal; then the code is used up
+    r = client.post(f"/api/subscriptions/{s['id']}/renew", json={"discount_code": "SUMMER20", "carry_over": False, "send_notification": False}).json()
+    assert r["price_paid"] == round(plan["price"] * .8, 2)
+    assert next(x for x in client.get("/api/discounts/").json() if x["code"] == "SUMMER20")["used_count"] == 2
+    assert client.get(f"/api/discounts/check?code=SUMMER20&plan_id={plan['id']}").json()["reason"] == "This code has been used up"
+
+    # Switch off / delete
+    assert client.put(f"/api/discounts/{d['id']}", json={"active": False}).json()["active"] is False
+    assert client.delete(f"/api/discounts/{d['id']}").status_code == 200

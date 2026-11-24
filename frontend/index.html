@@ -137,10 +137,12 @@
           <button class="tab active" onclick="subTab('active', this)">Active</button>
           <button class="tab" onclick="subTab('all', this)">All</button>
           <button class="tab" onclick="subTab('plans', this)">Plans</button>
+          <button class="tab" onclick="subTab('codes', this)">Discount codes</button>
         </div>
         <div id="sub-active" class="subpanel active"></div>
         <div id="sub-all" class="subpanel"></div>
         <div id="sub-plans" class="subpanel"></div>
+        <div id="sub-codes" class="subpanel"></div>
       </section>
 
       <!-- Payments -->
@@ -397,6 +399,9 @@
         <div class="form-group"><label>Used</label><input type="number" id="subscription-used" class="input" value="0"></div>
         <div class="form-group"><label>Price</label><input type="number" step="0.01" id="subscription-price" class="input"></div>
       </div>
+      <div class="form-group" id="subscription-discount-row"><label>Discount code</label>
+        <div style="display:flex;gap:8px"><input type="text" id="subscription-code" class="input" placeholder="Optional, e.g. SUMMER20" autocapitalize="characters" oninput="$('subscription-code-result').textContent=''"><button type="button" class="btn btn-secondary btn-sm" onclick="checkSubscriptionCode()">Apply</button></div>
+        <div class="help" id="subscription-code-result" aria-live="polite"></div></div>
       <div class="form-row" id="subscription-payment-row">
         <div class="form-group"><label>Payment</label><select id="subscription-method" class="input"><option value="cash">Paid - cash</option><option value="card">Paid - card</option><option value="transfer">Paid - bank transfer</option><option value="online">Paid - online</option><option value="">Not paid yet</option></select></div>
         <div class="form-group"><label>Status</label><select id="subscription-status" class="input"><option value="active">Active</option><option value="expired">Expired</option><option value="cancelled">Cancelled</option><option value="completed">Completed</option></select></div>
@@ -477,7 +482,7 @@
   <script src="/js/calendar.js?v=6"></script>
   <script src="/js/booking.js?v=4"></script>
   <script src="/js/clients.js?v=7"></script>
-  <script src="/js/money.js?v=3"></script>
+  <script src="/js/money.js?v=5"></script>
   <script src="/js/expenses.js?v=3"></script>
   <script src="/js/messages.js?v=2"></script>
   <script src="/js/push.js?v=1"></script>

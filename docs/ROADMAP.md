@@ -40,5 +40,5 @@ Work lands on `staging` first, then `main` (live) after the owner tries it.
 🔑 77–82 Assistant, natural-language questions, monthly analysis, PDF reports (needs an AI API key and a monthly cost)
 
 ## 83–90 Security and SaaS
-🟡 83 Server-side login (single admin password today) · ⬜ 84 Automatic database backups · 🟡 85 Data protection · ⬜ 86 Audit log ·
+🟡 83 Server-side login (single admin password today) · ✅ 84 Automatic daily database backups (14 kept on the server; download for off-site copy) · 🟡 85 Data protection · ⬜ 86 Audit log ·
 🔑 87–90 Multi-tenant SaaS, subscriptions, super admin, selling to other studios (big business decision)

@@ -48,7 +48,7 @@ async function openClientDetail(id, tab) {
   $('cd-body').innerHTML = `
     ${c.health_notes ? `<div class="health-flag"><strong>Health &amp; restrictions</strong><div>${esc(c.health_notes)}</div></div>` : ''}
     <div class="grid grid-4 mb">
-      <div class="stat"><div class="stat-label">Sessions done</div><div class="stat-value">${c.completed_appointments}</div><div class="stat-sub">${c.no_shows} no-shows${c.attendance_rate !== null && c.attendance_rate !== undefined ? ` · ${c.attendance_rate}% attended` : ''}</div></div>
+      <div class="stat"><div class="stat-label">Sessions done</div><div class="stat-value">${c.completed_appointments}</div><div class="stat-sub">${c.no_shows} no-shows · ${c.late_count || 0} late${c.attendance_rate !== null && c.attendance_rate !== undefined ? ` · ${c.attendance_rate}% attended` : ''}</div></div>
       <div class="stat"><div class="stat-label">Total spent</div><div class="stat-value">${money(c.total_spent)}</div><div class="stat-sub">${c.outstanding > 0 ? `<span style="color:var(--bad)">owes ${money(c.outstanding)}</span>` : 'nothing owed'}</div></div>
       <div class="stat"><div class="stat-label">Package left</div><div class="stat-value">${c.sessions_remaining}</div><div class="stat-sub">sessions</div></div>
       <div class="stat"><div class="stat-label">Regularity</div><div class="stat-value" style="font-size:1.1rem">${r.label}</div><div class="stat-sub">${c.days_since_last !== null && c.days_since_last !== undefined ? `last ${c.days_since_last}d ago` : 'no sessions yet'}${c.avg_gap_days ? ` · usually every ${Math.round(c.avg_gap_days)}d` : ''}</div></div>

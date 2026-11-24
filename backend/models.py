@@ -134,6 +134,7 @@ class Appointment(Base):
     # scheduled | confirmed | completed | cancelled | no_show
     status = Column(String, nullable=False, default="scheduled", index=True)
     price = Column(Float, nullable=False, default=0.0)  # snapshot at booking; 0 when covered by a subscription
+    late_minutes = Column(Integer, nullable=True)  # minutes the client arrived late (None = not recorded)
     notes = Column(Text, nullable=True)
     source = Column(String, nullable=False, default="admin")  # admin | online
     public_token = Column(String, nullable=True, unique=True, default=_token)

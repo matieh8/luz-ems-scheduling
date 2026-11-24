@@ -51,6 +51,7 @@ def summarize(c: models.Client) -> dict:
         total_appointments=len(appts),
         completed_appointments=len(completed),
         no_shows=no_shows,
+        late_count=len([a for a in completed if (a.late_minutes or 0) > 0]),
         total_spent=float(sum(p.amount for p in c.payments)),
         outstanding=float(outstanding),
         sessions_remaining=int(remaining),

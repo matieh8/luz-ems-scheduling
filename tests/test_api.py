@@ -544,3 +544,41 @@ def test_retention_levels():
     assert retention(gone, 0, True, now)["risk"] == "regular"  # already booked again
     r = retention(weekly, 2, False, now)
     assert r["attendance_rate"] == 80.0 and r["avg_gap_days"] == 7.0 and r["days_since_last"] == 3
+
+
+def test_progress_photos_need_consent_and_stay_private(client):
+    import os
+    from backend.database import DATA_DIR
+    cid = client.post("/api/clients/", json={"name": "Photo Client", "phone": "0509990003"}).json()["id"]
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+    up = lambda **kw: client.post(f"/api/clients/{cid}/photos", files={"file": ("front.png", png, "image/png")},
+                                  data={"pose": "front", **kw})
+
+    # No consent recorded yet: refused
+    r = up()
+    assert r.status_code == 409 and "consent" in r.json()["detail"].lower()
+    client.put(f"/api/clients/{cid}", json={"photo_consent": True})
+    c = client.get(f"/api/clients/{cid}").json()
+    assert c["photo_consent"] is True and c["photo_consent_at"]
+
+    # Only images, bad pose rejected
+    assert client.post(f"/api/clients/{cid}/photos", files={"file": ("x.txt", b"hello", "text/plain")}, data={"pose": "front"}).status_code == 422
+    assert up(pose="upside").status_code == 422
+    p = up(notes="Week 1").json()
+    assert p["pose"] == "front" and p["notes"] == "Week 1"
+    assert [x["id"] for x in client.get(f"/api/clients/{cid}/photos").json()] == [p["id"]]
+
+    # The file is served only to a signed-in admin
+    assert client.get(f"/api/clients/photos/{p['id']}/file").content == png
+    with TestClient(app) as anon:
+        assert anon.get(f"/api/clients/photos/{p['id']}/file").status_code == 401
+    path = os.path.join(DATA_DIR, "photos", str(cid))
+    assert len(os.listdir(path)) == 1
+
+    # Deleting the photo removes the file; withdrawing consent deletes the rest
+    p2 = up(pose="side").json()
+    assert client.delete(f"/api/clients/photos/{p['id']}").status_code == 200
+    assert len(os.listdir(path)) == 1
+    client.put(f"/api/clients/{cid}", json={"photo_consent": False})
+    assert client.get(f"/api/clients/{cid}/photos").json() == [] and os.listdir(path) == []
+    assert client.get(f"/api/clients/photos/{p2['id']}/file").status_code == 404

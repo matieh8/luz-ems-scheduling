@@ -413,3 +413,14 @@ table.plain td { padding: 10px 14px; }
   .note-form { grid-template-columns: minmax(0, 1fr); }
   .measure-grid .input, .note-form .input { font-size: 16px; }
 }
+
+/* Progress photos */
+.consent-box { background: var(--warn-bg); border-radius: 12px; padding: 12px 14px; font-size: .86rem; }
+.consent-box p { margin: 0 0 8px; }
+.compare { display: grid; gap: 12px; margin-bottom: 12px; }
+.compare-imgs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin-top: 4px; }
+.compare figure, .photo { margin: 0; }
+.compare img, .photo img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 10px; background: var(--bg); display: block; }
+.compare figcaption { font-size: .75rem; color: var(--text-2); margin-top: 4px; }
+.photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+.photo figcaption { display: flex; justify-content: space-between; align-items: center; font-size: .75rem; color: var(--text-2); margin-top: 4px; gap: 4px; }

@@ -646,3 +646,36 @@ def test_discount_codes(client):
     # Switch off / delete
     assert client.put(f"/api/discounts/{d['id']}", json={"active": False}).json()["active"] is False
     assert client.delete(f"/api/discounts/{d['id']}").status_code == 200
+
+
+def test_gift_cards(client):
+    plan = client.get("/api/subscriptions/plans").json()[0]
+    buyer = client.post("/api/clients/", json={"name": "Gift Buyer", "phone": "0509990007"}).json()["id"]
+    paid_before = client.get("/api/dashboard/overview").json()["kpis"]["revenue"]["value"]
+
+    # Sell: a code is made, the buyer pays now (revenue counts at the sale)
+    g = client.post("/api/gift-cards/", json={"plan_id": plan["id"], "purchaser_client_id": buyer, "recipient_name": "Lucky Friend",
+                                              "recipient_phone": "0509990008", "message": "Happy birthday!", "payment_method": "card"}).json()
+    assert g["code"].startswith("GIFT-") and len(g["code"]) == 14 and g["status"] == "active"
+    assert g["price_paid"] == plan["price"] and g["valid_until"]
+    assert client.get("/api/dashboard/overview").json()["kpis"]["revenue"]["value"] == paid_before + plan["price"]
+    assert client.get(f"/api/gift-cards/lookup?code={g['code'].lower()}").json()["id"] == g["id"]
+    assert client.get("/api/gift-cards/lookup?code=GIFT-NOPE-NOPE").status_code == 404
+    # A new buyer can be entered by name and phone
+    g2 = client.post("/api/gift-cards/", json={"plan_id": plan["id"], "purchaser_name": "Walk-in Buyer", "purchaser_phone": "0509990009",
+                                               "recipient_name": "Someone", "payment_method": None}).json()
+    assert any(c["name"] == "Walk-in Buyer" for c in client.get("/api/clients/?q=Walk-in").json())
+
+    # Redeem: the recipient becomes a client with a paid package
+    r = client.post(f"/api/gift-cards/{g['id']}/redeem", json={})
+    assert r.status_code == 200, r.text
+    sub = r.json()
+    assert sub["plan_id"] == plan["id"] and sub["sessions_total"] == plan["sessions_included"] and sub["paid_amount"] == plan["price"]
+    assert sub["client"]["name"] == "Lucky Friend" and "GIFT-" in sub["notes"]
+    cards = {c["id"]: c for c in client.get("/api/gift-cards/").json()}
+    assert cards[g["id"]]["status"] == "redeemed" and cards[g["id"]]["redeemed_client_id"] == sub["client_id"]
+    assert client.post(f"/api/gift-cards/{g['id']}/redeem", json={}).status_code == 409
+
+    # Cancel an unused card; it can't be redeemed after
+    assert client.post(f"/api/gift-cards/{g2['id']}/cancel").json()["status"] == "cancelled"
+    assert client.post(f"/api/gift-cards/{g2['id']}/redeem", json={"client_id": buyer}).status_code == 409

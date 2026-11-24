@@ -292,6 +292,30 @@ class DiscountCode(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class GiftCard(Base):
+    """Sessions sold as a gift: paid by the buyer now, turned into a package for the recipient later."""
+    __tablename__ = "gift_cards"
+
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String, nullable=False, unique=True, index=True)  # GIFT-XXXX-XXXX
+    plan_id = Column(Integer, ForeignKey("subscription_plans.id"), nullable=False)
+    price_paid = Column(Float, nullable=False)
+    purchaser_client_id = Column(Integer, ForeignKey("clients.id"), nullable=False)
+    recipient_name = Column(String, nullable=False)
+    recipient_phone = Column(String, nullable=True)
+    message = Column(Text, nullable=True)
+    status = Column(String, nullable=False, default="active")  # active | redeemed | cancelled
+    valid_until = Column(DateTime, nullable=True)
+    payment_id = Column(Integer, ForeignKey("payments.id"), nullable=True)
+    redeemed_at = Column(DateTime, nullable=True)
+    redeemed_client_id = Column(Integer, ForeignKey("clients.id"), nullable=True)
+    redeemed_subscription_id = Column(Integer, ForeignKey("subscriptions.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    plan = relationship("SubscriptionPlan")
+    purchaser = relationship("Client", foreign_keys=[purchaser_client_id])
+
+
 class Setting(Base):
     __tablename__ = "settings"
 

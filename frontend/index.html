@@ -133,16 +133,18 @@
           <div><h2>Packages</h2><div class="sub">Session packs and memberships</div></div>
           <div class="actions"><button class="btn btn-secondary" onclick="openPlanModal()">+ New plan</button><button class="btn btn-primary" onclick="openSubscriptionModal()">Sell package</button></div>
         </div>
-        <div class="tabs">
+        <div class="tabs tabs-scroll">
           <button class="tab active" onclick="subTab('active', this)">Active</button>
           <button class="tab" onclick="subTab('all', this)">All</button>
           <button class="tab" onclick="subTab('plans', this)">Plans</button>
           <button class="tab" onclick="subTab('codes', this)">Discount codes</button>
+          <button class="tab" onclick="subTab('gifts', this)">Gift cards</button>
         </div>
         <div id="sub-active" class="subpanel active"></div>
         <div id="sub-all" class="subpanel"></div>
         <div id="sub-plans" class="subpanel"></div>
         <div id="sub-codes" class="subpanel"></div>
+        <div id="sub-gifts" class="subpanel"></div>
       </section>
 
       <!-- Payments -->
@@ -482,7 +484,7 @@
   <script src="/js/calendar.js?v=6"></script>
   <script src="/js/booking.js?v=4"></script>
   <script src="/js/clients.js?v=7"></script>
-  <script src="/js/money.js?v=5"></script>
+  <script src="/js/money.js?v=6"></script>
   <script src="/js/expenses.js?v=3"></script>
   <script src="/js/messages.js?v=2"></script>
   <script src="/js/push.js?v=1"></script>

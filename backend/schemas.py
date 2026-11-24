@@ -11,10 +11,44 @@ class ClientBase(BaseModel):
     notes: Optional[str] = None
     date_of_birth: Optional[str] = None
     source: Optional[str] = None
+    health_notes: Optional[str] = None
     notify_whatsapp: bool = True
     notify_sms: bool = False
     notify_email: bool = True
     active: bool = True
+
+
+class MeasurementCreate(BaseModel):
+    measured_at: Optional[datetime] = None
+    weight_kg: Optional[float] = Field(None, gt=0, lt=400)
+    body_fat_pct: Optional[float] = Field(None, ge=0, le=80)
+    muscle_kg: Optional[float] = Field(None, gt=0, lt=200)
+    waist_cm: Optional[float] = Field(None, gt=0, lt=300)
+    hips_cm: Optional[float] = Field(None, gt=0, lt=300)
+    chest_cm: Optional[float] = Field(None, gt=0, lt=300)
+    arm_cm: Optional[float] = Field(None, gt=0, lt=150)
+    thigh_cm: Optional[float] = Field(None, gt=0, lt=200)
+    notes: Optional[str] = None
+
+
+class MeasurementResponse(MeasurementCreate):
+    id: int
+    client_id: int
+    measured_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ClientNoteCreate(BaseModel):
+    kind: str = Field("note", pattern="^(note|call|whatsapp|visit|injury|email)$")
+    text: str = Field(..., min_length=1, max_length=4000)
+    author: Optional[str] = None
+
+
+class ClientNoteResponse(ClientNoteCreate):
+    id: int
+    client_id: int
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ClientCreate(ClientBase):
@@ -28,6 +62,7 @@ class ClientUpdate(BaseModel):
     notes: Optional[str] = None
     date_of_birth: Optional[str] = None
     source: Optional[str] = None
+    health_notes: Optional[str] = None
     notify_whatsapp: Optional[bool] = None
     notify_sms: Optional[bool] = None
     notify_email: Optional[bool] = None
@@ -50,6 +85,10 @@ class ClientSummary(ClientResponse):
     sessions_remaining: int = 0
     last_visit: Optional[datetime] = None
     next_visit: Optional[datetime] = None
+    risk: str = "new"  # new | regular | slipping | at_risk | lapsed
+    attendance_rate: Optional[float] = None
+    avg_gap_days: Optional[float] = None
+    days_since_last: Optional[int] = None
 
 
 # ---------- Staff ----------

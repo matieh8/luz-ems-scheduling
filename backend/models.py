@@ -293,6 +293,38 @@ class DiscountCode(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class Device(Base):
+    """An EMS machine or suit, with a service interval."""
+    __tablename__ = "devices"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    model = Column(String, nullable=True)
+    serial_number = Column(String, nullable=True)
+    purchased_on = Column(String, nullable=True)  # YYYY-MM-DD
+    status = Column(String, nullable=False, default="active")  # active | maintenance | retired
+    service_every_days = Column(Integer, nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    maintenance = relationship("DeviceMaintenance", back_populates="device", cascade="all, delete-orphan")
+
+
+class DeviceMaintenance(Base):
+    __tablename__ = "device_maintenance"
+
+    id = Column(Integer, primary_key=True, index=True)
+    device_id = Column(Integer, ForeignKey("devices.id"), nullable=False, index=True)
+    done_on = Column(String, nullable=False)  # YYYY-MM-DD
+    kind = Column(String, nullable=False, default="service")  # service | repair | inspection | cleaning
+    cost = Column(Float, nullable=True)
+    notes = Column(Text, nullable=True)
+    expense_id = Column(Integer, ForeignKey("expenses.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    device = relationship("Device", back_populates="maintenance")
+
+
 class AuditLog(Base):
     """Every successful change made through the admin API: who/when/what, with the data sent (secrets hidden)."""
     __tablename__ = "audit_logs"

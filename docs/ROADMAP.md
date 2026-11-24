@@ -4,7 +4,7 @@ Status of the owner's checklist (items 1–90). ✅ done · 🟡 partly · ⬜ n
 Work lands on `staging` first, then `main` (live) after the owner tries it.
 
 ## 1–17 Design and dashboard
-✅ 1 Premium Emerald theme · ✅ 2 New dashboard · ⬜ 3 Dark mode · ✅ 4 Sidebar/icons · ✅ 5 Responsive · ✅ 6 Unified type/icons/cards · ✅ 7–17 Dashboard figures
+✅ 1 Premium Emerald theme · ✅ 2 New dashboard · ✅ 3 Dark mode (light / dark / follow device) · ✅ 4 Sidebar/icons · ✅ 5 Responsive · ✅ 6 Unified type/icons/cards · ✅ 7–17 Dashboard figures
 
 ## 18–24 CRM
 ✅ 18 Client profile · ✅ 19 Payments, packages, sessions history · ✅ 20 Weight, measurements, body fat · ✅ 21 Before/after photos with consent ·

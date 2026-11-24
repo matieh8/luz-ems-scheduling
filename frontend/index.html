@@ -14,7 +14,9 @@
   <meta name="apple-mobile-web-app-title" content="LUZ EMS">
   <meta name="theme-color" content="#f4f6f5">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/app.css?v=16">
+  <script>/* theme before first paint: light | dark | auto (follows the phone/computer) */
+    (function () { var t = 'auto'; try { t = localStorage.getItem('luz_theme') || 'auto'; } catch (e) {} document.documentElement.setAttribute('data-theme', t); })();</script>
+  <link rel="stylesheet" href="/css/app.css?v=18">
 </head>
 <body>
   <div class="login-overlay" id="login">
@@ -49,6 +51,11 @@
         <button data-page="settings" onclick="go('settings')"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg> Settings</button>
       </nav>
       <div class="sidebar-footer">
+        <div class="theme-switch" role="group" aria-label="Theme">
+          <button data-t="light" onclick="setTheme('light')" title="Light" aria-label="Light theme"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button>
+          <button data-t="auto" onclick="setTheme('auto')" title="Same as this device" aria-label="Automatic theme"><svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg></button>
+          <button data-t="dark" onclick="setTheme('dark')" title="Dark" aria-label="Dark theme"><svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg></button>
+        </div>
         <a href="/book" target="_blank">Booking page ↗</a>
         <button class="btn btn-ghost btn-xs" onclick="logout()">Sign out</button>
       </div>
@@ -503,7 +510,7 @@
 
   <div class="toast" id="toast"></div>
 
-  <script src="/js/core.js?v=3"></script>
+  <script src="/js/core.js?v=4"></script>
   <script src="/js/calendar.js?v=6"></script>
   <script src="/js/booking.js?v=4"></script>
   <script src="/js/clients.js?v=7"></script>

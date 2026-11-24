@@ -1,6 +1,31 @@
 /* Settings page: business, hours, scheduling, online booking, channels, automations, catalog */
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+/* ---------- database backups ---------- */
+async function loadBackups() {
+  const box = $('backups-card'); if (!box) return;
+  const r = await api('GET', '/backups/');
+  const kb = n => n > 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`;
+  box.innerHTML = `<div class="card-title">Backups <button class="btn btn-secondary btn-sm" id="bk-now" onclick="backupNow()">Back up now</button></div>
+    <p class="small muted" style="margin:0 0 10px">A full copy of the database is made automatically once a day; the newest ${r.keep} are kept on the server. They are on the same server as the app, so download one now and then and keep it somewhere safe (Google Drive, your laptop). Photos are not inside these copies.</p>
+    ${r.backups.length ? `<div class="table-wrap"><table class="plain"><thead><tr><th>Backup</th><th>Made</th><th class="num">Size</th><th></th></tr></thead><tbody>${r.backups.map((b, i) => `<tr>
+      <td class="mono small">${esc(b.name)}${i === 0 ? ' <span class="chip">latest</span>' : ''}</td><td class="small">${fmtDT(b.created_at)}</td><td class="num small">${kb(b.size)}</td>
+      <td class="num"><button class="btn btn-ghost btn-xs" onclick="downloadBackup('${esc(b.name)}')">Download</button></td></tr>`).join('')}</tbody></table></div>`
+      : '<div class="empty small">No backups yet. The first one is made within a minute of the server starting, or press Back up now.</div>'}`;
+}
+async function backupNow() {
+  guard(async () => { $('bk-now').disabled = true; try { const b = await api('POST', '/backups/'); toast(`Backup made: ${b.name}`); } finally { loadBackups(); } });
+}
+async function downloadBackup(name) {
+  guard(async () => {
+    const r = await fetch(`${API}/backups/${encodeURIComponent(name)}`, { headers: { Authorization: `Bearer ${S.token}` } });
+    if (!r.ok) throw new Error('Download failed');
+    const url = URL.createObjectURL(await r.blob()); const a = document.createElement('a');
+    a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000);
+  });
+}
+
 async function loadSettings() {
+  loadBackups();
   const [s, hours] = await Promise.all([api('GET', '/settings/'), api('GET', '/settings/hours')]); S.settings = s;
   const row = (id, label, help, type = 'text', extra = '') => `<div class="form-group"><label>${label}</label><input type="${type}" id="st-${id}" class="input" value="${esc(s[id] ?? '')}" ${extra}>${help ? `<div class="help">${help}</div>` : ''}</div>`;
   const tog = (id, label, help) => `<div class="setting-row"><div><strong>${label}</strong>${help ? `<p>${help}</p>` : ''}</div><label class="toggle"><input type="checkbox" id="st-${id}" ${s[id] ? 'checked' : ''}><span class="slider"></span></label></div>`;

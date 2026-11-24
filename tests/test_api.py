@@ -777,3 +777,36 @@ def test_not_renewed_offers_need_approval(client):
     # Sending by hand counts as approved
     sent = client.post(f"/api/subscriptions/{row['subscription_id']}/renewal-offer").json()
     assert sent and all(l["status"] != "pending_approval" for l in sent)
+
+
+def test_database_backups(client):
+    import os, sqlite3
+    from backend import backups
+    from backend.database import DATA_DIR
+    r = client.post("/api/backups/")
+    assert r.status_code == 200, r.text
+    b = r.json()
+    assert b["name"].startswith("app-") and b["name"].endswith(".db") and b["size"] > 0
+    path = os.path.join(DATA_DIR, "backups", b["name"])
+    con = sqlite3.connect(path)
+    try:  # a complete, readable copy of the live database
+        assert con.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+        assert con.execute("SELECT count(*) FROM clients").fetchone()[0] >= 1
+    finally:
+        con.close()
+    listed = client.get("/api/backups/").json()
+    assert listed["backups"][0]["name"] == b["name"] and listed["keep"] >= 7
+    dl = client.get(f"/api/backups/{b['name']}")
+    assert dl.status_code == 200 and dl.content[:15] == b"SQLite format 3"
+    assert client.get("/api/backups/..%2Fapp.db").status_code in (400, 404)
+    assert client.get("/api/backups/app.db").status_code == 400
+    with TestClient(app) as anon:
+        assert anon.get(f"/api/backups/{b['name']}").status_code == 401
+
+    # Daily job makes at most one backup a day and keeps only the newest N
+    assert backups.run_daily_backup() is None  # one already made today
+    folder = os.path.join(DATA_DIR, "backups")
+    for i in range(20):
+        open(os.path.join(folder, f"app-2020-01-{i + 1:02d}_000000.db"), "wb").write(b"SQLite format 3\x00old")
+    backups.prune(keep=5)
+    assert len([f for f in os.listdir(folder) if f.endswith(".db")]) == 5 and b["name"] in os.listdir(folder)

@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from backend.auth import require_auth, ensure_admin_password
 from backend.database import DATA_DIR, ROOT_DIR, SessionLocal
 from backend.migrate import run_migrations
-from backend.routers import (appointments, auth, clients, dashboard, discounts, expenses, giftcards, notifications, payments, public,
+from backend.routers import (appointments, auth, backups, clients, dashboard, discounts, expenses, giftcards, notifications, payments, public,
                              push, reports, services, settings, staff, subscriptions)
 from backend.seed import seed_data
 
@@ -163,6 +163,13 @@ async def lifespan(app: FastAPI):
             print(f"[jobs] error: {e}")
         finally:
             db.close()
+        try:
+            from backend.backups import run_daily_backup
+            made = run_daily_backup()
+            if made:
+                print(f"[backup] {made['name']} ({made['size']} bytes)")
+        except Exception as e:
+            print(f"[backup] failed: {e}")
 
     if os.environ.get("LUZ_DISABLE_JOBS") != "1":
         scheduler.add_job(tick, "interval", minutes=1, id="jobs", replace_existing=True)
@@ -188,7 +195,7 @@ protected = [Depends(require_auth)]
 app.include_router(expenses.router, dependencies=protected)
 for r in (clients.router, staff.router, services.router, appointments.router, appointments.blocked_router,
           settings.router, dashboard.router, notifications.router, subscriptions.router, payments.router,
-          reports.router, push.router, discounts.router, giftcards.router):
+          reports.router, push.router, discounts.router, giftcards.router, backups.router):
     app.include_router(r, dependencies=protected)
 
 

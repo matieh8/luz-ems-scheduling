@@ -15,7 +15,7 @@ Work lands on `staging` first, then `main` (live) after the owner tries it.
 ✅ 29 Attendance, no-show, late minutes · ✅ 30 Reminders
 
 ## 31–37 Packages
-✅ 31–34 Plans, price, sessions, validity, usage, expiry alerts · ✅ 35 Renewal (with carry-over) · ⬜ 36 Discount codes · ⬜ 37 Gift cards
+✅ 31–34 Plans, price, sessions, validity, usage, expiry alerts · ✅ 35 Renewal (with carry-over) · ✅ 36 Discount codes · ✅ 37 Gift cards
 
 ## 38–46 Money
 ✅ 38–41 Payments, expenses, net profit, money owed · ⬜ 42 Cash flow · ⬜ 43 Average revenue per client · ⬜ 44 Profit per service/package ·

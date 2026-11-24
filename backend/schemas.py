@@ -240,6 +240,43 @@ class DiscountResponse(DiscountCreate):
     model_config = ConfigDict(from_attributes=True)
 
 
+class GiftCardCreate(BaseModel):
+    plan_id: int
+    purchaser_client_id: Optional[int] = None
+    purchaser_name: Optional[str] = None      # used when the buyer is not a client yet
+    purchaser_phone: Optional[str] = None
+    recipient_name: str = Field(..., min_length=1)
+    recipient_phone: Optional[str] = None
+    message: Optional[str] = None
+    price_paid: Optional[float] = Field(None, ge=0)
+    payment_method: Optional[str] = "cash"    # None = not paid yet
+    valid_days: int = Field(365, ge=1, le=1825)
+
+
+class GiftCardRedeem(BaseModel):
+    client_id: Optional[int] = None           # default: find or create the recipient by phone / name
+
+
+class GiftCardResponse(BaseModel):
+    id: int
+    code: str
+    plan_id: int
+    price_paid: float
+    purchaser_client_id: int
+    recipient_name: str
+    recipient_phone: Optional[str] = None
+    message: Optional[str] = None
+    status: str
+    valid_until: Optional[datetime] = None
+    redeemed_at: Optional[datetime] = None
+    redeemed_client_id: Optional[int] = None
+    redeemed_subscription_id: Optional[int] = None
+    created_at: datetime
+    plan_name: Optional[str] = None
+    purchaser_name: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
+
+
 class SubscriptionUpdate(BaseModel):
     client_id: Optional[int] = None
     plan_id: Optional[int] = None

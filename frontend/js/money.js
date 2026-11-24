@@ -36,6 +36,7 @@ function subTab(t, el) { SUBS.tab = t; document.querySelectorAll('#page-subscrip
 async function loadSubscriptions() {
   if (SUBS.tab === 'plans') return loadPlans();
   if (SUBS.tab === 'codes') return loadCodes();
+  if (SUBS.tab === 'gifts') return loadGifts();
   const subs = await api('GET', `/subscriptions/${SUBS.tab === 'active' ? '?active=true' : ''}`);
   $('sub-' + SUBS.tab).innerHTML = subsTable(subs);
 }
@@ -138,6 +139,65 @@ async function checkSubscriptionCode() {
   const price = parseFloat(val('subscription-price'));
   const r = await api('GET', `/discounts/check?code=${encodeURIComponent(code)}&plan_id=${val('subscription-plan')}${isNaN(price) ? '' : '&price=' + price}`);
   out.innerHTML = r.valid ? `<span style="color:var(--good);font-weight:600">✓ ${esc(r.label)}: client pays ${money(r.final_price)} (saves ${money(r.discount)})</span>` : `<span style="color:var(--bad)">${esc(r.reason)}</span>`;
+}
+
+/* ---------- gift cards ---------- */
+function giftStatus(g) {
+  if (g.status === 'active' && g.valid_until && parseISO(g.valid_until) < new Date()) return '<span class="badge badge-expired">expired</span>';
+  return g.status === 'active' ? badge('active') : g.status === 'redeemed' ? '<span class="badge badge-completed">redeemed</span>' : '<span class="badge badge-cancelled">cancelled</span>';
+}
+async function loadGifts() {
+  const [gifts, plans] = await Promise.all([api('GET', '/gift-cards/'), api('GET', '/subscriptions/plans?active_only=true')]);
+  $('sub-gifts').innerHTML = `<details class="add-box" ${gifts.length ? '' : 'open'}><summary>+ Sell a gift card</summary>
+    <div class="form-group"><label>Gift</label><select id="gc-plan" class="input">${plans.map(p => `<option value="${p.id}">${esc(p.name)} · ${p.sessions_included} sessions · ${money(p.price)}</option>`).join('')}</select></div>
+    <div class="form-group"><label>Bought by</label><select id="gc-buyer" class="input" onchange="$('gc-new-buyer').style.display = this.value ? 'none' : 'grid'"><option value="">New person (not a client yet)</option>${clientOptions()}</select></div>
+    <div class="form-row" id="gc-new-buyer"><div class="form-group"><label>Buyer's name</label><input type="text" id="gc-bname" class="input" autocomplete="off"></div><div class="form-group"><label>Buyer's phone</label><input type="tel" id="gc-bphone" class="input" inputmode="tel" autocomplete="off"></div></div>
+    <div class="form-row"><div class="form-group"><label>For (recipient's name)</label><input type="text" id="gc-rname" class="input" autocomplete="off"></div><div class="form-group"><label>Recipient's phone (optional)</label><input type="tel" id="gc-rphone" class="input" inputmode="tel" autocomplete="off"></div></div>
+    <div class="form-group"><label>Message on the card (optional)</label><input type="text" id="gc-msg" class="input" placeholder="Happy birthday!"></div>
+    <div class="form-row"><div class="form-group"><label>Payment</label><select id="gc-method" class="input"><option value="cash">Paid: cash</option><option value="card">Paid: card</option><option value="transfer">Paid: bank transfer</option><option value="online">Paid: online</option><option value="">Not paid yet</option></select></div>
+      <div class="form-group"><label>Valid for</label><select id="gc-days" class="input"><option value="90">3 months</option><option value="180">6 months</option><option value="365" selected>1 year</option></select></div></div>
+    <button class="btn btn-primary btn-sm" onclick="sellGift()">Create gift card</button></details>` +
+    (gifts.length ? `<div class="table-wrap"><table><thead><tr><th>Code</th><th>Gift</th><th>From → To</th><th>Valid until</th><th class="num">Price</th><th>Status</th><th></th></tr></thead><tbody>${gifts.map(g => `<tr>
+      <td><strong class="mono">${esc(g.code)}</strong></td>
+      <td>${esc(g.plan_name || '')}${g.message ? `<div class="tiny muted">“${esc(g.message)}”</div>` : ''}</td>
+      <td class="small">${esc(g.purchaser_name || '—')} → <strong>${esc(g.recipient_name)}</strong>${g.recipient_phone ? `<div class="tiny muted">${esc(g.recipient_phone)}</div>` : ''}</td>
+      <td class="small">${g.valid_until ? fmtDate(g.valid_until) : '—'}</td>
+      <td class="num">${money(g.price_paid)}</td>
+      <td>${giftStatus(g)}${g.redeemed_at ? `<div class="tiny muted">${fmtDate(g.redeemed_at)}</div>` : ''}</td>
+      <td class="num">${g.status === 'active' ? `<button class="btn btn-success btn-xs" onclick="redeemGift(${g.id})">Redeem</button><button class="btn btn-ghost btn-xs" onclick="copyGift(${g.id})">Copy text</button><button class="btn btn-ghost btn-xs" style="color:var(--bad)" onclick="cancelGift(${g.id}, '${esc(g.code)}')">Cancel</button>` : g.redeemed_client_id ? `<button class="btn btn-ghost btn-xs" onclick="openClientDetail(${g.redeemed_client_id}, 'subs')">Open client</button>` : ''}</td></tr>`).join('')}</tbody></table></div>`
+      : '<div class="card empty">No gift cards sold yet.</div>');
+  window._gifts = gifts;
+}
+async function sellGift() {
+  guard(async () => {
+    const body = { plan_id: +val('gc-plan'), recipient_name: val('gc-rname').trim(), recipient_phone: val('gc-rphone').trim() || null, message: val('gc-msg').trim() || null,
+      payment_method: val('gc-method') || null, valid_days: +val('gc-days') };
+    if (val('gc-buyer')) body.purchaser_client_id = +val('gc-buyer'); else { body.purchaser_name = val('gc-bname').trim(); body.purchaser_phone = val('gc-bphone').trim() || null; }
+    if (!body.recipient_name) throw new Error("Enter the recipient's name");
+    if (!body.purchaser_client_id && !body.purchaser_name) throw new Error("Choose the buyer or enter their name");
+    const g = await api('POST', '/gift-cards/', body);
+    toast(`Gift card ${g.code} created`); await refreshLookups(); await loadGifts();
+  });
+}
+function giftText(g) {
+  return `🎁 ${S.business} gift card\nFor: ${g.recipient_name}\nGift: ${g.plan_name}${g.message ? `\n“${g.message}”` : ''}\nCode: ${g.code}\nValid until ${g.valid_until ? fmtDate(g.valid_until) : '—'}. Show this code when you book your first session.`;
+}
+async function copyGift(id) {
+  const g = (window._gifts || []).find(x => x.id === id); if (!g) return;
+  try { await navigator.clipboard.writeText(giftText(g)); toast('Gift card text copied: paste it into WhatsApp'); }
+  catch (e) { confirmBox('Gift card text', `<textarea class="input" style="min-height:140px" readonly onclick="this.select()">${esc(giftText(g))}</textarea>`, 'Done', async () => {}); }
+}
+function redeemGift(id) {
+  const g = (window._gifts || []).find(x => x.id === id); if (!g) return;
+  confirmBox(`Redeem ${esc(g.code)}`, `<p><strong>${esc(g.plan_name)}</strong> for <strong>${esc(g.recipient_name)}</strong>${g.recipient_phone ? ` (${esc(g.recipient_phone)})` : ''}.</p>
+    <div class="form-group"><label>Give the package to</label><select id="gr-client" class="input"><option value="">${esc(g.recipient_name)}: create or find by phone</option>${clientOptions()}</select></div>
+    <p class="small muted">A paid package is added to this client. The buyer's payment covers it.</p>`, 'Redeem', async () => {
+    const sub = await api('POST', `/gift-cards/${id}/redeem`, val('gr-client') ? { client_id: +val('gr-client') } : {});
+    toast(`Redeemed: ${sub.client.name} now has ${sub.sessions_total} sessions`); await refreshLookups(); loadGifts();
+  });
+}
+function cancelGift(id, code) {
+  confirmBox('Cancel gift card', `<p>Cancel <strong>${esc(code)}</strong>? It can no longer be redeemed. Refund the buyer separately if needed.</p>`, 'Cancel card', async () => { await api('POST', `/gift-cards/${id}/cancel`); toast('Gift card cancelled'); loadGifts(); }, 'btn-danger');
 }
 
 function deleteSubscription(id, planName) {

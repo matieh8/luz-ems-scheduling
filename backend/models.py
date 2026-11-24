@@ -19,6 +19,7 @@ class Client(Base):
     notes = Column(Text, nullable=True)
     date_of_birth = Column(String, nullable=True)
     source = Column(String, nullable=True)  # walk-in / instagram / referral / online
+    health_notes = Column(Text, nullable=True)  # injuries, medical conditions, training restrictions
     notify_whatsapp = Column(Boolean, default=True)
     notify_sms = Column(Boolean, default=False)
     notify_email = Column(Boolean, default=True)
@@ -29,6 +30,43 @@ class Client(Base):
     appointments = relationship("Appointment", back_populates="client", cascade="all, delete-orphan")
     subscriptions = relationship("Subscription", back_populates="client", cascade="all, delete-orphan")
     payments = relationship("Payment", back_populates="client", cascade="all, delete-orphan")
+    measurements = relationship("BodyMeasurement", back_populates="client", cascade="all, delete-orphan")
+    client_notes = relationship("ClientNote", back_populates="client", cascade="all, delete-orphan")
+
+
+class BodyMeasurement(Base):
+    """One check-in: weight, body composition and tape measurements on a given day."""
+    __tablename__ = "body_measurements"
+
+    id = Column(Integer, primary_key=True, index=True)
+    client_id = Column(Integer, ForeignKey("clients.id"), nullable=False, index=True)
+    measured_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    weight_kg = Column(Float, nullable=True)
+    body_fat_pct = Column(Float, nullable=True)
+    muscle_kg = Column(Float, nullable=True)
+    waist_cm = Column(Float, nullable=True)
+    hips_cm = Column(Float, nullable=True)
+    chest_cm = Column(Float, nullable=True)
+    arm_cm = Column(Float, nullable=True)
+    thigh_cm = Column(Float, nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    client = relationship("Client", back_populates="measurements")
+
+
+class ClientNote(Base):
+    """Trainer notes and the contact log: calls, WhatsApp chats, visits, injuries."""
+    __tablename__ = "client_notes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    client_id = Column(Integer, ForeignKey("clients.id"), nullable=False, index=True)
+    kind = Column(String, nullable=False, default="note")  # note | call | whatsapp | visit | injury | email
+    text = Column(Text, nullable=False)
+    author = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    client = relationship("Client", back_populates="client_notes")
 
 
 class Staff(Base):

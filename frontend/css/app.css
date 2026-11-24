@@ -388,3 +388,28 @@ table.plain td { padding: 10px 14px; }
   .donut { margin: 0 auto; }
   table.plain th:nth-child(3), table.plain td:nth-child(3) { display: none; }
 }
+
+/* ---------- Client profile (CRM) ---------- */
+.health-flag { background: var(--bad-bg); color: var(--bad); border-radius: 12px; padding: 10px 14px; margin-bottom: 14px; font-size: .86rem; }
+.health-flag strong { display: block; font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 2px; }
+.chip-bad { background: var(--bad-bg); color: var(--bad); border-color: transparent; }
+.tabs-scroll { overflow-x: auto; scrollbar-width: none; }
+.tabs-scroll .tab { white-space: nowrap; }
+.delta { font-weight: 700; } .delta.good { color: var(--good); } .delta.bad { color: var(--bad); }
+.add-box { background: var(--bg); border-radius: 12px; padding: 10px 14px; margin-bottom: 12px; }
+.add-box summary { cursor: pointer; font-weight: 600; color: var(--accent-dark); font-size: .88rem; }
+.add-box[open] summary { margin-bottom: 10px; }
+.measure-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 12px; }
+.note-form { display: grid; grid-template-columns: 150px minmax(0, 1fr) auto; gap: 8px; align-items: start; margin-bottom: 14px; }
+.note-form textarea { min-height: 42px; }
+.timeline { display: flex; flex-direction: column; gap: 8px; }
+.tl-item { border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 10px; padding: 9px 12px; }
+.tl-item.kind-injury { border-left-color: var(--bad); }
+.tl-item.kind-call, .tl-item.kind-whatsapp { border-left-color: var(--info); }
+.tl-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.tl-text { font-size: .88rem; white-space: pre-wrap; }
+@media (max-width: 760px) {
+  .measure-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .note-form { grid-template-columns: minmax(0, 1fr); }
+  .measure-grid .input, .note-form .input { font-size: 16px; }
+}

@@ -492,3 +492,44 @@ def test_dashboard_overview(client):
     assert a["recent_payments"][0]["client_name"] == "Overview Client"
     assert any(p["name"] == plan["name"] for p in a["top_plans"])
     assert "amount" in a["due"] and "count" in a["due"]
+
+
+def test_client_crm_measurements_notes_and_retention(client):
+    cid = client.post("/api/clients/", json={"name": "CRM Client", "phone": "0509990002",
+                                             "health_notes": "Old knee injury, no deep squats"}).json()["id"]
+    assert client.get(f"/api/clients/{cid}").json()["health_notes"].startswith("Old knee")
+
+    # Body measurements: at least one value, sane ranges, newest first
+    assert client.post(f"/api/clients/{cid}/measurements", json={"notes": "empty"}).status_code == 422
+    assert client.post(f"/api/clients/{cid}/measurements", json={"weight_kg": -5}).status_code == 422
+    first = client.post(f"/api/clients/{cid}/measurements", json={"measured_at": "2026-01-10T08:00:00Z", "weight_kg": 82.5, "body_fat_pct": 24}).json()
+    client.post(f"/api/clients/{cid}/measurements", json={"measured_at": "2026-02-10T08:00:00Z", "weight_kg": 79.1, "waist_cm": 88})
+    ms = client.get(f"/api/clients/{cid}/measurements").json()
+    assert [m["weight_kg"] for m in ms] == [79.1, 82.5]
+    assert client.delete(f"/api/clients/measurements/{first['id']}").status_code == 200
+    assert len(client.get(f"/api/clients/{cid}/measurements").json()) == 1
+
+    # Notes and contact log
+    assert client.post(f"/api/clients/{cid}/notes", json={"kind": "sms-blast", "text": "x"}).status_code == 422
+    assert client.post(f"/api/clients/{cid}/notes", json={"kind": "call", "text": "Called about renewal"}).status_code == 200
+    n = client.post(f"/api/clients/{cid}/notes", json={"kind": "injury", "text": "Shoulder strain, low intensity on arms"}).json()
+    h = client.get(f"/api/clients/{cid}/history").json()
+    assert [x["kind"] for x in h["notes"]] == ["injury", "call"] and len(h["measurements"]) == 1
+    assert client.delete(f"/api/clients/notes/{n['id']}").status_code == 200
+    assert h["client"]["risk"] == "new"
+
+
+def test_retention_levels():
+    from backend.routers.clients import retention
+    now = datetime(2026, 6, 30)
+    weekly = [now - timedelta(days=7 * i + 3) for i in range(8)]  # every 7 days, last one 3 days ago
+    assert retention(weekly, 0, False, now)["risk"] == "regular"
+    late = [t - timedelta(days=12) for t in weekly]   # 15 days since last, usual gap 7
+    assert retention(late, 0, False, now)["risk"] == "slipping"
+    later = [t - timedelta(days=20) for t in weekly]  # 23 days
+    assert retention(later, 0, False, now)["risk"] == "at_risk"
+    gone = [t - timedelta(days=40) for t in weekly]   # 43 days
+    assert retention(gone, 0, False, now)["risk"] == "lapsed"
+    assert retention(gone, 0, True, now)["risk"] == "regular"  # already booked again
+    r = retention(weekly, 2, False, now)
+    assert r["attendance_rate"] == 80.0 and r["avg_gap_days"] == 7.0 and r["days_since_last"] == 3

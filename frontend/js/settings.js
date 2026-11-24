@@ -152,6 +152,7 @@ async function changePassword() { guard(async () => { if (!val('pw-current') || 
 
 /* ---------- services & team ---------- */
 async function loadCatalog() {
+  if (typeof loadDevices === 'function') loadDevices();
   const [services, staff] = await Promise.all([api('GET', '/services/'), api('GET', '/staff/')]); S.services = services; S.staff = staff;
   $('services-list').innerHTML = !services.length ? '<div class="card empty">No services yet.</div>' : `<table><thead><tr><th>Service</th><th class="num">Duration</th><th class="num">Price</th><th>Online</th><th></th></tr></thead><tbody>` + services.map(s => `<tr>
     <td><span class="dot" style="background:${s.color}"></span><strong>${esc(s.name)}</strong>${!s.active ? ' <span class="chip">inactive</span>' : ''}<div class="tiny muted">${esc(s.description || '')}</div></td>

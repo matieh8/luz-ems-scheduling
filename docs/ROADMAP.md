@@ -31,7 +31,7 @@ Work lands on `staging` first, then `main` (live) after the owner tries it.
 ⬜ 61–62 Staff logins and permissions · ⬜ 63 Trainer performance · ⬜ 64 Commissions · 🟡 65 Sessions per trainer (assignment exists)
 
 ## 66–70 Equipment and services
-⬜ 66–67 EMS devices and maintenance · ✅ 68 Services and prices · ⬜ 69 Service locations · ⬜ 70 Multi-branch
+✅ 66–67 EMS devices, service schedule, maintenance log (+ expense) · ✅ 68 Services and prices · ⬜ 69 Service locations · ⬜ 70 Multi-branch
 
 ## 71–76 Marketing
 ⬜ 71 Leads · ✅ 72 Client source · ⬜ 73–74 Referrals and rewards · ⬜ 75 Enquiry → subscription conversion · ✅ 76 Clients who did not renew

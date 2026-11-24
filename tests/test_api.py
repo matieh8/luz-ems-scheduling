@@ -840,3 +840,32 @@ def test_audit_log_records_every_change(client):
     assert client.get("/api/audit/?entity=payments&limit=1000").json()[0]["entity"] == "payments"
     with TestClient(app) as anon:
         assert anon.get("/api/audit/").status_code == 401
+
+
+def test_devices_and_maintenance(client):
+    d = client.post("/api/devices/", json={"name": "EMS Suit 1", "model": "XBody Actiwave", "serial_number": "XB-001",
+                                           "purchased_on": "2025-01-15", "service_every_days": 90}).json()
+    assert d["status"] == "active" and d["next_service_due"] is None and d["service_state"] == "never"
+    assert client.post("/api/devices/", json={"name": ""}).status_code == 422
+
+    # Logging a service sets the next due date; a cost can be booked as an expense in one go
+    exp_before = len(client.get("/api/expenses/").json())
+    m = client.post(f"/api/devices/{d['id']}/maintenance", json={"done_on": "2026-01-10", "kind": "service", "cost": 350,
+                                                               "notes": "Electrodes replaced", "add_expense": True}).json()
+    assert m["kind"] == "service" and m["cost"] == 350
+    d2 = client.get(f"/api/devices/{d['id']}").json()
+    assert d2["last_service_on"] == "2026-01-10" and d2["next_service_due"] == "2026-04-10"
+    assert d2["service_state"] in ("ok", "due_soon", "overdue")
+    exps = client.get("/api/expenses/").json()
+    assert len(exps) == exp_before + 1 and any(e["category"] == "Maintenance" and e["amount"] == 350 for e in exps)
+    assert [x["notes"] for x in client.get(f"/api/devices/{d['id']}/maintenance").json()] == ["Electrodes replaced"]
+
+    # Overdue devices raise a dashboard alert; retired ones don't
+    client.post(f"/api/devices/{d['id']}/maintenance", json={"done_on": "2020-01-01", "kind": "inspection"})
+    client.put(f"/api/devices/{d['id']}", json={"service_every_days": 30})
+    assert client.get(f"/api/devices/{d['id']}").json()["service_state"] == "overdue"
+    assert "devices" in [a["key"] for a in client.get("/api/dashboard/").json()["alerts"]]
+    client.put(f"/api/devices/{d['id']}", json={"status": "retired"})
+    assert "devices" not in [a["key"] for a in client.get("/api/dashboard/").json()["alerts"]]
+    assert client.delete(f"/api/devices/{d['id']}").status_code == 200
+    assert client.get(f"/api/devices/{d['id']}").status_code == 404

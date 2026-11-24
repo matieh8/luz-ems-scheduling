@@ -168,6 +168,8 @@ async def lifespan(app: FastAPI):
             made = run_daily_backup()
             if made:
                 print(f"[backup] {made['name']} ({made['size']} bytes)")
+                from backend.audit import prune_old
+                prune_old()  # once a day, alongside the backup
         except Exception as e:
             print(f"[backup] failed: {e}")
 
@@ -185,6 +187,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="LUZ EMS Scheduling", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+from backend.audit import AuditMiddleware, router as audit_router  # noqa: E402
+app.add_middleware(AuditMiddleware)
 
 # Open endpoints
 app.include_router(auth.router)
@@ -195,7 +199,7 @@ protected = [Depends(require_auth)]
 app.include_router(expenses.router, dependencies=protected)
 for r in (clients.router, staff.router, services.router, appointments.router, appointments.blocked_router,
           settings.router, dashboard.router, notifications.router, subscriptions.router, payments.router,
-          reports.router, push.router, discounts.router, giftcards.router, backups.router):
+          reports.router, push.router, discounts.router, giftcards.router, backups.router, audit_router):
     app.include_router(r, dependencies=protected)
 
 

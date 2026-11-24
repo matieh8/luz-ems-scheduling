@@ -293,6 +293,24 @@ class DiscountCode(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class AuditLog(Base):
+    """Every successful change made through the admin API: who/when/what, with the data sent (secrets hidden)."""
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    method = Column(String, nullable=False)
+    path = Column(String, nullable=False)
+    entity = Column(String, nullable=True, index=True)
+    entity_id = Column(Integer, nullable=True)
+    action = Column(String, nullable=False)
+    summary = Column(String, nullable=True)
+    details = Column(Text, nullable=True)
+    status = Column(Integer, nullable=False)
+    ip = Column(String, nullable=True)
+    device = Column(String, nullable=True)
+
+
 class GiftCard(Base):
     """Sessions sold as a gift: paid by the buyer now, turned into a package for the recipient later."""
     __tablename__ = "gift_cards"

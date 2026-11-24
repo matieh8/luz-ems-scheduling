@@ -810,3 +810,33 @@ def test_database_backups(client):
         open(os.path.join(folder, f"app-2020-01-{i + 1:02d}_000000.db"), "wb").write(b"SQLite format 3\x00old")
     backups.prune(keep=5)
     assert len([f for f in os.listdir(folder) if f.endswith(".db")]) == 5 and b["name"] in os.listdir(folder)
+
+
+def test_audit_log_records_every_change(client):
+    n0 = len(client.get("/api/audit/?limit=1000").json())
+    cid = client.post("/api/clients/", json={"name": "Audit Client", "phone": "0509990014"}).json()["id"]
+    client.put(f"/api/clients/{cid}", json={"notes": "VIP"})
+    pay = client.post("/api/payments/", json={"client_id": cid, "amount": 123, "method": "cash"}).json()
+    client.delete(f"/api/payments/{pay['id']}")
+    client.put("/api/settings/", json={"twilio_auth_token": "super-secret-value"})
+    client.get("/api/clients/")                                  # reads are not logged
+    client.post("/api/clients/", json={"phone": "x"})             # failed (422) is not logged
+    with TestClient(app) as anon:
+        anon.post("/api/auth/login", json={"password": "wrong"})  # login attempts are not stored with the password
+
+    rows = client.get("/api/audit/?limit=1000").json()
+    new = rows[: len(rows) - n0]
+    acts = [(r["method"], r["entity"], r["action"]) for r in new]
+    assert ("POST", "clients", "created") in acts and ("PUT", "clients", "updated") in acts
+    assert ("POST", "payments", "created") in acts and ("DELETE", "payments", "deleted") in acts
+    assert all(r["method"] != "GET" for r in new) and all(r["status"] < 400 for r in new)
+    created = next(r for r in new if r["entity"] == "clients" and r["action"] == "created")
+    assert created["entity_id"] == cid and "Audit Client" in created["details"]
+    deleted = next(r for r in new if r["entity"] == "payments" and r["action"] == "deleted")
+    assert deleted["entity_id"] == pay["id"] and "123" in deleted["summary"]
+    s = next(r for r in new if r["entity"] == "settings")
+    assert "super-secret-value" not in s["details"] and "***" in s["details"]
+    assert not any("wrong" in (r["details"] or "") for r in rows)
+    assert client.get("/api/audit/?entity=payments&limit=1000").json()[0]["entity"] == "payments"
+    with TestClient(app) as anon:
+        assert anon.get("/api/audit/").status_code == 401

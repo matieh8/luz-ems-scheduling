@@ -24,8 +24,27 @@ async function downloadBackup(name) {
   });
 }
 
+/* ---------- activity (audit) log ---------- */
+function deviceName(ua) {
+  if (!ua) return '';
+  const os = /iPhone|iPad/.test(ua) ? 'iPhone/iPad' : /Android/.test(ua) ? 'Android' : /Windows/.test(ua) ? 'Windows' : /Mac OS/.test(ua) ? 'Mac' : 'device';
+  const br = /Edg\//.test(ua) ? 'Edge' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : /Firefox\//.test(ua) ? 'Firefox' : '';
+  return `${br ? br + ' on ' : ''}${os}`;
+}
+async function loadAudit() {
+  const el = $('audit-list'); if (!el) return;
+  const e = val('audit-entity');
+  const rows = await api('GET', `/audit/?limit=150${e ? '&entity=' + e : ''}`);
+  const icon = a => a === 'deleted' ? 'badge-cancelled' : a === 'created' ? 'badge-active' : a === 'updated' ? 'badge-scheduled' : 'badge-neutral';
+  el.innerHTML = rows.length ? `<div class="audit">${rows.map(r => `<div class="audit-row"><div class="audit-when mono small">${fmtDT(r.at)}</div>
+      <div class="audit-what"><span class="badge ${icon(r.action)}">${esc(r.action)}</span> ${esc(r.summary || r.path)}
+      <div class="tiny muted">${esc(deviceName(r.device))}${r.ip ? ' · ' + esc(r.ip) : ''}</div>
+      ${r.details ? `<details><summary class="tiny" style="cursor:pointer;color:var(--accent)">Details</summary><pre class="tiny audit-pre">${esc(JSON.stringify(JSON.parse(r.details), null, 2))}</pre></details>` : ''}</div></div>`).join('')}</div>`
+    : '<div class="empty small">Nothing recorded yet.</div>';
+}
+
 async function loadSettings() {
-  loadBackups();
+  loadBackups(); loadAudit();
   const [s, hours] = await Promise.all([api('GET', '/settings/'), api('GET', '/settings/hours')]); S.settings = s;
   const row = (id, label, help, type = 'text', extra = '') => `<div class="form-group"><label>${label}</label><input type="${type}" id="st-${id}" class="input" value="${esc(s[id] ?? '')}" ${extra}>${help ? `<div class="help">${help}</div>` : ''}</div>`;
   const tog = (id, label, help) => `<div class="setting-row"><div><strong>${label}</strong>${help ? `<p>${help}</p>` : ''}</div><label class="toggle"><input type="checkbox" id="st-${id}" ${s[id] ? 'checked' : ''}><span class="slider"></span></label></div>`;

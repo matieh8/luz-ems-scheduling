@@ -480,3 +480,10 @@ table.plain td { padding: 10px 14px; }
 .badge-discarded { background: #ececf4; color: #4b4b63; }
 .approval-card { border-color: var(--warn); box-shadow: 0 0 0 3px var(--warn-bg), var(--shadow); }
 .approval-card .card-title .actions { margin-left: auto; }
+
+/* Activity log */
+.audit { display: flex; flex-direction: column; max-height: 520px; overflow-y: auto; }
+.audit-row { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 12px; padding: 9px 4px; border-bottom: 1px solid var(--border); font-size: .86rem; }
+.audit-row:last-child { border-bottom: none; }
+.audit-pre { white-space: pre-wrap; word-break: break-word; background: var(--bg); padding: 8px 10px; border-radius: 8px; margin: 6px 0 0; max-height: 240px; overflow: auto; }
+@media (max-width: 760px) { .audit-row { grid-template-columns: minmax(0, 1fr); gap: 2px; } }

@@ -19,7 +19,7 @@ Work lands on `staging` first, then `main` (live) after the owner tries it.
 
 ## 38–46 Money
 ✅ 38–41 Payments, expenses, net profit, money owed · ✅ 42 Cash flow · ✅ 43 Average revenue per client · ✅ 44 Profit per service/package (estimate) ·
-✅ 45 Expense categories + business groups in Finance · ⬜ 46 PDF invoices
+✅ 45 Expense categories + business groups in Finance · ✅ 46 Invoices (print / Save as PDF; VAT breakdown pending owner answer)
 
 ## 47–53 Automation and WhatsApp
 🔑 47 WhatsApp Business API (Meta account + per-message cost; today: WhatsApp Web bridge / Twilio) · ✅ 48–51 Confirmations, reminders, expiry, follow-up · ⬜ 52 Renewal messages · ⬜ 53 Approval before marketing messages / payments

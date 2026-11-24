@@ -4,10 +4,46 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend import models, schemas
-from backend.tz import to_utc_naive, utcnow
+from backend.scheduling import get_settings
+from backend.tz import to_local, to_utc_naive, utcnow
 
 router = APIRouter(prefix="/api/payments", tags=["Payments"])
 METHODS = ("cash", "card", "transfer", "online", "other")
+
+
+@router.get("/{payment_id}/invoice")
+def invoice(payment_id: int, db: Session = Depends(get_db)):
+    """Everything needed to print an invoice / receipt for one payment."""
+    p = db.query(models.Payment).filter(models.Payment.id == payment_id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    s = get_settings(db)
+    lines = []
+    sub, appt = p.subscription, p.appointment
+    if sub and sub.plan:
+        desc = f"{sub.plan.name} ({sub.sessions_total} sessions" + (f", valid until {to_local(sub.end_date, s.timezone):%d %b %Y}" if sub.end_date else "") + ")"
+        full = float(sub.price_paid or 0) + float(sub.discount_amount or 0)
+        # Show the list price and discount only when this payment settles the whole package
+        if sub.discount_amount and abs(float(p.amount) - float(sub.price_paid or 0)) < 0.01:
+            lines = [{"description": desc, "amount": round(full, 2)},
+                     {"description": f"Discount ({sub.discount_code})", "amount": -round(float(sub.discount_amount), 2)}]
+        else:
+            lines = [{"description": desc, "amount": round(float(p.amount), 2)}]
+    elif appt and appt.service:
+        when = to_local(appt.start_time, s.timezone)
+        lines = [{"description": f"{appt.service.name} session, {when:%d %b %Y %H:%M}", "amount": round(float(p.amount), 2)}]
+    else:
+        lines = [{"description": p.notes or "Payment", "amount": round(float(p.amount), 2)}]
+    paid_local = to_local(p.paid_at, s.timezone)
+    return {
+        "number": f"INV-{paid_local:%Y}-{p.id:05d}", "date": paid_local.strftime("%d %b %Y"),
+        "business": {"name": s.business_name, "phone": s.business_phone, "email": s.business_email,
+                     "address": s.business_address, "trn": s.tax_registration_number},
+        "client": {"name": p.client.name if p.client else "", "phone": p.client.phone if p.client else "",
+                   "email": p.client.email if p.client else None},
+        "lines": lines, "total": round(float(p.amount), 2), "method": p.method, "currency": s.currency,
+        "notes": p.notes if (sub or appt) else None,
+    }
 
 
 @router.get("/", response_model=List[schemas.PaymentResponse])

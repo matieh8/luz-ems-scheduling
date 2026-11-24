@@ -10,6 +10,7 @@ async function loadSettings() {
         ${row('business_name', 'Business name')}
         <div class="form-row">${row('business_phone', 'Phone (admin alerts go here)', '', 'tel')}${row('business_email', 'Email', '', 'email')}</div>
         ${row('business_address', 'Address', 'Shown in messages as {business_address}')}
+        ${row('tax_registration_number', 'Tax registration number (TRN)', 'Optional. Printed on invoices when filled in.')}
         <div class="form-row">${row('timezone', 'Time zone', 'e.g. Asia/Dubai')}${row('currency', 'Currency', '')}</div>
         ${row('public_base_url', 'Public URL', 'Used to build booking and manage links in messages, e.g. https://book.luzems.com')}
       </div>
@@ -90,7 +91,7 @@ async function resetWhatsApp() {
 }
 async function saveSettings() {
   guard(async () => {
-    const ids = ['business_name', 'business_phone', 'business_email', 'business_address', 'timezone', 'currency', 'public_base_url', 'slot_interval_minutes', 'max_concurrent_sessions', 'online_min_notice_hours', 'online_max_days_ahead', 'online_allow_cancel_hours', 'reminder_hours_before', 'admin_reminder_hours', 'follow_up_hours_after', 'subscription_low_threshold', 'subscription_expiry_notice_days', 'whatsapp_provider', 'twilio_account_sid', 'twilio_auth_token', 'twilio_phone_number', 'twilio_sms_number', 'smtp_host', 'smtp_port', 'smtp_username', 'smtp_password', 'smtp_from', 'push_summary_hour'];
+    const ids = ['business_name', 'business_phone', 'business_email', 'business_address', 'tax_registration_number', 'timezone', 'currency', 'public_base_url', 'slot_interval_minutes', 'max_concurrent_sessions', 'online_min_notice_hours', 'online_max_days_ahead', 'online_allow_cancel_hours', 'reminder_hours_before', 'admin_reminder_hours', 'follow_up_hours_after', 'subscription_low_threshold', 'subscription_expiry_notice_days', 'whatsapp_provider', 'twilio_account_sid', 'twilio_auth_token', 'twilio_phone_number', 'twilio_sms_number', 'smtp_host', 'smtp_port', 'smtp_username', 'smtp_password', 'smtp_from', 'push_summary_hour'];
     const toggles = ['auto_complete_past', 'online_booking_enabled', 'notify_admin_online_booking', 'follow_up_enabled', 'demo_mode', 'whatsapp_enabled', 'sms_enabled', 'email_enabled', 'push_bookings', 'push_session_reminders', 'push_failed_messages', 'push_daily_summary'];
     const payload = {};
     ids.forEach(i => { const el = $('st-' + i); let v = el.value; if (el.type === 'number') v = v === '' ? null : +v; else v = v.trim() || null; payload[i] = v; });

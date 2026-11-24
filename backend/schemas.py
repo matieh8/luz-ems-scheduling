@@ -223,10 +223,20 @@ class SubscriptionUpdate(BaseModel):
     notes: Optional[str] = None
 
 
+class SubscriptionRenew(BaseModel):
+    plan_id: Optional[int] = None          # default: the same plan
+    carry_over: bool = True                # move unused sessions into the new package and close the old one
+    price_paid: Optional[float] = None     # default: the plan's price
+    payment_method: Optional[str] = "cash"
+    record_payment: bool = True
+    send_notification: bool = True
+
+
 class SubscriptionResponse(BaseModel):
     id: int
     client_id: int
     plan_id: int
+    renewed_from_id: Optional[int] = None
     start_date: datetime
     end_date: Optional[datetime] = None
     sessions_total: int

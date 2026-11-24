@@ -104,6 +104,45 @@ def create_subscription(sub: schemas.SubscriptionCreate, db: Session = Depends(g
     return db_sub
 
 
+@router.post("/{subscription_id}/renew", response_model=schemas.SubscriptionResponse)
+def renew_subscription(subscription_id: int, body: schemas.SubscriptionRenew, db: Session = Depends(get_db)):
+    """Sell the client a new package based on this one, optionally carrying unused sessions over."""
+    old = db.query(models.Subscription).filter(models.Subscription.id == subscription_id).first()
+    if not old:
+        raise HTTPException(status_code=404, detail="Subscription not found")
+    if db.query(models.Subscription).filter(models.Subscription.renewed_from_id == old.id).first():
+        raise HTTPException(status_code=409, detail="This package has already been renewed")
+    plan = db.query(models.SubscriptionPlan).filter(models.SubscriptionPlan.id == (body.plan_id or old.plan_id)).first()
+    if not plan:
+        raise HTTPException(status_code=400, detail="Plan not found")
+    now = utcnow()
+    carried = old.sessions_remaining if (body.carry_over and old.status == "active") else 0
+    price = body.price_paid if body.price_paid is not None else plan.price
+    new = models.Subscription(
+        client_id=old.client_id, plan_id=plan.id, start_date=now,
+        end_date=now + timedelta(days=plan.duration_days) if plan.duration_days else None,
+        sessions_total=plan.sessions_included + carried, sessions_used=0, price_paid=price, status="active",
+        notes=f"Renewal of package #{old.id}" + (f", {carried} session(s) carried over" if carried else ""),
+        renewed_from_id=old.id,
+    )
+    db.add(new)
+    if body.carry_over and old.status == "active":
+        old.status = "renewed"
+    db.commit()
+    db.refresh(new)
+    if body.record_payment and price > 0 and body.payment_method:
+        db.add(models.Payment(client_id=old.client_id, subscription_id=new.id, amount=price,
+                              method=body.payment_method, paid_at=now, notes=f"{plan.name} (renewal)"))
+        db.commit()
+        db.refresh(new)
+    if body.send_notification:
+        try:
+            notifications.send_subscription_purchase(db, new)
+        except Exception as e:
+            print(f"[notify] renewal message failed: {e}")
+    return new
+
+
 @router.put("/{subscription_id}", response_model=schemas.SubscriptionResponse)
 def update_subscription(subscription_id: int, sub: schemas.SubscriptionUpdate, db: Session = Depends(get_db)):
     db_sub = db.query(models.Subscription).filter(models.Subscription.id == subscription_id).first()

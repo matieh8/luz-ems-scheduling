@@ -11,7 +11,23 @@ function subsTable(subs) {
       <td class="small">${fmtDate(s.start_date)} → ${s.end_date ? fmtDate(s.end_date) : 'no expiry'}${expSoon && s.status === 'active' ? '<div class="tiny" style="color:var(--warn)">expires soon</div>' : ''}</td>
       <td class="num">${money(s.price_paid)}${s.paid_amount < s.price_paid ? `<div class="tiny" style="color:var(--bad)">paid ${money(s.paid_amount)}</div>` : ''}</td>
       <td>${badge(s.status === 'active' ? 'active' : s.status === 'expired' ? 'expired' : 'neutral').replace('neutral', s.status)}</td>
-      <td class="num"><button class="btn btn-ghost btn-xs" onclick="editSubscription(${s.id})">Edit</button>${s.paid_amount < s.price_paid ? `<button class="btn btn-ghost btn-xs" onclick="openPaymentModal({client_id:${s.client_id}, subscription_id:${s.id}, amount:${s.price_paid - s.paid_amount}, label:'${esc(s.plan.name)}'})">Pay</button>` : ''}<button class="btn btn-ghost btn-xs" style="color:var(--bad)" onclick="deleteSubscription(${s.id}, '${esc(s.plan.name).replace(/'/g, "\\'")}')">Delete</button></td></tr>`; }).join('') + '</tbody></table></div>';
+      <td class="num">${s.status !== 'renewed' && s.status !== 'cancelled' ? `<button class="btn btn-success btn-xs" onclick="renewFlow(${s.id})">Renew</button>` : ''}<button class="btn btn-ghost btn-xs" onclick="editSubscription(${s.id})">Edit</button>${s.paid_amount < s.price_paid ? `<button class="btn btn-ghost btn-xs" onclick="openPaymentModal({client_id:${s.client_id}, subscription_id:${s.id}, amount:${s.price_paid - s.paid_amount}, label:'${esc(s.plan.name)}'})">Pay</button>` : ''}<button class="btn btn-ghost btn-xs" style="color:var(--bad)" onclick="deleteSubscription(${s.id}, '${esc(s.plan.name).replace(/'/g, "\\'")}')">Delete</button></td></tr>`; }).join('') + '</tbody></table></div>';
+}
+async function renewFlow(id) {
+  const [subs, plans] = await Promise.all([api('GET', '/subscriptions/'), api('GET', '/subscriptions/plans?active_only=true')]);
+  const s = subs.find(x => x.id === id); if (!s) return toast('Package not found', true);
+  const canCarry = s.status === 'active' && s.sessions_remaining > 0;
+  confirmBox(`Renew ${esc(s.client.name)}'s package`, `
+    <div class="form-group"><label>New package</label><select id="rn-plan" class="input">${plans.map(p => `<option value="${p.id}" ${p.id === s.plan_id ? 'selected' : ''}>${esc(p.name)} · ${p.sessions_included} sessions · ${money(p.price)}</option>`).join('')}</select></div>
+    ${canCarry ? `<label class="check mb"><input type="checkbox" id="rn-carry" checked> Carry over the ${s.sessions_remaining} unused session(s) and close the current package</label>` : '<p class="small muted">The current package has no sessions left to carry over.</p>'}
+    <div class="form-group"><label>Payment</label><select id="rn-method" class="input"><option value="cash">Paid: cash</option><option value="card">Paid: card</option><option value="transfer">Paid: bank transfer</option><option value="online">Paid: online</option><option value="">Not paid yet</option></select></div>
+    <label class="check"><input type="checkbox" id="rn-notify" checked> Send the client the package message</label>`,
+    'Renew', async () => {
+      const r = await api('POST', `/subscriptions/${id}/renew`, { plan_id: +val('rn-plan'), carry_over: canCarry ? $('rn-carry').checked : false,
+        payment_method: val('rn-method') || null, record_payment: !!val('rn-method'), send_notification: $('rn-notify').checked });
+      toast(`Renewed: ${r.sessions_total} sessions`); refreshCurrent();
+      if ($('client-detail-modal').classList.contains('active')) openClientDetail(s.client_id, 'subs');
+    });
 }
 let SUBS = { tab: 'active' };
 function subTab(t, el) { SUBS.tab = t; document.querySelectorAll('#page-subscriptions .tab').forEach(x => x.classList.remove('active')); el.classList.add('active'); document.querySelectorAll('#page-subscriptions .subpanel').forEach(p => p.classList.toggle('active', p.id === 'sub-' + t)); loadSubscriptions(); }

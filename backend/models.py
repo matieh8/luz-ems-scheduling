@@ -262,6 +262,8 @@ class Subscription(Base):
     status = Column(String, nullable=False, default="active")  # active | expired | cancelled | completed | renewed
     notes = Column(Text, nullable=True)
     renewed_from_id = Column(Integer, ForeignKey("subscriptions.id"), nullable=True)  # the package this one renews
+    discount_code = Column(String, nullable=True)
+    discount_amount = Column(Float, nullable=True)
     low_notified_at = Column(DateTime, nullable=True)
     expiry_notified_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -271,6 +273,23 @@ class Subscription(Base):
     plan = relationship("SubscriptionPlan", back_populates="subscriptions")
     appointments = relationship("Appointment", back_populates="subscription")
     payments = relationship("Payment", back_populates="subscription")
+
+
+class DiscountCode(Base):
+    """Promo code for package sales: a percentage or a fixed amount off, with optional dates and a use limit."""
+    __tablename__ = "discount_codes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String, nullable=False, unique=True, index=True)  # stored upper case
+    kind = Column(String, nullable=False, default="percent")  # percent | amount
+    value = Column(Float, nullable=False)
+    max_uses = Column(Integer, nullable=True)  # None = unlimited
+    used_count = Column(Integer, nullable=False, default=0)
+    valid_from = Column(DateTime, nullable=True)
+    valid_until = Column(DateTime, nullable=True)
+    active = Column(Boolean, nullable=False, default=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 class Setting(Base):

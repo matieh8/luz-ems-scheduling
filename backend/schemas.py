@@ -209,6 +209,35 @@ class SubscriptionCreate(BaseModel):
     payment_method: Optional[str] = "cash"  # records a payment for the sale; None = unpaid
     record_payment: bool = True
     send_notification: bool = True
+    discount_code: Optional[str] = None
+
+
+class DiscountCreate(BaseModel):
+    code: str = Field(..., min_length=2, max_length=40)
+    kind: str = Field("percent", pattern="^(percent|amount)$")
+    value: float = Field(..., gt=0)
+    max_uses: Optional[int] = Field(None, ge=1)
+    valid_from: Optional[datetime] = None
+    valid_until: Optional[datetime] = None
+    active: bool = True
+    notes: Optional[str] = None
+
+
+class DiscountUpdate(BaseModel):
+    kind: Optional[str] = Field(None, pattern="^(percent|amount)$")
+    value: Optional[float] = Field(None, gt=0)
+    max_uses: Optional[int] = Field(None, ge=1)
+    valid_from: Optional[datetime] = None
+    valid_until: Optional[datetime] = None
+    active: Optional[bool] = None
+    notes: Optional[str] = None
+
+
+class DiscountResponse(DiscountCreate):
+    id: int
+    used_count: int
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SubscriptionUpdate(BaseModel):
@@ -230,6 +259,7 @@ class SubscriptionRenew(BaseModel):
     payment_method: Optional[str] = "cash"
     record_payment: bool = True
     send_notification: bool = True
+    discount_code: Optional[str] = None
 
 
 class SubscriptionResponse(BaseModel):
@@ -237,6 +267,8 @@ class SubscriptionResponse(BaseModel):
     client_id: int
     plan_id: int
     renewed_from_id: Optional[int] = None
+    discount_code: Optional[str] = None
+    discount_amount: Optional[float] = None
     start_date: datetime
     end_date: Optional[datetime] = None
     sessions_total: int

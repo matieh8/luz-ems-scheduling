@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend import models, schemas, notifications
+from backend.routers import discounts
 from backend.tz import to_utc_naive, utcnow
 
 router = APIRouter(prefix="/api/subscriptions", tags=["Subscriptions"])
@@ -81,12 +82,13 @@ def create_subscription(sub: schemas.SubscriptionCreate, db: Session = Depends(g
     start = to_utc_naive(sub.start_date) if sub.start_date else utcnow()
     end = to_utc_naive(sub.end_date) if sub.end_date else (start + timedelta(days=plan.duration_days) if plan.duration_days else None)
     sessions_total = sub.sessions_total or plan.sessions_included
-    price_paid = sub.price_paid if sub.price_paid is not None else plan.price
+    base_price = sub.price_paid if sub.price_paid is not None else plan.price
+    price_paid, code, off = discounts.apply(db, sub.discount_code, base_price)
 
     db_sub = models.Subscription(
         client_id=sub.client_id, plan_id=sub.plan_id, start_date=start, end_date=end,
         sessions_total=sessions_total, sessions_used=sub.sessions_used, price_paid=price_paid,
-        status=sub.status, notes=sub.notes,
+        status=sub.status, notes=sub.notes, discount_code=code, discount_amount=off,
     )
     db.add(db_sub)
     db.commit()
@@ -117,8 +119,9 @@ def renew_subscription(subscription_id: int, body: schemas.SubscriptionRenew, db
         raise HTTPException(status_code=400, detail="Plan not found")
     now = utcnow()
     carried = old.sessions_remaining if (body.carry_over and old.status == "active") else 0
-    price = body.price_paid if body.price_paid is not None else plan.price
+    price, code, off = discounts.apply(db, body.discount_code, body.price_paid if body.price_paid is not None else plan.price)
     new = models.Subscription(
+        discount_code=code, discount_amount=off,
         client_id=old.client_id, plan_id=plan.id, start_date=now,
         end_date=now + timedelta(days=plan.duration_days) if plan.duration_days else None,
         sessions_total=plan.sessions_included + carried, sessions_used=0, price_paid=price, status="active",

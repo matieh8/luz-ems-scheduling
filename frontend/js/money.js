@@ -9,7 +9,7 @@ function subsTable(subs) {
       <td>${esc(s.plan.name)}</td>
       <td style="min-width:140px"><div class="small">${s.sessions_used} / ${s.sessions_total} used · <strong>${s.sessions_remaining} left</strong></div><div class="progress"><div style="width:${pct}%"></div></div></td>
       <td class="small">${fmtDate(s.start_date)} → ${s.end_date ? fmtDate(s.end_date) : 'no expiry'}${expSoon && s.status === 'active' ? '<div class="tiny" style="color:var(--warn)">expires soon</div>' : ''}</td>
-      <td class="num">${money(s.price_paid)}${s.paid_amount < s.price_paid ? `<div class="tiny" style="color:var(--bad)">paid ${money(s.paid_amount)}</div>` : ''}</td>
+      <td class="num">${money(s.price_paid)}${s.discount_code ? `<div class="tiny" style="color:var(--good)">${esc(s.discount_code)} −${money(s.discount_amount)}</div>` : ''}${s.paid_amount < s.price_paid ? `<div class="tiny" style="color:var(--bad)">paid ${money(s.paid_amount)}</div>` : ''}</td>
       <td>${badge(s.status === 'active' ? 'active' : s.status === 'expired' ? 'expired' : 'neutral').replace('neutral', s.status)}</td>
       <td class="num">${s.status !== 'renewed' && s.status !== 'cancelled' ? `<button class="btn btn-success btn-xs" onclick="renewFlow(${s.id})">Renew</button>` : ''}<button class="btn btn-ghost btn-xs" onclick="editSubscription(${s.id})">Edit</button>${s.paid_amount < s.price_paid ? `<button class="btn btn-ghost btn-xs" onclick="openPaymentModal({client_id:${s.client_id}, subscription_id:${s.id}, amount:${s.price_paid - s.paid_amount}, label:'${esc(s.plan.name)}'})">Pay</button>` : ''}<button class="btn btn-ghost btn-xs" style="color:var(--bad)" onclick="deleteSubscription(${s.id}, '${esc(s.plan.name).replace(/'/g, "\\'")}')">Delete</button></td></tr>`; }).join('') + '</tbody></table></div>';
 }
@@ -20,11 +20,13 @@ async function renewFlow(id) {
   confirmBox(`Renew ${esc(s.client.name)}'s package`, `
     <div class="form-group"><label>New package</label><select id="rn-plan" class="input">${plans.map(p => `<option value="${p.id}" ${p.id === s.plan_id ? 'selected' : ''}>${esc(p.name)} · ${p.sessions_included} sessions · ${money(p.price)}</option>`).join('')}</select></div>
     ${canCarry ? `<label class="check mb"><input type="checkbox" id="rn-carry" checked> Carry over the ${s.sessions_remaining} unused session(s) and close the current package</label>` : '<p class="small muted">The current package has no sessions left to carry over.</p>'}
+    <div class="form-group"><label>Discount code (optional)</label><input type="text" id="rn-code" class="input" autocapitalize="characters"></div>
     <div class="form-group"><label>Payment</label><select id="rn-method" class="input"><option value="cash">Paid: cash</option><option value="card">Paid: card</option><option value="transfer">Paid: bank transfer</option><option value="online">Paid: online</option><option value="">Not paid yet</option></select></div>
     <label class="check"><input type="checkbox" id="rn-notify" checked> Send the client the package message</label>`,
     'Renew', async () => {
       const r = await api('POST', `/subscriptions/${id}/renew`, { plan_id: +val('rn-plan'), carry_over: canCarry ? $('rn-carry').checked : false,
-        payment_method: val('rn-method') || null, record_payment: !!val('rn-method'), send_notification: $('rn-notify').checked });
+        payment_method: val('rn-method') || null, record_payment: !!val('rn-method'), send_notification: $('rn-notify').checked,
+        discount_code: val('rn-code').trim() || null });
       toast(`Renewed: ${r.sessions_total} sessions`); refreshCurrent();
       if ($('client-detail-modal').classList.contains('active')) openClientDetail(s.client_id, 'subs');
     });
@@ -33,6 +35,7 @@ let SUBS = { tab: 'active' };
 function subTab(t, el) { SUBS.tab = t; document.querySelectorAll('#page-subscriptions .tab').forEach(x => x.classList.remove('active')); el.classList.add('active'); document.querySelectorAll('#page-subscriptions .subpanel').forEach(p => p.classList.toggle('active', p.id === 'sub-' + t)); loadSubscriptions(); }
 async function loadSubscriptions() {
   if (SUBS.tab === 'plans') return loadPlans();
+  if (SUBS.tab === 'codes') return loadCodes();
   const subs = await api('GET', `/subscriptions/${SUBS.tab === 'active' ? '?active=true' : ''}`);
   $('sub-' + SUBS.tab).innerHTML = subsTable(subs);
 }
@@ -52,7 +55,8 @@ function deletePlan(id) { confirmBox('Delete plan', '<p>Delete this plan? If it 
 function openSubscriptionModal(id, clientId) {
   $('subscription-modal-title').textContent = 'Sell package';
   fillSelect('subscription-client', clientOptions(clientId)); fillSelect('subscription-plan', S.plans.filter(p => p.active).map(p => `<option value="${p.id}">${esc(p.name)} · ${money(p.price)}</option>`).join(''));
-  ['subscription-id', 'subscription-end', 'subscription-total', 'subscription-price', 'subscription-notes'].forEach(i => setVal(i, ''));
+  ['subscription-id', 'subscription-end', 'subscription-total', 'subscription-price', 'subscription-notes', 'subscription-code'].forEach(i => setVal(i, ''));
+  $('subscription-code-result').textContent = ''; $('subscription-discount-row').style.display = 'block';
   setVal('subscription-start', todayKey()); setVal('subscription-used', 0); setVal('subscription-status', 'active'); setVal('subscription-method', 'cash'); $('subscription-notify').checked = true;
   $('subscription-payment-row').style.display = 'grid'; $('subscription-notify-row').style.display = 'flex';
   if (clientId) setVal('subscription-client', clientId);
@@ -70,7 +74,7 @@ async function editSubscription(id) {
   fillSelect('subscription-plan', S.plans.map(p => `<option value="${p.id}">${esc(p.name)} · ${money(p.price)}</option>`).join(''));
   setVal('subscription-id', s.id); setVal('subscription-plan', s.plan_id); setVal('subscription-start', dateKey(parseISO(s.start_date))); setVal('subscription-end', s.end_date ? dateKey(parseISO(s.end_date)) : '');
   setVal('subscription-total', s.sessions_total); setVal('subscription-used', s.sessions_used); setVal('subscription-price', s.price_paid); setVal('subscription-status', s.status); setVal('subscription-notes', s.notes);
-  $('subscription-payment-row').querySelector('.form-group').style.display = 'none'; $('subscription-notify-row').style.display = 'none';
+  $('subscription-payment-row').querySelector('.form-group').style.display = 'none'; $('subscription-notify-row').style.display = 'none'; $('subscription-discount-row').style.display = 'none';
 }
 async function saveSubscription() {
   guard(async () => {
@@ -79,10 +83,63 @@ async function saveSubscription() {
       end_date: val('subscription-end') ? zonedToDate(val('subscription-end'), '23:59').toISOString() : null, sessions_total: +val('subscription-total'), sessions_used: +val('subscription-used'),
       price_paid: parseFloat(val('subscription-price')), status: val('subscription-status'), notes: val('subscription-notes') || null };
     if (id) await api('PUT', `/subscriptions/${id}`, payload);
-    else { payload.record_payment = !!val('subscription-method'); payload.payment_method = val('subscription-method') || null; payload.send_notification = $('subscription-notify').checked; await api('POST', '/subscriptions/', payload); }
+    else { payload.record_payment = !!val('subscription-method'); payload.payment_method = val('subscription-method') || null; payload.send_notification = $('subscription-notify').checked;
+      if (val('subscription-code').trim()) payload.discount_code = val('subscription-code').trim();
+      await api('POST', '/subscriptions/', payload); }
     closeModal('subscription-modal'); toast('Package saved'); await refreshLookups(); refreshCurrent();
   });
 }
+/* ---------- discount codes ---------- */
+function codeStatus(d) {
+  const now = new Date();
+  if (!d.active) return '<span class="badge badge-neutral">off</span>';
+  if (d.valid_until && parseISO(d.valid_until) < now) return '<span class="badge badge-expired">expired</span>';
+  if (d.valid_from && parseISO(d.valid_from) > now) return '<span class="badge badge-scheduled">not started</span>';
+  if (d.max_uses && d.used_count >= d.max_uses) return '<span class="badge badge-expired">used up</span>';
+  return badge('active');
+}
+async function loadCodes() {
+  const codes = await api('GET', '/discounts/');
+  $('sub-codes').innerHTML = `<details class="add-box" ${codes.length ? '' : 'open'}><summary>+ New discount code</summary>
+    <div class="measure-grid">
+      <div class="form-group"><label>Code</label><input type="text" id="dc-code" class="input" placeholder="SUMMER20" autocapitalize="characters"></div>
+      <div class="form-group"><label>Type</label><select id="dc-kind" class="input"><option value="percent">% off</option><option value="amount">${esc(S.currency)} off</option></select></div>
+      <div class="form-group"><label>Value</label><input type="number" min="0" step="0.01" id="dc-value" class="input" placeholder="20"></div>
+      <div class="form-group"><label>Max uses (optional)</label><input type="number" min="1" step="1" id="dc-max" class="input" placeholder="Unlimited"></div>
+      <div class="form-group"><label>Valid from (optional)</label><input type="date" id="dc-from" class="input"></div>
+      <div class="form-group"><label>Valid until (optional)</label><input type="date" id="dc-until" class="input"></div>
+    </div>
+    <div class="form-group"><label>Notes</label><input type="text" id="dc-notes" class="input" placeholder="e.g. Instagram summer campaign"></div>
+    <button class="btn btn-primary btn-sm" onclick="saveCode()">Create code</button></details>` +
+    (codes.length ? `<div class="table-wrap"><table><thead><tr><th>Code</th><th>Discount</th><th>Used</th><th>Valid</th><th>Status</th><th></th></tr></thead><tbody>${codes.map(d => `<tr>
+      <td><strong class="mono">${esc(d.code)}</strong>${d.notes ? `<div class="tiny muted">${esc(d.notes)}</div>` : ''}</td>
+      <td>${d.kind === 'percent' ? `${d.value}%` : money(d.value)} off packages</td>
+      <td class="mono">${d.used_count}${d.max_uses ? ` / ${d.max_uses}` : ''}</td>
+      <td class="small">${d.valid_from ? fmtDate(d.valid_from) : 'now'} → ${d.valid_until ? fmtDate(d.valid_until) : 'no end'}</td>
+      <td>${codeStatus(d)}</td>
+      <td class="num"><button class="btn btn-ghost btn-xs" onclick="toggleCode(${d.id}, ${!d.active})">${d.active ? 'Switch off' : 'Switch on'}</button><button class="btn btn-ghost btn-xs" style="color:var(--bad)" onclick="deleteCode(${d.id}, '${esc(d.code)}')">Delete</button></td></tr>`).join('')}</tbody></table></div>`
+      : '<div class="card empty">No discount codes yet.</div>');
+}
+async function saveCode() {
+  guard(async () => {
+    const body = { code: val('dc-code').trim(), kind: val('dc-kind'), value: parseFloat(val('dc-value')), notes: val('dc-notes').trim() || null };
+    if (!body.code || !(body.value > 0)) throw new Error('Enter a code and a value');
+    if (val('dc-max')) body.max_uses = +val('dc-max');
+    if (val('dc-from')) body.valid_from = zonedToDate(val('dc-from'), '00:00').toISOString();
+    if (val('dc-until')) body.valid_until = zonedToDate(val('dc-until'), '23:59').toISOString();
+    await api('POST', '/discounts/', body); toast(`Code ${body.code.toUpperCase()} created`); loadCodes();
+  });
+}
+async function toggleCode(id, on) { guard(async () => { await api('PUT', `/discounts/${id}`, { active: on }); loadCodes(); }); }
+function deleteCode(id, code) { confirmBox('Delete code', `<p>Delete <strong>${esc(code)}</strong>? Packages already sold with it keep their price.</p>`, 'Delete', async () => { await api('DELETE', `/discounts/${id}`); toast('Code deleted'); loadCodes(); }, 'btn-danger'); }
+async function checkSubscriptionCode() {
+  const code = val('subscription-code').trim(), out = $('subscription-code-result');
+  if (!code) { out.textContent = ''; return; }
+  const price = parseFloat(val('subscription-price'));
+  const r = await api('GET', `/discounts/check?code=${encodeURIComponent(code)}&plan_id=${val('subscription-plan')}${isNaN(price) ? '' : '&price=' + price}`);
+  out.innerHTML = r.valid ? `<span style="color:var(--good);font-weight:600">✓ ${esc(r.label)}: client pays ${money(r.final_price)} (saves ${money(r.discount)})</span>` : `<span style="color:var(--bad)">${esc(r.reason)}</span>`;
+}
+
 function deleteSubscription(id, planName) {
   confirmBox('Delete package', `<p>Delete the <strong>${esc(planName)}</strong> package? This will remove the package and unlink any payments from it. Sessions already delivered will not be deleted.</p>`, 'Delete', async () => {
     await api('DELETE', `/subscriptions/${id}`); toast('Package deleted'); await refreshLookups(); refreshCurrent();

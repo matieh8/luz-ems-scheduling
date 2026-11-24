@@ -227,6 +227,18 @@
           <div class="card"><div class="card-title">Session outcomes</div><div id="rep-status"></div></div>
         </div>
         <div class="card mt"><div class="card-title">Top clients</div><div id="rep-top" class="table-wrap"></div></div>
+
+        <div class="header mt" style="margin-top:32px">
+          <div><h2>Finance</h2><div class="sub" id="fin-sub"></div></div>
+          <div class="seg" id="fin-range"><button data-m="3" onclick="finMonths(3)">3 months</button><button class="active" data-m="6" onclick="finMonths(6)">6 months</button><button data-m="12" onclick="finMonths(12)">12 months</button></div>
+        </div>
+        <div class="grid grid-4" id="fin-kpis"></div>
+        <div class="card mt"><div class="card-title">Cash flow <span class="legend" style="margin:0"><span style="--c:var(--series-1)">Money in</span><span style="--c:var(--series-2)">Money out</span><span style="--c:var(--text)">Running balance</span></span></div><div id="fin-chart" class="chart"></div></div>
+        <div class="card mt"><div class="card-title">Profit by service <span class="muted small">estimated</span></div><div class="tiny muted mb" id="fin-cost-note"></div><div id="fin-services"></div></div>
+        <div class="grid grid-2 mt">
+          <div class="card"><div class="card-title">Profit by package <span class="muted small">sold in this period</span></div><div id="fin-plans"></div></div>
+          <div class="card"><div class="card-title">Where the money goes <span class="muted small">expenses by group</span></div><div id="fin-groups"></div></div>
+        </div>
       </section>
 
       <!-- Messages -->
@@ -484,7 +496,8 @@
   <script src="/js/calendar.js?v=6"></script>
   <script src="/js/booking.js?v=4"></script>
   <script src="/js/clients.js?v=7"></script>
-  <script src="/js/money.js?v=6"></script>
+  <script src="/js/money.js?v=7"></script>
+  <script src="/js/finance.js?v=1"></script>
   <script src="/js/expenses.js?v=3"></script>
   <script src="/js/messages.js?v=2"></script>
   <script src="/js/push.js?v=1"></script>

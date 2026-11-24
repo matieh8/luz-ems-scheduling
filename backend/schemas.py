@@ -97,6 +97,7 @@ class ClientSummary(ClientResponse):
     sessions_remaining: int = 0
     last_visit: Optional[datetime] = None
     next_visit: Optional[datetime] = None
+    late_count: int = 0
     risk: str = "new"  # new | regular | slipping | at_risk | lapsed
     attendance_rate: Optional[float] = None
     avg_gap_days: Optional[float] = None
@@ -299,6 +300,7 @@ class AppointmentUpdate(BaseModel):
     start_time: Optional[datetime] = None
     notes: Optional[str] = None
     price: Optional[float] = None
+    late_minutes: Optional[int] = Field(None, ge=0, le=240)
     send_notification: bool = True
     force: bool = False
 
@@ -306,6 +308,7 @@ class AppointmentUpdate(BaseModel):
 class AppointmentStatusChange(BaseModel):
     status: str  # confirmed | completed | cancelled | no_show | scheduled
     reason: Optional[str] = None
+    late_minutes: Optional[int] = Field(None, ge=0, le=240)
     send_notification: bool = True
     payment_amount: Optional[float] = None
     payment_method: Optional[str] = None
@@ -321,6 +324,7 @@ class AppointmentResponse(BaseModel):
     end_time: datetime
     status: str
     price: float
+    late_minutes: Optional[int] = None
     notes: Optional[str] = None
     source: str
     public_token: Optional[str] = None

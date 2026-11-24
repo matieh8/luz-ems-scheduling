@@ -111,7 +111,7 @@ function apptTable(list, opts = {}) {
       <td><strong>${esc(a.client.name)}</strong><div class="tiny muted">${esc(a.client.phone)}</div></td>
       <td><span class="dot" style="background:${a.service.color}"></span>${esc(a.service.name)}</td>
       <td>${a.staff ? esc(a.staff.name) : '<span class="muted">—</span>'}</td>
-      <td>${badge(a.status)}${a.source === 'online' ? ' <span class="chip">online</span>' : ''}</td>
+      <td>${badge(a.status)}${a.late_minutes ? ` <span class="chip" style="color:var(--warn)">${a.late_minutes}m late</span>` : ''}${a.source === 'online' ? ' <span class="chip">online</span>' : ''}</td>
       <td class="num">${a.subscription_id ? '<span class="chip">package</span>' : money(a.price)}${a.balance_due > 0 ? `<div class="tiny" style="color:var(--bad)">due ${money(a.balance_due)}</div>` : ''}</td>
       <td class="num"><button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();openAppointment(${a.id})">Manage</button></td></tr>`).join('') + '</tbody></table></div>';
 }

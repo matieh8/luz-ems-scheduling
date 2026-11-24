@@ -582,3 +582,17 @@ def test_progress_photos_need_consent_and_stay_private(client):
     client.put(f"/api/clients/{cid}", json={"photo_consent": False})
     assert client.get(f"/api/clients/{cid}/photos").json() == [] and os.listdir(path) == []
     assert client.get(f"/api/clients/photos/{p2['id']}/file").status_code == 404
+
+
+def test_late_arrivals_are_tracked(client):
+    cid = client.post("/api/clients/", json={"name": "Late Client", "phone": "0509990004"}).json()["id"]
+    svc = client.get("/api/services/").json()[0]
+    a = client.post("/api/appointments/", json={"client_id": cid, "service_id": svc["id"],
+                                                "start_time": next_weekday_at(11, days_ahead=9).isoformat(), "force": True}).json()
+    assert a["late_minutes"] is None
+    r = client.post(f"/api/appointments/{a['id']}/status", json={"status": "completed", "late_minutes": 12, "send_notification": False})
+    assert r.status_code == 200 and r.json()["late_minutes"] == 12
+    assert client.get(f"/api/clients/{cid}").json()["late_count"] == 1
+    assert client.put(f"/api/appointments/{a['id']}", json={"late_minutes": -3}).status_code == 422
+    assert client.put(f"/api/appointments/{a['id']}", json={"late_minutes": 0, "send_notification": False}).json()["late_minutes"] == 0
+    assert client.get(f"/api/clients/{cid}").json()["late_count"] == 0

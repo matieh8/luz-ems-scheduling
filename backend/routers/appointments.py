@@ -266,6 +266,8 @@ def change_status(appointment_id: int, body: schemas.AppointmentStatusChange, db
         appt.confirmed_at = now
     if new == "completed":
         appt.completed_at = now
+        if body.late_minutes is not None:
+            appt.late_minutes = body.late_minutes
         if body.payment_amount and body.payment_amount > 0:
             db.add(models.Payment(client_id=appt.client_id, appointment_id=appt.id,
                                   amount=body.payment_amount, method=body.payment_method or "cash", paid_at=now))

@@ -126,6 +126,7 @@ async function openAppointment(id) {
       <dt>When</dt><dd>${fmtDateShort(a.start_time)}, ${fmtTime(a.start_time)} – ${fmtTime(a.end_time)}<div class="tiny muted">${relTime(a.start_time)} · ${a.service.duration_minutes} min</div></dd>
       <dt>Trainer</dt><dd>${a.staff ? esc(a.staff.name) : '<span class="muted">Unassigned</span>'}</dd>
       <dt>Price</dt><dd>${a.subscription_id ? '<span class="chip">Covered by package</span>' : money(a.price)}${!a.subscription_id && a.price > 0 ? ` · paid ${money(a.paid_amount)}${a.balance_due > 0 ? ` · <span style="color:var(--bad)">due ${money(a.balance_due)}</span>` : ' · <span style="color:var(--good)">settled</span>'}` : ''}</dd>
+      ${a.status === 'completed' ? `<dt>Arrival</dt><dd>${a.late_minutes ? `<span style="color:var(--warn);font-weight:600">${a.late_minutes} min late</span>` : 'On time'} <a href="#" class="small" onclick="editLate(${a.id}, ${a.late_minutes || 0});return false">change</a></dd>` : ''}
       ${a.series_id ? `<dt>Repeat</dt><dd><span class="chip">🔁 Part of a repeat booking</span></dd>` : ''}
       <dt>Booked via</dt><dd>${a.source === 'online' ? 'Online booking page' : 'Admin'} · ${fmtDate(a.created_at)}</dd>
       ${a.notes ? `<dt>Notes</dt><dd>${esc(a.notes)}</dd>` : ''}
@@ -151,14 +152,22 @@ async function openAppointment(id) {
   openDrawer();
 }
 async function setStatus(id, status, extra = {}) { await guard(async () => { await api('POST', `/appointments/${id}/status`, { status, ...extra }); toast(`Marked ${status.replace('_', ' ')}`); await openAppointment(id); refreshCurrent(); }); }
+function editLate(id, current) {
+  confirmBox('Arrival time', `<div class="form-group"><label>Minutes late (0 = on time)</label><input type="number" min="0" max="240" step="1" inputmode="numeric" id="late-min" class="input" value="${current}"></div>`, 'Save', async () => {
+    const late = Math.max(0, Math.min(240, parseInt(val('late-min'), 10) || 0));
+    await api('PUT', `/appointments/${id}`, { late_minutes: late, send_notification: false }); toast('Saved'); await openAppointment(id); refreshCurrent();
+  });
+}
 function completeFlow(id) {
   api('GET', `/appointments/${id}`).then(a => {
     const needsPay = !a.subscription_id && a.balance_due > 0;
-    confirmBox('Complete session', `<p>Mark <strong>${esc(a.client.name)}</strong>'s ${esc(a.service.name)} as completed.</p>` + (needsPay ? `
+    confirmBox('Complete session', `<p>Mark <strong>${esc(a.client.name)}</strong>'s ${esc(a.service.name)} as completed.</p>
+      <div class="form-group"><label>Arrived late? (minutes)</label><input type="number" min="0" max="240" step="1" inputmode="numeric" id="cp-late" class="input" value="0"><div class="help">Leave 0 if on time.</div></div>` + (needsPay ? `
       <div class="form-row"><div class="form-group"><label>Payment received</label><input type="number" step="0.01" id="cp-amount" class="input" value="${a.balance_due}"></div>
       <div class="form-group"><label>Method</label><select id="cp-method" class="input"><option value="cash">Cash</option><option value="card">Card</option><option value="transfer">Bank transfer</option><option value="online">Online</option><option value="">Not paid yet</option></select></div></div>` : '<p class="muted small">Covered by package or already paid.</p>'),
       'Complete', async () => { const amt = needsPay ? parseFloat(val('cp-amount')) : 0; const m = needsPay ? val('cp-method') : '';
-        await api('POST', `/appointments/${id}/status`, { status: 'completed', payment_amount: m ? amt : null, payment_method: m || null }); toast('Session completed'); await openAppointment(id); refreshCurrent(); });
+        const late = Math.max(0, Math.min(240, parseInt(val('cp-late'), 10) || 0));
+        await api('POST', `/appointments/${id}/status`, { status: 'completed', late_minutes: late, payment_amount: m ? amt : null, payment_method: m || null }); toast('Session completed'); await openAppointment(id); refreshCurrent(); });
   });
 }
 function cancelFlow(id) {

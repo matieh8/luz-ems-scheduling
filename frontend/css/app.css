@@ -424,3 +424,26 @@ table.plain td { padding: 10px 14px; }
 .compare figcaption { font-size: .75rem; color: var(--text-2); margin-top: 4px; }
 .photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
 .photo figcaption { display: flex; justify-content: space-between; align-items: center; font-size: .75rem; color: var(--text-2); margin-top: 4px; gap: 4px; }
+
+/* Month calendar */
+.cal-month { min-width: 100%; }
+.cm-head { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--surface); z-index: 2; }
+.cm-head div { padding: 9px 8px; font-size: .74rem; font-weight: 600; color: var(--text-2); text-align: center; }
+.cm-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.cm-day { min-height: 112px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 6px; cursor: pointer; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.cm-day:nth-child(7n) { border-right: none; }
+.cm-day:hover { background: var(--bg); }
+.cm-day.other { background: #fafbfa; color: var(--text-3); }
+.cm-day.closed .cm-n { color: var(--text-3); }
+.cm-top { display: flex; justify-content: space-between; align-items: center; }
+.cm-n { font-weight: 700; font-size: .85rem; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; }
+.cm-day.today .cm-n { background: var(--accent); color: #fff; }
+.cm-count { font-size: .68rem; font-weight: 700; background: var(--accent-light); color: var(--accent-dark); border-radius: 999px; padding: 1px 7px; }
+.cm-ev { font-size: .72rem; padding: 2px 6px; border-radius: 6px; background: color-mix(in srgb, var(--c) 14%, transparent); border-left: 3px solid var(--c); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+.cm-ev:hover { background: color-mix(in srgb, var(--c) 26%, transparent); }
+.cm-more { font-size: .7rem; color: var(--text-2); padding-left: 4px; }
+@media (max-width: 760px) {
+  .cm-day { min-height: 64px; padding: 4px; }
+  .cm-ev, .cm-more { display: none; }
+  .cm-top { flex-direction: column; gap: 2px; }
+}

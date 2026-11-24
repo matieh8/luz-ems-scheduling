@@ -3,11 +3,14 @@ const CAL = { view: 'week', anchor: todayKey(), hours: [], appts: [], blocks: []
 const ROW_MIN = 30, ROW_PX = 36;
 
 function calView(v) { CAL.view = v; document.querySelectorAll('#cal-view button').forEach(b => b.classList.toggle('active', b.dataset.v === v)); loadCalendar(); }
-function calMove(n) { CAL.anchor = addDays(CAL.anchor, CAL.view === 'week' ? 7 * n : CAL.view === 'day' ? n : 7 * n); loadCalendar(); }
+function addMonths(key, n) { const [y, m] = key.split('-').map(Number); const d = new Date(Date.UTC(y, m - 1 + n, 1)); return d.toISOString().slice(0, 10); }
+function calMove(n) { CAL.anchor = CAL.view === 'month' ? addMonths(CAL.anchor, n) : addDays(CAL.anchor, CAL.view === 'day' ? n : 7 * n); loadCalendar(); }
 function calToday() { CAL.anchor = todayKey(); loadCalendar(); }
+function calOpenDay(k) { CAL.anchor = k; calView('day'); }
 
 function calRange() {
   if (CAL.view === 'day') return [CAL.anchor, addDays(CAL.anchor, 1)];
+  if (CAL.view === 'month') { const first = CAL.anchor.slice(0, 8) + '01'; const ws = weekStartKey(first); return [ws, addDays(ws, 42)]; }
   const ws = weekStartKey(CAL.anchor); return [ws, addDays(ws, CAL.view === 'agenda' ? 14 : 7)];
 }
 
@@ -20,6 +23,7 @@ async function loadCalendar() {
   [CAL.appts, CAL.blocks] = await Promise.all([api('GET', `/appointments/?${q}${staffId ? '&staff_id=' + staffId : ''}`), api('GET', `/blocked-times/?${q}`)]);
   $('cal-legend').innerHTML = S.services.filter(s => s.active).map(s => `<span class="dot" style="background:${s.color}"></span>${esc(s.name)}&nbsp;&nbsp;`).join('');
   if (CAL.view === 'agenda') return renderAgenda(from, to);
+  if (CAL.view === 'month') return renderMonth(from);
   renderGrid(from, CAL.view === 'day' ? 1 : 7);
 }
 
@@ -67,6 +71,28 @@ function px(min) { return min / ROW_MIN * ROW_PX; }
 function minOf(iso) { const p = tzParts(parseISO(iso)); return p.h * 60 + p.mi; }
 function fmtMin(m) { const h = Math.floor(m / 60); return h === 0 ? '12 AM' : h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`; }
 function fmtMin24(m) { return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`; }
+
+function renderMonth(from) {
+  const month = CAL.anchor.slice(0, 7), today = todayKey();
+  const [y, m] = month.split('-').map(Number);
+  $('cal-title').textContent = new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString('en-GB', { timeZone: 'UTC', month: 'long', year: 'numeric' });
+  const byDay = {};
+  CAL.appts.filter(a => a.status !== 'cancelled').forEach(a => { const k = dateKey(parseISO(a.start_time)); (byDay[k] = byDay[k] || []).push(a); });
+  Object.values(byDay).forEach(l => l.sort((a, b) => a.start_time.localeCompare(b.start_time)));
+  const keys = Array.from({ length: 42 }, (_, i) => addDays(from, i));
+  // Drop a 6th week that is entirely next month
+  const weeks = [0, 1, 2, 3, 4, 5].filter(w => w < 5 || keys[w * 7].slice(0, 7) === month);
+  let html = `<div class="cal-month"><div class="cm-head">${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => `<div>${d}</div>`).join('')}</div><div class="cm-grid">`;
+  weeks.forEach(w => keys.slice(w * 7, w * 7 + 7).forEach(k => {
+    const list = byDay[k] || [], h = hoursFor(k), closed = !h || h.closed;
+    html += `<div class="cm-day ${k.slice(0, 7) !== month ? 'other' : ''} ${k === today ? 'today' : ''} ${closed ? 'closed' : ''}" onclick="calOpenDay('${k}')" role="button" tabindex="0" aria-label="${fmtKeyLong(k)}, ${list.length} session(s)">
+      <div class="cm-top"><span class="cm-n">${+k.slice(8)}</span>${list.length ? `<span class="cm-count">${list.length}</span>` : ''}</div>
+      ${list.slice(0, 3).map(a => `<div class="cm-ev" style="--c:${a.service.color}" onclick="event.stopPropagation();openAppointment(${a.id})" title="${esc(a.client.name)} · ${esc(a.service.name)}"><b>${fmtTime(a.start_time)}</b> ${esc(a.client.name.split(' ')[0])}</div>`).join('')}
+      ${list.length > 3 ? `<div class="cm-more">+${list.length - 3} more</div>` : ''}</div>`;
+  }));
+  $('cal').innerHTML = html + '</div></div>';
+  $('cal').scrollTop = 0;
+}
 
 function renderAgenda(from, to) {
   $('cal-title').textContent = `${fmtKey(from)} – ${fmtKey(addDays(to, -1))}`;

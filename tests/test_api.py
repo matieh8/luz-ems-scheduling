@@ -708,3 +708,23 @@ def test_finance_report(client):
         assert {"name", "sessions", "revenue", "est_cost", "est_profit", "margin_pct"} <= set(r)
     for r in f1["plans"]:
         assert {"name", "sold", "revenue", "est_cost", "est_profit"} <= set(r)
+
+
+def test_invoice_for_a_payment(client):
+    client.put("/api/settings/", json={"business_address": "Dubai Marina", "tax_registration_number": "100123456700003"})
+    cid = client.post("/api/clients/", json={"name": "Invoice Client", "phone": "0509990011", "email": "inv@example.com"}).json()["id"]
+    plan = client.get("/api/subscriptions/plans").json()[0]
+    client.post("/api/discounts/", json={"code": "INV10", "kind": "amount", "value": 10})
+    sub = client.post("/api/subscriptions/", json={"client_id": cid, "plan_id": plan["id"], "discount_code": "INV10",
+                                                   "payment_method": "card", "send_notification": False}).json()
+    pay = client.get(f"/api/clients/{cid}/history").json()["payments"][0]
+    inv = client.get(f"/api/payments/{pay['id']}/invoice")
+    assert inv.status_code == 200, inv.text
+    inv = inv.json()
+    assert inv["number"] == f"INV-{pay['paid_at'][:4]}-{pay['id']:05d}"
+    assert inv["business"]["name"] and inv["business"]["address"] == "Dubai Marina" and inv["business"]["trn"] == "100123456700003"
+    assert inv["client"]["name"] == "Invoice Client" and inv["client"]["email"] == "inv@example.com"
+    assert inv["lines"][0]["description"].startswith(plan["name"]) and inv["lines"][0]["amount"] == plan["price"]
+    assert inv["lines"][1] == {"description": "Discount (INV10)", "amount": -10.0}
+    assert inv["total"] == pay["amount"] == plan["price"] - 10 and inv["method"] == "card" and inv["currency"]
+    assert client.get("/api/payments/999999/invoice").status_code == 404

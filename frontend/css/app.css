@@ -449,3 +449,29 @@ table.plain td { padding: 10px 14px; }
 }
 
 .badge-renewed { background: var(--accent-light); color: var(--accent-dark); }
+
+/* Invoice (printed from the browser; Save as PDF) */
+#print-area { display: none; }
+.invoice { max-width: 760px; margin: 0 auto; padding: 40px; color: #101814; font-size: 14px; background: #fff; }
+.inv-head { display: flex; justify-content: space-between; gap: 24px; border-bottom: 2px solid #047857; padding-bottom: 20px; }
+.inv-biz { font-size: 12.5px; color: #5a6861; line-height: 1.55; margin-top: 6px; }
+.inv-biz strong { color: #101814; }
+.inv-meta { text-align: right; }
+.inv-meta h1 { font-size: 22px; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 10px; font-weight: 700; }
+.inv-meta div { display: flex; justify-content: flex-end; gap: 12px; font-size: 13px; margin: 3px 0; }
+.inv-meta span { color: #5a6861; }
+.inv-paid { color: #047857; }
+.inv-to { margin: 22px 0; font-size: 13.5px; line-height: 1.55; }
+.inv-to span { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: #5a6861; margin-bottom: 2px; }
+.inv-lines { width: 100%; border: none; box-shadow: none; border-radius: 0; }
+.inv-lines th { background: #f4f6f5; text-transform: uppercase; font-size: 11px; }
+.inv-lines td { font-size: 13.5px; }
+.inv-lines tfoot td { font-weight: 800; font-size: 15px; border-top: 2px solid #101814; border-bottom: none; }
+.inv-foot { margin-top: 36px; color: #5a6861; font-size: 12.5px; }
+@media print {
+  @page { margin: 12mm; }
+  body.printing > *:not(#print-area) { display: none !important; }
+  body.printing #print-area { display: block; }
+  body.printing { background: #fff; }
+  .invoice { padding: 0; }
+}

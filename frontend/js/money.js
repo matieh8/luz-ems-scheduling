@@ -215,7 +215,35 @@ function paymentsTable(list, compact) {
     <td class="mono">${fmtDT(p.paid_at)}</td>${compact ? '' : `<td><strong>${esc(p.client.name)}</strong></td>`}
     <td>${p.appointment_id ? '<span class="chip">session</span>' : p.subscription_id ? '<span class="chip">package</span>' : '<span class="chip">other</span>'} <span class="small muted">${esc(p.notes || '')}</span></td>
     <td>${esc(p.method)}</td><td class="num bold">${money(p.amount)}</td>
-    <td class="num"><button class="btn btn-ghost btn-xs" style="color:var(--bad)" onclick="deletePayment(${p.id})">Delete</button></td></tr>`).join('') + '</tbody></table></div>';
+    <td class="num"><button class="btn btn-ghost btn-xs" onclick="printInvoice(${p.id})">Invoice</button><button class="btn btn-ghost btn-xs" style="color:var(--bad)" onclick="deletePayment(${p.id})">Delete</button></td></tr>`).join('') + '</tbody></table></div>';
+}
+
+/* ---------- invoices: printed from the browser, so "Save as PDF" works everywhere and Arabic names render ---------- */
+function invoiceHTML(inv) {
+  const m = v => `${esc(inv.currency)} ${Number(v).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const b = inv.business, c = inv.client;
+  return `<div class="invoice">
+    <div class="inv-head"><div><div class="wordmark lg">LUZ<small>EMS</small></div><div class="inv-biz"><strong>${esc(b.name)}</strong>${b.address ? `<br>${esc(b.address)}` : ''}${b.phone ? `<br>${esc(b.phone)}` : ''}${b.email ? `<br>${esc(b.email)}` : ''}${b.trn ? `<br>TRN: ${esc(b.trn)}` : ''}</div></div>
+      <div class="inv-meta"><h1>Invoice</h1><div><span>Number</span><strong>${esc(inv.number)}</strong></div><div><span>Date</span><strong>${esc(inv.date)}</strong></div><div><span>Status</span><strong class="inv-paid">Paid · ${esc(inv.method)}</strong></div></div></div>
+    <div class="inv-to"><span>Billed to</span><strong>${esc(c.name)}</strong>${c.phone && c.phone !== '-' ? `<br>${esc(c.phone)}` : ''}${c.email ? `<br>${esc(c.email)}` : ''}</div>
+    <table class="inv-lines"><thead><tr><th>Description</th><th class="num">Amount</th></tr></thead><tbody>
+      ${inv.lines.map(l => `<tr><td>${esc(l.description)}</td><td class="num">${l.amount < 0 ? '−' : ''}${m(Math.abs(l.amount))}</td></tr>`).join('')}</tbody>
+      <tfoot><tr><td>Total paid</td><td class="num">${m(inv.total)}</td></tr></tfoot></table>
+    <p class="inv-foot">Thank you for training with ${esc(b.name)}.</p></div>`;
+}
+async function printInvoice(paymentId) {
+  guard(async () => {
+    const inv = await api('GET', `/payments/${paymentId}/invoice`);
+    let area = $('print-area');
+    if (!area) { area = document.createElement('div'); area.id = 'print-area'; document.body.appendChild(area); }
+    area.innerHTML = invoiceHTML(inv);
+    const title = document.title; document.title = inv.number; // the PDF file name
+    document.body.classList.add('printing');
+    const done = () => { document.body.classList.remove('printing'); document.title = title; window.removeEventListener('afterprint', done); };
+    window.addEventListener('afterprint', done);
+    window.print();
+    setTimeout(() => { if (!matchMedia('print').matches) done(); }, 1500);
+  });
 }
 async function loadPayments() {
   if (!val('pay-from')) { setVal('pay-from', addDays(todayKey(), -30)); setVal('pay-to', todayKey()); }

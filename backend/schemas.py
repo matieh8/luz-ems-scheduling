@@ -516,6 +516,7 @@ class SettingsResponse(BaseModel):
     business_phone: Optional[str] = None
     business_email: Optional[str] = None
     business_address: Optional[str] = None
+    tax_registration_number: Optional[str] = None
     timezone: str
     currency: str
     public_base_url: Optional[str] = None
@@ -561,6 +562,7 @@ class SettingsUpdate(BaseModel):
     business_phone: Optional[str] = None
     business_email: Optional[str] = None
     business_address: Optional[str] = None
+    tax_registration_number: Optional[str] = None
     timezone: Optional[str] = None
     currency: Optional[str] = None
     public_base_url: Optional[str] = None

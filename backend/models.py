@@ -324,6 +324,7 @@ class Setting(Base):
     business_phone = Column(String, nullable=True)
     business_email = Column(String, nullable=True)
     business_address = Column(String, nullable=True)
+    tax_registration_number = Column(String, nullable=True)  # TRN, printed on invoices when set
     timezone = Column(String, nullable=False, default="Asia/Dubai")
     currency = Column(String, nullable=False, default="AED")
     public_base_url = Column(String, nullable=True)  # e.g. https://book.luzems.com

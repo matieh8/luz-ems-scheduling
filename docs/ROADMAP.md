@@ -22,7 +22,7 @@ Work lands on `staging` first, then `main` (live) after the owner tries it.
 ✅ 45 Expense categories + business groups in Finance · ✅ 46 Invoices (print / Save as PDF; studio is not VAT registered, so plain "Invoice" with no VAT line)
 
 ## 47–53 Automation and WhatsApp
-🔑 47 WhatsApp Business API (Meta account + per-message cost; today: WhatsApp Web bridge / Twilio) · ✅ 48–51 Confirmations, reminders, expiry, follow-up · ⬜ 52 Renewal messages · ⬜ 53 Approval before marketing messages / payments
+🔑 47 WhatsApp Business API (Meta account + per-message cost; today: WhatsApp Web bridge / Twilio) · ✅ 48–51 Confirmations, reminders, expiry, follow-up · ✅ 52 Renewal offers · ✅ 53 Owner approval before marketing messages go out (payments are only ever recorded by the owner)
 
 ## 54–60 Client portal
 🔑 54–60 Client accounts (how clients sign in, e.g. a one-time code by WhatsApp). Today: public booking page + per-booking link.
@@ -34,7 +34,7 @@ Work lands on `staging` first, then `main` (live) after the owner tries it.
 ⬜ 66–67 EMS devices and maintenance · ✅ 68 Services and prices · ⬜ 69 Service locations · ⬜ 70 Multi-branch
 
 ## 71–76 Marketing
-⬜ 71 Leads · ✅ 72 Client source · ⬜ 73–74 Referrals and rewards · ⬜ 75 Enquiry → subscription conversion · ⬜ 76 Clients who did not renew
+⬜ 71 Leads · ✅ 72 Client source · ⬜ 73–74 Referrals and rewards · ⬜ 75 Enquiry → subscription conversion · ✅ 76 Clients who did not renew
 
 ## 77–82 AI
 🔑 77–82 Assistant, natural-language questions, monthly analysis, PDF reports (needs an AI API key and a monthly cost)

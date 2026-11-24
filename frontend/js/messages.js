@@ -8,10 +8,23 @@ function messagesTable(logs, compact) {
     <td>${esc(l.type.replace(/_/g, ' '))}</td><td><span class="chip">${l.channel}</span></td>
     <td>${badge(l.status)}${l.external_response && l.status === 'failed' ? `<div class="tiny" style="color:var(--bad);max-width:200px">${esc(l.external_response)}</div>` : ''}</td>
     <td><details><summary class="small" style="cursor:pointer;color:var(--accent)">${esc((l.subject || l.content).split('\n')[0].slice(0, 60))}…</summary><pre class="small" style="white-space:pre-wrap;margin:6px 0 0;background:var(--bg);padding:10px;border-radius:8px">${esc(l.content)}</pre></details></td>
-    <td class="num">${l.status === 'failed' || l.status === 'skipped' ? `<button class="btn btn-ghost btn-xs" onclick="retryMessage(${l.id})">Retry</button>` : ''}</td></tr>`).join('') + '</tbody></table></div>';
+    <td class="num">${l.status === 'failed' || l.status === 'skipped' ? `<button class="btn btn-ghost btn-xs" onclick="retryMessage(${l.id})">Retry</button>` : ''}${l.status === 'pending_approval' ? `<button class="btn btn-success btn-xs" onclick="approveMessage(${l.id})">Approve &amp; send</button><button class="btn btn-ghost btn-xs" onclick="discardMessage(${l.id})">Discard</button>` : ''}</td></tr>`).join('') + '</tbody></table></div>';
 }
+/* Messages the app prepared by itself (renewal offers) wait here for the owner's OK */
+async function loadPending() {
+  const p = await api('GET', '/notifications/pending');
+  const box = $('msg-pending'); if (!box) return;
+  box.innerHTML = p.count ? `<div class="card mb approval-card"><div class="card-title">Waiting for your approval <span class="badge badge-queued">${p.count}</span>
+      <span class="actions"><button class="btn btn-success btn-sm" onclick="approveAllMessages(${p.count})">Approve &amp; send all</button></span></div>
+      <p class="small muted" style="margin:0 0 10px">These marketing messages were prepared automatically and have not been sent. Read them, then send or discard each one.</p>
+      ${messagesTable(p.messages)}</div>` : '';
+}
+async function approveMessage(id) { guard(async () => { const l = await api('POST', `/notifications/logs/${id}/approve`); toast(l.status === 'sent' ? 'Sent' : `Message ${l.status}`); loadMessages(); }); }
+async function discardMessage(id) { guard(async () => { await api('POST', `/notifications/logs/${id}/discard`); toast('Discarded, not sent'); loadMessages(); }); }
+function approveAllMessages(n) { confirmBox('Send all', `<p>Send all ${n} waiting message(s) now?</p>`, 'Send all', async () => { const r = await api('POST', '/notifications/approve-all'); toast(`${r.approved} message(s) sent`); loadMessages(); }); }
 async function loadMessages() {
   if (MSG.tab === 'templates') return loadTemplates();
+  loadPending();
   if (!MSG.templates.length) { MSG.templates = await api('GET', '/notifications/templates'); fillSelect('msg-type', '<option value="">All types</option>' + MSG.templates.map(t => `<option value="${t.key}">${esc(t.name)}</option>`).join('') + '<option value="custom">Custom message</option>'); }
   const q = ['status', 'channel', 'type'].map(k => val('msg-' + k) ? `&${k}=${val('msg-' + k)}` : '').join('');
   $('messages-table').innerHTML = messagesTable(await api('GET', `/notifications/logs?limit=200${q}`));

@@ -254,6 +254,9 @@ def dashboard(db: Session = Depends(get_db)):
                                                                     models.NotificationLog.created_at > failed_since).scalar() or 0
     if failed:
         alerts.append({"key": "failed_messages", "level": "serious", "text": f"{failed} message(s) failed to send in the last 2 days", "link": "messages"})
+    held = db.query(func.count(models.NotificationLog.id)).filter(models.NotificationLog.status == "pending_approval").scalar() or 0
+    if held:
+        alerts.append({"key": "pending_messages", "level": "warning", "text": f"{held} message(s) are waiting for your approval before they are sent", "link": "messages"})
     if settings.demo_mode:
         alerts.append({"key": "demo_mode", "level": "info", "text": "Demo mode is on: messages are logged, not sent to clients", "link": "settings"})
     # Dismissed alerts stay hidden for a day (failed_messages instead only counts newer failures, handled above).

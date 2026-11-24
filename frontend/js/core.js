@@ -59,6 +59,17 @@ const PAGES = { dashboard: () => loadDashboard(), calendar: () => loadCalendar()
   subscriptions: () => loadSubscriptions(), payments: () => loadPayments(), expenses: () => loadExpenses(),
   reports: () => loadReports(), messages: () => loadMessages(), catalog: () => loadCatalog(),
   settings: () => loadSettings() };
+/* Theme: light, dark, or auto (follow the device). Saved on this device only. */
+function setTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  try { localStorage.setItem('luz_theme', t); } catch (e) {}
+  document.querySelectorAll('.theme-switch button').forEach(b => b.classList.toggle('active', b.dataset.t === t));
+  const dark = t === 'dark' || (t === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
+  const meta = document.querySelector('meta[name="theme-color"]'); if (meta) meta.content = dark ? '#0c1110' : '#f4f6f5';
+  if (typeof window._dashMonths !== 'undefined' && $('page-dashboard').classList.contains('active')) loadDashboard(); // redraw charts
+}
+document.addEventListener('DOMContentLoaded', () => setTheme(document.documentElement.getAttribute('data-theme') || 'auto'));
+
 function go(page) {
   if (!PAGES[page]) page = 'dashboard';
   S.page = page; location.hash = page;

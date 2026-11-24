@@ -259,8 +259,9 @@ class Subscription(Base):
     sessions_total = Column(Integer, nullable=False)
     sessions_used = Column(Integer, nullable=False, default=0)
     price_paid = Column(Float, nullable=False)
-    status = Column(String, nullable=False, default="active")  # active | expired | cancelled | completed
+    status = Column(String, nullable=False, default="active")  # active | expired | cancelled | completed | renewed
     notes = Column(Text, nullable=True)
+    renewed_from_id = Column(Integer, ForeignKey("subscriptions.id"), nullable=True)  # the package this one renews
     low_notified_at = Column(DateTime, nullable=True)
     expiry_notified_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

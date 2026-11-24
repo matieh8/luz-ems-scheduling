@@ -102,7 +102,7 @@ def client_history(client_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Client not found")
     appointments = sorted(client.appointments, key=lambda a: a.start_time, reverse=True)
     subs = sorted(client.subscriptions, key=lambda s: s.created_at, reverse=True)
-    payments = sorted(client.payments, key=lambda p: p.paid_at, reverse=True)
+    payments = sorted(client.payments, key=lambda p: (p.paid_at, p.id), reverse=True)
     messages = (
         db.query(models.NotificationLog)
         .filter(models.NotificationLog.client_id == client_id)

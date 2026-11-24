@@ -447,3 +447,5 @@ table.plain td { padding: 10px 14px; }
   .cm-ev, .cm-more { display: none; }
   .cm-top { flex-direction: column; gap: 2px; }
 }
+
+.badge-renewed { background: var(--accent-light); color: var(--accent-dark); }

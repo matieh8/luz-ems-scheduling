@@ -596,3 +596,30 @@ def test_late_arrivals_are_tracked(client):
     assert client.put(f"/api/appointments/{a['id']}", json={"late_minutes": -3}).status_code == 422
     assert client.put(f"/api/appointments/{a['id']}", json={"late_minutes": 0, "send_notification": False}).json()["late_minutes"] == 0
     assert client.get(f"/api/clients/{cid}").json()["late_count"] == 0
+
+
+def test_package_renewal(client):
+    cid = client.post("/api/clients/", json={"name": "Renew Client", "phone": "0509990005"}).json()["id"]
+    plan = client.get("/api/subscriptions/plans").json()[0]
+    old = client.post("/api/subscriptions/", json={"client_id": cid, "plan_id": plan["id"], "sessions_used": plan["sessions_included"] - 2,
+                                                   "payment_method": "cash", "send_notification": False}).json()
+    assert old["sessions_remaining"] == 2
+    pays_before = len(client.get(f"/api/clients/{cid}/history").json()["payments"])
+
+    # Renew, carrying the 2 unused sessions over; old package closes as "renewed"
+    r = client.post(f"/api/subscriptions/{old['id']}/renew", json={"carry_over": True, "payment_method": "card", "send_notification": False})
+    assert r.status_code == 200, r.text
+    new = r.json()
+    assert new["renewed_from_id"] == old["id"] and new["plan_id"] == plan["id"]
+    assert new["sessions_total"] == plan["sessions_included"] + 2 and new["sessions_remaining"] == plan["sessions_included"] + 2
+    assert new["status"] == "active" and new["price_paid"] == plan["price"]
+    olds = {s["id"]: s for s in client.get(f"/api/subscriptions/?client_id={cid}").json()}
+    assert olds[old["id"]]["status"] == "renewed"
+    h = client.get(f"/api/clients/{cid}/history").json()
+    assert len(h["payments"]) == pays_before + 1 and h["payments"][0]["method"] == "card"
+
+    # A package can only be renewed once; without carry-over the old one keeps its sessions
+    assert client.post(f"/api/subscriptions/{old['id']}/renew", json={}).status_code == 409
+    again = client.post(f"/api/subscriptions/{new['id']}/renew", json={"carry_over": False, "record_payment": False, "send_notification": False}).json()
+    assert again["sessions_total"] == plan["sessions_included"]
+    assert {s["id"]: s for s in client.get(f"/api/subscriptions/?client_id={cid}").json()}[new["id"]]["status"] == "active"

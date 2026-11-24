@@ -18,8 +18,8 @@ Work lands on `staging` first, then `main` (live) after the owner tries it.
 ✅ 31–34 Plans, price, sessions, validity, usage, expiry alerts · ✅ 35 Renewal (with carry-over) · ✅ 36 Discount codes · ✅ 37 Gift cards
 
 ## 38–46 Money
-✅ 38–41 Payments, expenses, net profit, money owed · ⬜ 42 Cash flow · ⬜ 43 Average revenue per client · ⬜ 44 Profit per service/package ·
-🟡 45 Expense categories (fuel, maintenance… exist as free categories) · ⬜ 46 PDF invoices
+✅ 38–41 Payments, expenses, net profit, money owed · ✅ 42 Cash flow · ✅ 43 Average revenue per client · ✅ 44 Profit per service/package (estimate) ·
+✅ 45 Expense categories + business groups in Finance · ⬜ 46 PDF invoices
 
 ## 47–53 Automation and WhatsApp
 🔑 47 WhatsApp Business API (Meta account + per-message cost; today: WhatsApp Web bridge / Twilio) · ✅ 48–51 Confirmations, reminders, expiry, follow-up · ⬜ 52 Renewal messages · ⬜ 53 Approval before marketing messages / payments

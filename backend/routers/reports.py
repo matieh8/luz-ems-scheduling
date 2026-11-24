@@ -6,6 +6,7 @@ from datetime import date, datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend import models
@@ -33,6 +34,132 @@ def _session_value(a: models.Appointment) -> float:
     if a.subscription_id and a.subscription and a.subscription.sessions_total:
         return float(a.subscription.price_paid) / a.subscription.sessions_total
     return float(a.price or 0)
+
+
+EXPENSE_GROUPS = [
+    ("Fuel & transport", ("fuel", "transport", "petrol", "taxi", "parking", "salik", "car", "travel")),
+    ("Maintenance & equipment", ("maintenance", "repair", "equipment", "device", "machine", "suit")),
+    ("Marketing", ("marketing", "ads", "advert", "instagram", "promotion", "printing")),
+    ("Staff", ("salar", "wage", "commission", "staff", "bonus")),
+    ("Premises & utilities", ("rent", "electric", "water", "internet", "phone", "utilit", "cleaning", "dewa")),
+    ("Software & subscriptions", ("subscription", "software", "app")),
+]
+
+
+def expense_group(category: str) -> str:
+    c = (category or "").lower()
+    for name, words in EXPENSE_GROUPS:
+        if any(w in c for w in words):
+            return name
+    return "Other"
+
+
+def _month_start(d: date, back: int = 0) -> date:
+    y, m = d.year, d.month - back
+    while m < 1:
+        m += 12
+        y -= 1
+    return date(y, m, 1)
+
+
+@router.get("/finance")
+def finance(months: int = Query(6, ge=1, le=24), db: Session = Depends(get_db)):
+    """Cash flow, revenue per client and estimated profit per service and package over the last N months.
+
+    Cash flow uses money that actually moved: payments received and expenses marked paid.
+    Profit per service/package is an estimate: every delivered session carries an equal share of all expenses
+    (cost per session = expenses / sessions delivered in the period)."""
+    settings = get_settings(db)
+    tz = settings.timezone
+    today = local_today(tz)
+    periods = [_month_start(today, i).strftime("%Y-%m") for i in range(months - 1, -1, -1)]
+    start, _ = local_day_bounds(_month_start(today, months - 1), tz)
+    _, end = local_day_bounds(today, tz)
+    key = lambda dt: to_local(dt, tz).strftime("%Y-%m")
+
+    pays = db.query(models.Payment).filter(models.Payment.paid_at >= start, models.Payment.paid_at < end).all()
+    exps = db.query(models.Expense).filter(models.Expense.date >= start, models.Expense.date < end).all()
+    done = db.query(models.Appointment).filter(models.Appointment.start_time >= start, models.Appointment.start_time < end,
+                                               models.Appointment.status == "completed").all()
+    subs = db.query(models.Subscription).filter(models.Subscription.created_at >= start, models.Subscription.created_at < end,
+                                                models.Subscription.status != "cancelled").all()
+
+    # 42 Cash flow
+    flow = {p: {"period": p, "money_in": 0.0, "money_out": 0.0} for p in periods}
+    for p in pays:
+        if key(p.paid_at) in flow:
+            flow[key(p.paid_at)]["money_in"] += float(p.amount)
+    for e in exps:
+        if e.paid and key(e.date) in flow:
+            flow[key(e.date)]["money_out"] += float(e.amount)
+    balance, rows = 0.0, []
+    for p in periods:
+        r = flow[p]
+        r["money_in"], r["money_out"] = round(r["money_in"], 2), round(r["money_out"], 2)
+        r["net"] = round(r["money_in"] - r["money_out"], 2)
+        balance = round(balance + r["net"], 2)
+        r["balance"] = balance
+        rows.append(r)
+    owed_sessions = sum(a.balance_due for a in db.query(models.Appointment).filter(models.Appointment.status == "completed").all())
+    owed_packages = sum(max(float(s.price_paid or 0) - s.paid_amount, 0) for s in db.query(models.Subscription).filter(models.Subscription.status != "cancelled").all())
+    bills = sum(float(e.amount) for e in db.query(models.Expense).filter(models.Expense.paid == False).all())  # noqa: E712
+
+    # 43 Revenue per client
+    revenue = sum(float(p.amount) for p in pays)
+    by_client = defaultdict(float)
+    for p in pays:
+        by_client[p.client_id] += float(p.amount)
+    all_time = db.query(models.Payment.client_id, func.sum(models.Payment.amount)).group_by(models.Payment.client_id).all()
+    lifetime = [float(t or 0) for _, t in all_time if t]
+
+    # 44 Estimated profit per service / package
+    expenses_total = sum(float(e.amount) for e in exps)
+    cost_per_session = round(expenses_total / len(done), 2) if done else 0.0
+    svc = defaultdict(lambda: {"sessions": 0, "revenue": 0.0})
+    for a in done:
+        r = svc[a.service.name if a.service else "Other"]
+        r["sessions"] += 1
+        r["revenue"] += _session_value(a)
+    services = []
+    for name, r in svc.items():
+        cost = round(r["sessions"] * cost_per_session, 2)
+        rev = round(r["revenue"], 2)
+        services.append({"name": name, "sessions": r["sessions"], "revenue": rev, "avg_price": round(rev / r["sessions"], 2),
+                         "est_cost": cost, "est_profit": round(rev - cost, 2), "margin_pct": round((rev - cost) / rev * 100, 1) if rev else None})
+    services.sort(key=lambda r: -r["est_profit"])
+    pl = defaultdict(lambda: {"sold": 0, "revenue": 0.0, "sessions": 0})
+    for s in subs:
+        r = pl[s.plan.name if s.plan else "Package"]
+        r["sold"] += 1
+        r["revenue"] += float(s.price_paid or 0)
+        r["sessions"] += int(s.sessions_total or 0)
+    plans = []
+    for name, r in pl.items():
+        cost = round(r["sessions"] * cost_per_session, 2)
+        rev = round(r["revenue"], 2)
+        plans.append({"name": name, "sold": r["sold"], "revenue": rev, "sessions_sold": r["sessions"],
+                      "price_per_session": round(rev / r["sessions"], 2) if r["sessions"] else None,
+                      "est_cost": cost, "est_profit": round(rev - cost, 2), "margin_pct": round((rev - cost) / rev * 100, 1) if rev else None})
+    plans.sort(key=lambda r: -r["est_profit"])
+
+    # 45 Expenses by business group
+    groups = defaultdict(float)
+    for e in exps:
+        groups[expense_group(e.category)] += float(e.amount)
+
+    return {
+        "from": _month_start(today, months - 1).isoformat(), "to": today.isoformat(),
+        "months": rows,
+        "outstanding": {"owed_to_you": round(owed_sessions + owed_packages, 2), "owed_sessions": round(owed_sessions, 2),
+                        "owed_packages": round(owed_packages, 2), "bills_to_pay": round(bills, 2)},
+        "per_client": {"paying_clients": len(by_client), "revenue": round(revenue, 2),
+                       "avg_per_client": round(revenue / len(by_client), 2) if by_client else 0.0,
+                       "avg_per_client_per_month": round(revenue / len(by_client) / months, 2) if by_client else 0.0,
+                       "avg_lifetime_value": round(sum(lifetime) / len(lifetime), 2) if lifetime else 0.0},
+        "costs": {"expenses_total": round(expenses_total, 2), "sessions_delivered": len(done), "cost_per_session": cost_per_session},
+        "services": services, "plans": plans,
+        "expense_groups": sorted(({"group": g, "total": round(t, 2)} for g, t in groups.items()), key=lambda r: -r["total"]),
+    }
 
 
 @router.get("/summary")

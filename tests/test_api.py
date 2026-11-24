@@ -679,3 +679,32 @@ def test_gift_cards(client):
     # Cancel an unused card; it can't be redeemed after
     assert client.post(f"/api/gift-cards/{g2['id']}/cancel").json()["status"] == "cancelled"
     assert client.post(f"/api/gift-cards/{g2['id']}/redeem", json={"client_id": buyer}).status_code == 409
+
+
+def test_finance_report(client):
+    f0 = client.get("/api/reports/finance?months=6").json()
+    assert len(f0["months"]) == 6 and {"period", "money_in", "money_out", "net", "balance"} <= set(f0["months"][-1])
+    assert {"owed_to_you", "bills_to_pay"} <= set(f0["outstanding"])
+    assert {"paying_clients", "avg_per_client", "avg_lifetime_value", "cost_per_session"} <= set(f0["per_client"] | f0["costs"])
+
+    cid = client.post("/api/clients/", json={"name": "Finance Client", "phone": "0509990010"}).json()["id"]
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    client.post("/api/payments/", json={"client_id": cid, "amount": 400, "method": "cash", "paid_at": now.isoformat()})
+    client.post("/api/expenses/", json={"date": now.isoformat(), "category": "Fuel", "amount": 60})
+    client.post("/api/expenses/", json={"date": now.isoformat(), "category": "Marketing", "amount": 90, "paid": False})
+    f1 = client.get("/api/reports/finance?months=6").json()
+    cur0, cur1 = f0["months"][-1], f1["months"][-1]
+    # Cash flow counts money that actually moved: the unpaid bill is listed separately
+    assert cur1["money_in"] == cur0["money_in"] + 400
+    assert cur1["money_out"] == cur0["money_out"] + 60
+    assert cur1["net"] == round(cur1["money_in"] - cur1["money_out"], 2)
+    assert f1["months"][-1]["balance"] == round(sum(m["net"] for m in f1["months"]), 2)
+    assert f1["outstanding"]["bills_to_pay"] == f0["outstanding"]["bills_to_pay"] + 90
+    groups = {g["group"]: g["total"] for g in f1["expense_groups"]}
+    assert groups.get("Fuel & transport", 0) >= 60 and groups.get("Marketing", 0) >= 90
+    assert f1["per_client"]["paying_clients"] >= 1
+    # Every row of the service / package tables explains itself
+    for r in f1["services"]:
+        assert {"name", "sessions", "revenue", "est_cost", "est_profit", "margin_pct"} <= set(r)
+    for r in f1["plans"]:
+        assert {"name", "sold", "revenue", "est_cost", "est_profit"} <= set(r)

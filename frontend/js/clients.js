@@ -93,7 +93,7 @@ function progressPanel(h) {
   const firstOf = k => { for (let i = ms.length - 1; i >= 0; i--) if (ms[i][k] !== null && ms[i][k] !== undefined) return ms[i][k]; return null; };
   const latestOf = k => { for (const m of ms) if (m[k] !== null && m[k] !== undefined) return m[k]; return null; };
   const summary = ms.length ? `<div class="grid grid-4 mb">${[['weight_kg', 'Weight', 'kg', true], ['body_fat_pct', 'Body fat', '%', true], ['muscle_kg', 'Muscle', 'kg', false], ['waist_cm', 'Waist', 'cm', true]].map(([k, l, u, low]) =>
-      `<div class="stat"><div class="stat-label">${l}</div><div class="stat-value" style="font-size:1.25rem">${fmtNum(latestOf(k), u)}</div><div class="stat-sub">${ms.length > 1 ? delta(latestOf(k), firstOf(k), u, low) + ' since ' + fmtDate(first.measured_at) : 'first check-in'}</div></div>`).join('')}</div>
+      { const d = delta(latestOf(k), firstOf(k), u, low); return `<div class="stat"><div class="stat-label">${l}</div><div class="stat-value" style="font-size:1.25rem">${fmtNum(latestOf(k), u)}</div><div class="stat-sub">${d ? d + ' since ' + fmtDate(first.measured_at) : latestOf(k) === null ? 'not measured yet' : 'no change yet'}</div></div>`; }).join('')}</div>
       <div class="card mb" style="padding:14px"><div class="card-title" style="margin-bottom:6px">Weight &amp; body fat over time</div><div id="cd-progress-chart" class="chart"></div></div>` : '';
   const form = `<details class="add-box" ${ms.length ? '' : 'open'}><summary>+ Add measurements</summary>
     <div class="measure-grid">

@@ -142,9 +142,16 @@ class AuditMiddleware:
         if before:
             details["before"] = redact(before)
         ip = (headers.get("x-forwarded-for") or "").split(",")[0].strip() or (scope.get("client") or [None])[0]
+        actor = None
+        auth_header = headers.get("authorization", "")
+        if auth_header.lower().startswith("bearer "):
+            from backend.auth import identity_for
+            who = identity_for(auth_header[7:].strip())
+            if who:
+                actor = "Owner" if who["role"] == "owner" else f"{who['name']} ({who['role']})"
         db = SessionLocal()
         try:
-            db.add(models.AuditLog(method=method, path=path, entity=entity, entity_id=entity_id, action=action,
+            db.add(models.AuditLog(actor=actor, method=method, path=path, entity=entity, entity_id=entity_id, action=action,
                                    summary=summary[:250], details=json.dumps(details, default=str)[:MAX_DETAILS] if details else None,
                                    status=code, ip=ip, device=(headers.get("user-agent") or "")[:200]))
             db.commit()
@@ -174,5 +181,6 @@ def list_audit(limit: int = Query(200, ge=1, le=2000), entity: Optional[str] = N
         q = q.filter(models.AuditLog.entity == entity)
     rows = q.order_by(models.AuditLog.at.desc(), models.AuditLog.id.desc()).limit(limit).all()
     return [{"id": r.id, "at": r.at, "method": r.method, "path": r.path, "entity": r.entity, "entity_id": r.entity_id,
-             "action": r.action, "summary": r.summary, "details": r.details, "status": r.status, "ip": r.ip, "device": r.device}
+             "action": r.action, "summary": r.summary, "details": r.details, "status": r.status, "ip": r.ip, "device": r.device,
+             "actor": r.actor}
             for r in rows]

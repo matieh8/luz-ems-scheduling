@@ -302,6 +302,7 @@ function repGran(g) { REP.gran = g; document.querySelectorAll('#rep-gran button'
 async function loadReports() {
   if (!REP.from) { return repPreset('month'); }
   if (typeof loadFinance === 'function') loadFinance();
+  if (typeof loadTeamReport === 'function') setTimeout(loadTeamReport, 0); // after REP dates are set
   const q = `from=${REP.from}&to=${REP.to}`;
   const [s, ts, top] = await Promise.all([api('GET', `/reports/summary?${q}`), api('GET', `/reports/timeseries?${q}&granularity=${REP.gran}`), api('GET', `/reports/top-clients?${q}`)]);
   $('rep-range-label').textContent = `${fmtKey(REP.from)} – ${fmtKey(REP.to)} · ${s.days} day${s.days > 1 ? 's' : ''}`;

@@ -16,13 +16,14 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script>/* theme before first paint: light | dark | auto (follows the phone/computer) */
     (function () { var t = 'auto'; try { t = localStorage.getItem('luz_theme') || 'auto'; } catch (e) {} document.documentElement.setAttribute('data-theme', t); })();</script>
-  <link rel="stylesheet" href="/css/app.css?v=18">
+  <link rel="stylesheet" href="/css/app.css?v=19">
 </head>
 <body>
   <div class="login-overlay" id="login">
     <form class="login-card" onsubmit="return doLogin(event)">
       <div class="wordmark lg" aria-label="LUZ EMS">LUZ<small>EMS</small></div>
       <p class="muted" style="margin:0 0 22px">Sign in to manage your studio</p>
+      <div class="form-group"><label>Username <span class="muted">(team members only)</span></label><input type="text" id="login-username" class="input" autocomplete="username" autocapitalize="none" placeholder="Leave empty if you're the owner"></div>
       <div class="form-group"><label>Password</label><input type="password" id="login-password" class="input" autofocus autocomplete="current-password"></div>
       <div id="login-error" class="small" style="color:var(--bad);min-height:18px;margin-bottom:8px"></div>
       <button class="btn btn-primary" style="width:100%;justify-content:center" type="submit">Sign in</button>
@@ -57,6 +58,7 @@
           <button data-t="auto" onclick="setTheme('auto')" title="Same as this device" aria-label="Automatic theme"><svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg></button>
           <button data-t="dark" onclick="setTheme('dark')" title="Dark" aria-label="Dark theme"><svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg></button>
         </div>
+        <span class="tiny muted" id="signed-in-as" style="width:100%"></span>
         <a href="/book" target="_blank">Booking page ↗</a>
         <button class="btn btn-ghost btn-xs" onclick="logout()">Sign out</button>
       </div>
@@ -257,6 +259,7 @@
           <div class="card"><div class="card-title">Session outcomes</div><div id="rep-status"></div></div>
         </div>
         <div class="card mt"><div class="card-title">Top clients</div><div id="rep-top" class="table-wrap"></div></div>
+        <div class="card mt"><div class="card-title">Trainers <span class="muted small">performance &amp; commission for this period</span></div><div id="team-report"></div></div>
 
         <div class="header mt" style="margin-top:32px">
           <div><h2>Finance</h2><div class="sub" id="fin-sub"></div></div>
@@ -534,18 +537,19 @@
 
   <div class="toast" id="toast"></div>
 
-  <script src="/js/core.js?v=5"></script>
+  <script src="/js/core.js?v=6"></script>
   <script src="/js/calendar.js?v=6"></script>
   <script src="/js/booking.js?v=4"></script>
   <script src="/js/clients.js?v=9"></script>
-  <script src="/js/money.js?v=10"></script>
+  <script src="/js/money.js?v=11"></script>
   <script src="/js/finance.js?v=1"></script>
   <script src="/js/expenses.js?v=3"></script>
   <script src="/js/messages.js?v=3"></script>
   <script src="/js/push.js?v=1"></script>
-  <script src="/js/settings.js?v=11"></script>
+  <script src="/js/settings.js?v=12"></script>
   <script src="/js/devices.js?v=1"></script>
   <script src="/js/leads.js?v=1"></script>
+  <script src="/js/team.js?v=2"></script>
   <script src="/js/dashboard.js?v=5"></script>
   <script>boot();</script>
 </body>

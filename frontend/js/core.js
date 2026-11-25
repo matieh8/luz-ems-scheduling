@@ -20,9 +20,10 @@ function showLogin() { document.getElementById('login').classList.add('active');
 async function doLogin(e) {
   e.preventDefault();
   const pw = document.getElementById('login-password').value;
+  const user = (document.getElementById('login-username') || { value: '' }).value.trim();
   const err = document.getElementById('login-error'); err.textContent = '';
   try {
-    const r = await fetch(API + '/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pw }) });
+    const r = await fetch(API + '/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(user ? { username: user, password: pw } : { password: pw }) });
     if (!r.ok) { err.textContent = (await r.json()).detail || 'Login failed'; return false; }
     S.token = (await r.json()).token; localStorage.setItem('luz_token', S.token);
     document.getElementById('login-password').value = '';
@@ -37,6 +38,12 @@ async function boot() {
   try {
     const me = await api('GET', '/auth/me');
     S.tz = me.timezone; S.currency = me.currency; S.business = me.business_name;
+    S.me = { role: me.role || 'owner', name: me.name || 'Owner', pages: me.pages || Object.keys(PAGES) };
+    // Show only the pages this account may use (the server enforces it too)
+    document.querySelectorAll('.nav button[data-page]').forEach(b => { b.style.display = S.me.pages.includes(b.dataset.page) ? '' : 'none'; });
+    document.querySelectorAll('.nav .nav-label').forEach(l => { let n = l.nextElementSibling, any = false; while (n && !n.classList.contains('nav-label')) { if (n.style.display !== 'none') any = true; n = n.nextElementSibling; } l.style.display = any ? '' : 'none'; });
+    document.body.dataset.role = S.me.role;
+    const who = document.getElementById('signed-in-as'); if (who) who.textContent = S.me.role === 'owner' ? 'Owner' : `${S.me.name} · ${S.me.role}`;
     document.getElementById('login').classList.remove('active');
     document.getElementById('app').style.display = 'flex';
     document.title = `${S.business} - Scheduling`;
@@ -71,7 +78,8 @@ function setTheme(t) {
 document.addEventListener('DOMContentLoaded', () => setTheme(document.documentElement.getAttribute('data-theme') || 'auto'));
 
 function go(page) {
-  if (!PAGES[page]) page = 'dashboard';
+  const allowedPages = (S.me && S.me.pages) || Object.keys(PAGES);
+  if (!PAGES[page] || !allowedPages.includes(page)) page = allowedPages.includes('dashboard') ? 'dashboard' : allowedPages[0];
   S.page = page; location.hash = page;
   document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + page));
   document.querySelectorAll('.nav button').forEach(b => b.classList.toggle('active', b.dataset.page === page));

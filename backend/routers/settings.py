@@ -1,5 +1,5 @@
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from zoneinfo import ZoneInfo
 from backend.database import get_db
@@ -20,8 +20,15 @@ def _get_or_create_settings(db: Session):
 
 
 @router.get("/", response_model=schemas.SettingsResponse)
-def get_settings(db: Session = Depends(get_db)):
-    return _get_or_create_settings(db)
+def get_settings(request: Request, db: Session = Depends(get_db)):
+    data = schemas.SettingsResponse.model_validate(_get_or_create_settings(db)).model_dump()
+    ident = getattr(request.state, "identity", None) or {"role": "owner"}
+    if ident["role"] != "owner":  # staff never receive keys or passwords
+        import re
+        for k in data:
+            if re.search(r"token|password|secret|sid|api_?key|smtp_user", k, re.I):
+                data[k] = None
+    return data
 
 
 @router.put("/", response_model=schemas.SettingsResponse)

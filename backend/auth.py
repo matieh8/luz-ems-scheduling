@@ -43,37 +43,143 @@ def verify_password(password: str, stored: Optional[str]) -> bool:
     return hmac.compare_digest(check, digest)
 
 
-def create_token() -> str:
-    payload = f"{int(time.time()) + TOKEN_TTL_SECONDS}:{secrets.token_hex(4)}"
+def _pw_stamp(password_hash: Optional[str]) -> str:
+    """Short fingerprint of the current password: changing it signs out old sessions."""
+    return hashlib.sha256((password_hash or "").encode()).hexdigest()[:10]
+
+
+def create_token(role: str = "owner", staff_id: int = 0, stamp: str = "") -> str:
+    """Owner tokens keep the original two-part payload; staff tokens add role, staff id and password stamp."""
+    base = f"{int(time.time()) + TOKEN_TTL_SECONDS}:{secrets.token_hex(4)}"
+    payload = base if role == "owner" else f"{base}:{role}:{int(staff_id)}:{stamp}"
     sig = hmac.new(_secret(), payload.encode(), hashlib.sha256).hexdigest()
     return base64.urlsafe_b64encode(f"{payload}.{sig}".encode()).decode()
 
 
-def verify_token(token: str) -> bool:
+def parse_token(token: str) -> Optional[dict]:
+    """{"role", "staff_id", "stamp"} for a valid, unexpired token, else None."""
     try:
         raw = base64.urlsafe_b64decode(token.encode()).decode()
         payload, sig = raw.rsplit(".", 1)
         expected = hmac.new(_secret(), payload.encode(), hashlib.sha256).hexdigest()
         if not hmac.compare_digest(sig, expected):
-            return False
-        expiry = int(payload.split(":")[0])
-        return expiry > time.time()
+            return None
+        parts = payload.split(":")
+        if int(parts[0]) <= time.time():
+            return None
+        if len(parts) >= 5:
+            return {"role": parts[2], "staff_id": int(parts[3]), "stamp": parts[4]}
+        return {"role": "owner", "staff_id": 0, "stamp": ""}
     except Exception:
-        return False
+        return None
+
+
+def verify_token(token: str) -> bool:
+    return parse_token(token) is not None
+
+
+# ---------------------------------------------------------------- permissions
+# What each staff role may do, checked on the server for every request (the owner can do everything).
+_ANY, _READ = {"GET", "POST", "PUT", "PATCH", "DELETE"}, {"GET"}
+_COMMON = [  # every signed-in account
+    (_READ, r"/api/auth/me$"), (_READ, r"/api/services/"), (_READ, r"/api/staff/$"), (_READ, r"/api/settings/(hours)?$"),
+    (_READ, r"/api/subscriptions/plans$"), (_ANY, r"/api/push/"), (_READ, r"/api/blocked-times/"),
+]
+_TRAINER = _COMMON + [
+    (_ANY - {"DELETE"}, r"/api/appointments/"),
+    (_READ, r"/api/clients/"), ({"PUT"}, r"/api/clients/\d+$"),
+    (_ANY, r"/api/clients/(\d+/)?(notes|measurements|photos)(/|$)"), (_ANY, r"/api/clients/(notes|measurements|photos)/"),
+    (_READ, r"/api/subscriptions/$"), (_READ, r"/api/notifications/logs"), ({"POST"}, r"/api/notifications/\d+/(reminder|confirmation)$"),
+    (_READ, r"/api/devices/"), ({"POST"}, r"/api/devices/\d+/maintenance$"),
+]
+_RECEPTION = _TRAINER + [
+    (_ANY, r"/api/appointments/"), (_ANY - {"DELETE"}, r"/api/clients/"), (_ANY, r"/api/blocked-times/"),
+    (_ANY - {"DELETE"}, r"/api/subscriptions/"), (_ANY - {"DELETE"}, r"/api/payments/"),
+    (_READ, r"/api/discounts/"), (_ANY, r"/api/gift-cards/"), (_ANY, r"/api/leads/"),
+    (_ANY, r"/api/notifications/(logs|custom|pending|approve-all|\d+/)"),
+]
+_MANAGER_DENY = [r"/api/backups/", r"/api/audit/", r"/api/auth/password$", r"/api/staff/\d+/account$"]
+PAGES = {
+    "owner": ["dashboard", "calendar", "clients", "subscriptions", "leads", "payments", "expenses", "reports", "messages", "catalog", "settings"],
+    "manager": ["dashboard", "calendar", "clients", "subscriptions", "leads", "payments", "expenses", "reports", "messages", "catalog"],
+    "reception": ["calendar", "clients", "subscriptions", "leads", "payments", "messages"],
+    "trainer": ["calendar", "clients"],
+}
+
+
+def allowed(role: str, method: str, path: str) -> bool:
+    import re
+    if role == "owner":
+        return True
+    if role == "manager":
+        if any(re.match(p, path) for p in _MANAGER_DENY):
+            return False
+        if path.startswith("/api/settings/") and method != "GET":
+            return False
+        return True
+    rules = {"trainer": _TRAINER, "reception": _RECEPTION}.get(role)
+    return bool(rules) and any(method in m and re.match(p, path) for m, p in rules)
+
+
+def identity_for(token: Optional[str], db=None) -> Optional[dict]:
+    """Who a token belongs to, re-checked against the staff record so a switched-off account stops at once."""
+    data = parse_token(token) if token else None
+    if not data:
+        return None
+    if data["role"] == "owner":
+        return {"role": "owner", "staff_id": 0, "name": "Owner"}
+    from backend.database import SessionLocal
+    own = db is None
+    db = db or SessionLocal()
+    try:
+        s = db.query(models.Staff).filter(models.Staff.id == data["staff_id"]).first()
+        if (not s or not s.active or s.access_role != data["role"] or not s.password_hash
+                or _pw_stamp(s.password_hash) != data["stamp"]):
+            return None
+        return {"role": s.access_role, "staff_id": s.id, "name": s.name}
+    finally:
+        if own:
+            db.close()
+
+
+def token_from(request: Request) -> Optional[str]:
+    header = request.headers.get("authorization", "")
+    if header.lower().startswith("bearer "):
+        return header[7:].strip()
+    return request.query_params.get("token")
 
 
 def require_auth(request: Request):
     if AUTH_DISABLED:
+        request.state.identity = {"role": "owner", "staff_id": 0, "name": "Owner"}
         return True
-    token = None
-    header = request.headers.get("authorization", "")
-    if header.lower().startswith("bearer "):
-        token = header[7:].strip()
-    if not token:
-        token = request.query_params.get("token")
-    if not token or not verify_token(token):
+    ident = identity_for(token_from(request))
+    if not ident:
         raise HTTPException(status_code=401, detail="Not authenticated")
+    if not allowed(ident["role"], request.method, request.url.path):
+        raise HTTPException(status_code=403, detail="Your account doesn't have access to this. Ask the owner.")
+    request.state.identity = ident
     return True
+
+
+# ---------------------------------------------------------------- login throttling
+_FAILS: dict = {}
+MAX_FAILS, FAIL_WINDOW = 8, 15 * 60
+
+
+def too_many_attempts(key: str) -> bool:
+    now = time.time()
+    recent = [t for t in _FAILS.get(key, []) if t > now - FAIL_WINDOW]
+    _FAILS[key] = recent
+    return len(recent) >= MAX_FAILS
+
+
+def record_failure(key: str):
+    _FAILS.setdefault(key, []).append(time.time())
+
+
+def clear_failures(key: str):
+    _FAILS.pop(key, None)
 
 
 def ensure_admin_password(db: Session):

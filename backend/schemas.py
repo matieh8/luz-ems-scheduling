@@ -131,10 +131,23 @@ class StaffUpdate(BaseModel):
     color: Optional[str] = None
     role: Optional[str] = None
     active: Optional[bool] = None
+    commission_type: Optional[str] = Field(None, pattern="^(none|percent|per_session)$")
+    commission_value: Optional[float] = Field(None, ge=0)
+
+
+class StaffAccount(BaseModel):
+    access: str = Field(..., pattern="^(none|trainer|reception|manager)$")
+    username: Optional[str] = Field(None, min_length=2, max_length=40)
+    password: Optional[str] = Field(None, min_length=8, max_length=128)  # optional when only the role changes
 
 
 class StaffResponse(StaffBase):
     id: int
+    login_username: Optional[str] = None
+    access_role: Optional[str] = None
+    has_password: bool = False
+    commission_type: Optional[str] = None
+    commission_value: Optional[float] = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -618,6 +631,7 @@ class PasswordChange(BaseModel):
 
 class LoginRequest(BaseModel):
     password: str
+    username: Optional[str] = None  # staff accounts; empty = the owner's password
 
 
 # ---------- Dashboard / reports ----------

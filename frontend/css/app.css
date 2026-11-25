@@ -521,3 +521,10 @@ table.plain td { padding: 10px 14px; }
 .sidebar-footer { flex-wrap: wrap; }
 
 .kpi-value { font-size: clamp(1.15rem, 1.55vw, 1.6rem); text-overflow: clip; }
+
+/* Hide actions a staff role can't use (the server refuses them anyway) */
+body[data-role="trainer"] [onclick^="openBlockModal"], body[data-role="trainer"] [onclick*="openPaymentModal"], body[data-role="trainer"] [onclick*="openSubscriptionModal"],
+body[data-role="trainer"] [onclick*="deleteClient"], body[data-role="trainer"] [onclick*="deleteAppointment"], body[data-role="trainer"] [onclick*="openClientModal"],
+body[data-role="trainer"] [onclick*="openCustomMessageModal"], body[data-role="trainer"] [onclick*="renewFlow"],
+body[data-role="reception"] [onclick*="deleteClient"], body[data-role="reception"] [onclick*="deletePayment"], body[data-role="reception"] [onclick*="deleteSubscription"],
+body[data-role="reception"] [onclick*="openPlanModal"], body[data-role="reception"] [onclick*="subTab('codes'"] { display: none !important; }

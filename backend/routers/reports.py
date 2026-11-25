@@ -162,6 +162,47 @@ def finance(months: int = Query(6, ge=1, le=24), db: Session = Depends(get_db)):
     }
 
 
+@router.get("/staff")
+def staff_report(from_date: Optional[date] = Query(None, alias="from"), to_date: Optional[date] = Query(None, alias="to"),
+                 db: Session = Depends(get_db)):
+    """Per trainer: sessions done, no-shows, cancellations, clients, value delivered, late arrivals and commission due."""
+    settings, tz, from_date, to_date, start, end = _range(db, from_date, to_date)
+    appts = db.query(models.Appointment).filter(models.Appointment.start_time >= start, models.Appointment.start_time < end,
+                                                models.Appointment.staff_id.isnot(None)).all()
+    rows = {}
+    for s in db.query(models.Staff).all():
+        rows[s.id] = {"staff_id": s.id, "name": s.name, "color": s.color, "active": s.active, "completed": 0, "no_show": 0,
+                      "cancelled": 0, "late": 0, "value": 0.0, "clients": set(),
+                      "commission_type": s.commission_type or "none", "commission_value": s.commission_value or 0}
+    for a in appts:
+        r = rows.get(a.staff_id)
+        if not r:
+            continue
+        if a.status == "completed":
+            r["completed"] += 1
+            r["value"] += _session_value(a)
+            r["clients"].add(a.client_id)
+            if (a.late_minutes or 0) > 0:
+                r["late"] += 1
+        elif a.status == "no_show":
+            r["no_show"] += 1
+        elif a.status == "cancelled":
+            r["cancelled"] += 1
+    out = []
+    for r in rows.values():
+        if not (r["completed"] or r["no_show"] or r["cancelled"]) and not r["active"]:
+            continue
+        kind, v = r["commission_type"], float(r["commission_value"] or 0)
+        commission = r["value"] * v / 100 if kind == "percent" else r["completed"] * v if kind == "per_session" else 0.0
+        booked = r["completed"] + r["no_show"]
+        out.append({**r, "clients": len(r["clients"]), "value": round(r["value"], 2), "commission": round(commission, 2),
+                    "show_rate": round(r["completed"] / booked * 100, 1) if booked else None,
+                    "avg_value": round(r["value"] / r["completed"], 2) if r["completed"] else 0.0})
+    out.sort(key=lambda r: -r["value"])
+    return {"from": from_date.isoformat(), "to": to_date.isoformat(), "staff": out,
+            "total_commission": round(sum(r["commission"] for r in out), 2)}
+
+
 @router.get("/summary")
 def summary(from_date: Optional[date] = Query(None, alias="from"), to_date: Optional[date] = Query(None, alias="to"),
             db: Session = Depends(get_db)):

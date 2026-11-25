@@ -102,8 +102,19 @@ class Staff(Base):
     role = Column(String, nullable=True, default="Trainer")
     active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    # Login to the admin app (None = no access)
+    login_username = Column(String, nullable=True, unique=True)
+    password_hash = Column(String, nullable=True)
+    access_role = Column(String, nullable=True)  # trainer | reception | manager
+    # Commission: percent of delivered session value, or a fixed amount per completed session
+    commission_type = Column(String, nullable=True)  # none | percent | per_session
+    commission_value = Column(Float, nullable=True)
 
     appointments = relationship("Appointment", back_populates="staff")
+
+    @property
+    def has_password(self) -> bool:
+        return bool(self.password_hash)
 
 
 class Service(Base):
@@ -365,6 +376,7 @@ class AuditLog(Base):
     status = Column(Integer, nullable=False)
     ip = Column(String, nullable=True)
     device = Column(String, nullable=True)
+    actor = Column(String, nullable=True)  # "Owner" or "<staff name> (<role>)"
 
 
 class GiftCard(Base):

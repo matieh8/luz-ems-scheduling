@@ -52,5 +52,5 @@ async function deviceHistory(id) {
 }
 function deleteDevice(id) {
   if (!confirm('Delete this device and its maintenance history? Expenses already recorded stay. This cannot be undone.')) return;
-  guard(async () => { await api('DELETE', `/devices/${id}`); document.querySelectorAll('.modal-overlay.active').forEach(m => m.classList.remove('active')); toast('Device deleted'); loadDevices(); });
+  guard(async () => { await api('DELETE', `/devices/${id}`); document.querySelectorAll('.modal-overlay.active').forEach(m => closeModal(m.id)); toast('Device deleted'); loadDevices(); });
 }

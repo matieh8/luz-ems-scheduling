@@ -130,6 +130,25 @@ def _client_or_404(db: Session, client_id: int) -> models.Client:
     return client
 
 
+@router.post("/{client_id}/portal-link")
+def portal_link(client_id: int, new: bool = False, db: Session = Depends(get_db)):
+    """The client's private link to their own page. new=true replaces it, so an old forwarded link stops working."""
+    c = _client_or_404(db, client_id)
+    if new or not c.portal_token:
+        c.portal_token = secrets.token_urlsafe(24)
+        db.commit()
+    from backend.notifications import normalize_phone
+    return {"path": f"/c/{c.portal_token}", "phone": normalize_phone(c.phone)}
+
+
+@router.delete("/{client_id}/portal-link")
+def remove_portal_link(client_id: int, db: Session = Depends(get_db)):
+    c = _client_or_404(db, client_id)
+    c.portal_token = None
+    db.commit()
+    return {"detail": "The client's link is switched off"}
+
+
 @router.get("/{client_id}/measurements", response_model=List[schemas.MeasurementResponse])
 def list_measurements(client_id: int, db: Session = Depends(get_db)):
     _client_or_404(db, client_id)

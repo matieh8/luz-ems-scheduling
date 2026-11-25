@@ -70,7 +70,7 @@ async function openClientDetail(id, tab) {
     <div id="cd-msgs" class="subpanel">${messagesTable(h.messages, true)}</div>`;
   const start = document.querySelector(`#cd-body .tab[data-t="${tab || 'appts'}"]`);
   cdTab(tab || 'appts', start);
-  $('cd-footer').innerHTML = `<div class="left"><button class="btn btn-secondary btn-sm" onclick="editClient(${c.id})">Edit</button><button class="btn btn-danger btn-sm" onclick="deleteClient(${c.id}, ${jsArg(c.name)})">Delete</button><button class="btn btn-secondary btn-sm" onclick="closeModal('client-detail-modal');openCustomMessageModal(${c.id})">Message</button><button class="btn btn-secondary btn-sm" onclick="closeModal('client-detail-modal');openPaymentModal({client_id:${c.id}})">Record payment</button><button class="btn btn-secondary btn-sm" onclick="closeModal('client-detail-modal');openSubscriptionModal(null, ${c.id})">Sell package</button></div><button class="btn btn-primary" onclick="closeModal('client-detail-modal');openBookingModal(null, {clientId:${c.id}})">Book session</button>`;
+  $('cd-footer').innerHTML = `<div class="left"><button class="btn btn-secondary btn-sm" onclick="editClient(${c.id})">Edit</button><button class="btn btn-danger btn-sm" onclick="deleteClient(${c.id}, ${jsArg(c.name)})">Delete</button><button class="btn btn-secondary btn-sm" onclick="closeModal('client-detail-modal');openCustomMessageModal(${c.id})">Message</button><button class="btn btn-secondary btn-sm" onclick="openClientLink(${c.id}, ${jsArg(c.name)})">Client link</button><button class="btn btn-secondary btn-sm" onclick="closeModal('client-detail-modal');openPaymentModal({client_id:${c.id}})">Record payment</button><button class="btn btn-secondary btn-sm" onclick="closeModal('client-detail-modal');openSubscriptionModal(null, ${c.id})">Sell package</button></div><button class="btn btn-primary" onclick="closeModal('client-detail-modal');openBookingModal(null, {clientId:${c.id}})">Book session</button>`;
   openModal('client-detail-modal');
 }
 function cdTab(t, el) {
@@ -252,6 +252,22 @@ async function saveClient() {
     if (!payload.name || !payload.phone) throw new Error('Name and phone are required');
     if (id) await api('PUT', `/clients/${id}`, payload); else await api('POST', '/clients/', payload);
     closeModal('client-modal'); toast('Client saved'); await refreshLookups(); refreshCurrent();
+  });
+}
+
+// The client's private page: their bookings, packages, payments, invoices and progress. Anyone with the link can see it.
+async function openClientLink(id, name, fresh = false) {
+  guard(async () => {
+    const r = await api('POST', `/clients/${id}/portal-link${fresh ? '?new=true' : ''}`);
+    const url = location.origin + r.path;
+    const text = `Hi ${name.split(' ')[0]}, here is your personal ${S.business} page with your sessions, package, payments and progress: ${url}`;
+    const wa = `https://wa.me/${(r.phone || '').replace(/\D/g, '')}?text=${encodeURIComponent(text)}`;
+    closeModal('client-detail-modal');
+    confirmBox('Client link', `<p class="small muted" style="margin-top:0">Send this to ${esc(name)}. They open it on their phone, no password needed, and see their sessions, package, payments, invoices and progress. Staff notes, health notes and photos are never shown.</p>
+      <input class="input mono small" readonly value="${esc(url)}" onclick="this.select()">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><a class="btn btn-success btn-sm" href="${esc(wa)}" target="_blank" rel="noopener">Send on WhatsApp</a>
+      <button class="btn btn-ghost btn-sm" onclick="openClientLink(${id}, ${jsArg(name)}, true)">Make a new link (old one stops working)</button></div>`,
+      'Copy link', async () => { await navigator.clipboard.writeText(url); toast('Link copied'); });
   });
 }
 

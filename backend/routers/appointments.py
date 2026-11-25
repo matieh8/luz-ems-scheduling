@@ -80,7 +80,7 @@ def list_appointments(
         query = query.filter(models.Appointment.status.in_(status.split(",")))
     query = query.order_by(models.Appointment.start_time)
     if unpaid:  # filter before the limit, or new unpaid sessions fall off the end
-        return [a for a in query.all() if a.balance_due > 0][:limit]
+        return models.unpaid_sessions(db, query)[:limit]
     return query.limit(limit).all()
 
 

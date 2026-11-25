@@ -1186,3 +1186,58 @@ def test_unpaid_list_is_filtered_before_the_limit(client):
     client.post("/api/payments/", json={"client_id": cid, "appointment_id": ids[0], "amount": 100, "method": "cash"})
     rows = client.get(f"/api/appointments/?client_id={cid}&status=completed&unpaid=true&limit=1").json()
     assert [r["id"] for r in rows] == [ids[1]]
+
+
+def test_client_link_shows_only_that_clients_own_data(client):
+    cid = client.post("/api/clients/", json={"name": "Portal Person", "phone": "0501234321",
+                                             "health_notes": "knee injury", "notes": "staff only"}).json()["id"]
+    other = client.post("/api/clients/", json={"name": "Someone Else", "phone": "0501234322"}).json()["id"]
+    plan = client.get("/api/subscriptions/plans").json()[0]
+    client.post("/api/subscriptions/", json={"client_id": cid, "plan_id": plan["id"], "payment_method": "card", "send_notification": False})
+    client.post(f"/api/clients/{cid}/measurements", json={"weight_kg": 80})
+    client.post(f"/api/clients/{cid}/measurements", json={"weight_kg": 78.5})
+    svc = client.get("/api/services/").json()[0]
+    client.post("/api/appointments/", json={"client_id": cid, "service_id": svc["id"], "start_time": next_weekday_at(11, 15).isoformat(),
+                                            "force": True, "send_notification": False})
+    other_pay = client.post("/api/payments/", json={"client_id": other, "amount": 55, "method": "cash"}).json()
+
+    link = client.post(f"/api/clients/{cid}/portal-link").json()
+    assert link["path"].startswith("/c/") and len(link["path"]) > 30
+    assert client.post(f"/api/clients/{cid}/portal-link").json()["path"] == link["path"]  # stable until replaced
+    token = link["path"].split("/")[-1]
+    with TestClient(app) as anon:
+        assert anon.get(link["path"]).status_code == 200  # the page itself
+        d = anon.get(f"/api/public/portal/{token}").json()
+        assert d["name"] == "Portal Person" and len(d["upcoming"]) == 1 and d["upcoming"][0]["token"]
+        assert d["packages"][0]["active"] and d["packages"][0]["sessions_remaining"] == plan["sessions_included"] - 1
+        assert len(d["payments"]) == 1 and [m["weight_kg"] for m in d["progress"]] == [80, 78.5]
+        assert "knee" not in str(d) and "staff only" not in str(d)  # staff and health notes stay private
+        inv = anon.get(f"/api/public/portal/{token}/invoice/{d['payments'][0]['id']}").json()
+        assert inv["number"].startswith("INV-") and inv["client"]["name"] == "Portal Person"
+        assert anon.get(f"/api/public/portal/{token}/invoice/{other_pay['id']}").status_code == 404  # not someone else's
+        assert anon.get("/api/public/portal/not-a-real-token").status_code == 404
+        # A new link replaces the old one; switching it off ends access
+        new = client.post(f"/api/clients/{cid}/portal-link?new=true").json()["path"].split("/")[-1]
+        assert anon.get(f"/api/public/portal/{token}").status_code == 404
+        assert anon.get(f"/api/public/portal/{new}").status_code == 200
+        client.delete(f"/api/clients/{cid}/portal-link")
+        assert anon.get(f"/api/public/portal/{new}").status_code == 404
+    trainer_like = client.post("/api/staff/", json={"name": "Link Coach"}).json()["id"]
+    client.put(f"/api/staff/{trainer_like}/account", json={"username": "linkcoach", "password": "pass-link-123", "access": "trainer"})
+    coach = _login_as("linkcoach", "pass-link-123")
+    try:
+        assert coach.post(f"/api/clients/{cid}/portal-link").status_code == 403
+    finally:
+        coach.__exit__(None, None, None)
+
+
+def test_editing_a_payment_is_checked_and_unpaid_totals_match(client):
+    cid = client.post("/api/clients/", json={"name": "Edit Payer", "phone": "0501234555"}).json()["id"]
+    p = client.post("/api/payments/", json={"client_id": cid, "amount": 40, "method": "cash"}).json()
+    assert client.put(f"/api/payments/{p['id']}", json={"amount": -500}).status_code == 422
+    assert client.put(f"/api/payments/{p['id']}", json={"method": "bitcoin"}).status_code == 400
+    assert client.put(f"/api/payments/{p['id']}", json={"amount": 45}).json()["amount"] == 45
+    # The one-query unpaid list agrees with the per-session balance
+    rows = client.get("/api/appointments/?status=completed&limit=100000").json()
+    expected = round(sum(a["balance_due"] for a in rows), 2)
+    assert round(client.get("/api/dashboard/overview").json()["due"]["amount"], 2) == expected

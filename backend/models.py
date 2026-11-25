@@ -3,6 +3,7 @@ from datetime import datetime
 from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Text, ForeignKey
 from sqlalchemy.orm import relationship
 from backend.database import Base
+from backend.tz import now_utc
 
 
 def _token():
@@ -29,8 +30,9 @@ class Client(Base):
     notify_sms = Column(Boolean, default=False)
     notify_email = Column(Boolean, default=True)
     active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    portal_token = Column(String, nullable=True, index=True)  # the client's private link /c/<token>; None = no link
+    created_at = Column(DateTime, default=now_utc)
+    updated_at = Column(DateTime, default=now_utc, onupdate=now_utc)
 
     appointments = relationship("Appointment", back_populates="client", cascade="all, delete-orphan")
     subscriptions = relationship("Subscription", back_populates="client", cascade="all, delete-orphan")
@@ -46,7 +48,7 @@ class BodyMeasurement(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     client_id = Column(Integer, ForeignKey("clients.id"), nullable=False, index=True)
-    measured_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    measured_at = Column(DateTime, nullable=False, default=now_utc, index=True)
     weight_kg = Column(Float, nullable=True)
     body_fat_pct = Column(Float, nullable=True)
     muscle_kg = Column(Float, nullable=True)
@@ -56,7 +58,7 @@ class BodyMeasurement(Base):
     arm_cm = Column(Float, nullable=True)
     thigh_cm = Column(Float, nullable=True)
     notes = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=now_utc)
 
     client = relationship("Client", back_populates="measurements")
 
@@ -70,7 +72,7 @@ class ClientNote(Base):
     kind = Column(String, nullable=False, default="note")  # note | call | whatsapp | visit | injury | email
     text = Column(Text, nullable=False)
     author = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=now_utc, index=True)
 
     client = relationship("Client", back_populates="client_notes")
 
@@ -81,12 +83,12 @@ class ProgressPhoto(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     client_id = Column(Integer, ForeignKey("clients.id"), nullable=False, index=True)
-    taken_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    taken_at = Column(DateTime, nullable=False, default=now_utc, index=True)
     pose = Column(String, nullable=False, default="front")  # front | side | back | other
     filename = Column(String, nullable=False)
     content_type = Column(String, nullable=False)
     notes = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=now_utc)
 
     client = relationship("Client", back_populates="photos")
 
@@ -101,7 +103,7 @@ class Staff(Base):
     color = Column(String, nullable=False, default="#2a78d6")
     role = Column(String, nullable=True, default="Trainer")
     active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=now_utc)
     # Login to the admin app (None = no access)
     login_username = Column(String, nullable=True, unique=True)
     password_hash = Column(String, nullable=True)
@@ -130,7 +132,7 @@ class Service(Base):
     category = Column(String, nullable=True)
     online_bookable = Column(Boolean, default=True)
     active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=now_utc)
 
     appointments = relationship("Appointment", back_populates="service")
 
@@ -161,8 +163,8 @@ class Appointment(Base):
     cancelled_at = Column(DateTime, nullable=True)
     cancel_reason = Column(Text, nullable=True)
     cancelled_by = Column(String, nullable=True)  # admin | client
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=now_utc)
+    updated_at = Column(DateTime, default=now_utc, onupdate=now_utc)
 
     client = relationship("Client", back_populates="appointments")
     service = relationship("Service", back_populates="appointments")
@@ -181,7 +183,7 @@ class BlockedTime(Base):
     start_time = Column(DateTime, nullable=False)
     end_time = Column(DateTime, nullable=False)
     reason = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=now_utc)
 
     staff = relationship("Staff")
 
@@ -205,9 +207,9 @@ class Payment(Base):
     subscription_id = Column(Integer, ForeignKey("subscriptions.id"), nullable=True)
     amount = Column(Float, nullable=False)
     method = Column(String, nullable=False, default="cash")  # cash | card | transfer | online | other
-    paid_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    paid_at = Column(DateTime, nullable=False, default=now_utc, index=True)
     notes = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=now_utc)
 
     client = relationship("Client", back_populates="payments")
     appointment = relationship("Appointment", back_populates="payments")
@@ -229,7 +231,7 @@ class NotificationLog(Base):
     external_response = Column(Text, nullable=True)
     attempts = Column(Integer, default=0, nullable=False)
     next_retry_at = Column(DateTime, nullable=True)  # set when a failure is worth retrying automatically
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=now_utc, index=True)
 
     appointment = relationship("Appointment", back_populates="notifications")
     client = relationship("Client")
@@ -244,7 +246,7 @@ class MessageTemplate(Base):
     subject = Column(String, nullable=True)  # used for email
     body = Column(Text, nullable=False)
     enabled = Column(Boolean, default=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, default=now_utc, onupdate=now_utc)
 
 
 class SubscriptionPlan(Base):
@@ -257,7 +259,7 @@ class SubscriptionPlan(Base):
     price = Column(Float, nullable=False)
     description = Column(Text, nullable=True)
     active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=now_utc)
 
     subscriptions = relationship("Subscription", back_populates="plan")
 
@@ -268,7 +270,7 @@ class Subscription(Base):
     id = Column(Integer, primary_key=True, index=True)
     client_id = Column(Integer, ForeignKey("clients.id"), nullable=False)
     plan_id = Column(Integer, ForeignKey("subscription_plans.id"), nullable=False)
-    start_date = Column(DateTime, nullable=False, default=datetime.utcnow)
+    start_date = Column(DateTime, nullable=False, default=now_utc)
     end_date = Column(DateTime, nullable=True)
     sessions_total = Column(Integer, nullable=False)
     sessions_used = Column(Integer, nullable=False, default=0)
@@ -281,8 +283,8 @@ class Subscription(Base):
     renewal_offer_at = Column(DateTime, nullable=True)  # when a renewal offer was prepared/sent for this ended package
     low_notified_at = Column(DateTime, nullable=True)
     expiry_notified_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=now_utc)
+    updated_at = Column(DateTime, default=now_utc, onupdate=now_utc)
 
     client = relationship("Client", back_populates="subscriptions")
     plan = relationship("SubscriptionPlan", back_populates="subscriptions")
@@ -304,7 +306,7 @@ class DiscountCode(Base):
     valid_until = Column(DateTime, nullable=True)
     active = Column(Boolean, nullable=False, default=True)
     notes = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=now_utc)
 
 
 class Lead(Base):
@@ -324,8 +326,8 @@ class Lead(Base):
     referred_by_client_id = Column(Integer, ForeignKey("clients.id"), nullable=True)
     converted_client_id = Column(Integer, ForeignKey("clients.id"), nullable=True)
     won_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=now_utc, index=True)
+    updated_at = Column(DateTime, default=now_utc, onupdate=now_utc)
 
 
 class Device(Base):
@@ -340,7 +342,7 @@ class Device(Base):
     status = Column(String, nullable=False, default="active")  # active | maintenance | retired
     service_every_days = Column(Integer, nullable=True)
     notes = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=now_utc)
 
     maintenance = relationship("DeviceMaintenance", back_populates="device", cascade="all, delete-orphan")
 
@@ -355,7 +357,7 @@ class DeviceMaintenance(Base):
     cost = Column(Float, nullable=True)
     notes = Column(Text, nullable=True)
     expense_id = Column(Integer, ForeignKey("expenses.id"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=now_utc)
 
     device = relationship("Device", back_populates="maintenance")
 
@@ -365,7 +367,7 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id = Column(Integer, primary_key=True, index=True)
-    at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    at = Column(DateTime, nullable=False, default=now_utc, index=True)
     method = Column(String, nullable=False)
     path = Column(String, nullable=False)
     entity = Column(String, nullable=True, index=True)
@@ -397,7 +399,7 @@ class GiftCard(Base):
     redeemed_at = Column(DateTime, nullable=True)
     redeemed_client_id = Column(Integer, ForeignKey("clients.id"), nullable=True)
     redeemed_subscription_id = Column(Integer, ForeignKey("subscriptions.id"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=now_utc)
 
     plan = relationship("SubscriptionPlan")
     purchaser = relationship("Client", foreign_keys=[purchaser_client_id])
@@ -464,7 +466,7 @@ class Setting(Base):
     admin_password_hash = Column(String, nullable=True)
     last_daily_job_at = Column(DateTime, nullable=True)
     alerts_dismissed = Column(Text, nullable=True)  # JSON {alert_key: iso utc timestamp}
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, default=now_utc, onupdate=now_utc)
 
 
 class PushSubscription(Base):
@@ -477,7 +479,7 @@ class PushSubscription(Base):
     auth = Column(String, nullable=False)
     device = Column(String, nullable=True)   # e.g. "iPhone", "Mac · Safari"
     origin = Column(String, nullable=True)   # site address the device subscribed from
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=now_utc)
     last_success_at = Column(DateTime, nullable=True)
     last_error = Column(Text, nullable=True)
 
@@ -486,13 +488,13 @@ class Expense(Base):
     __tablename__ = "expenses"
 
     id = Column(Integer, primary_key=True, index=True)
-    date = Column(DateTime, nullable=False, default=datetime.utcnow)
+    date = Column(DateTime, nullable=False, default=now_utc)
     category = Column(String, nullable=False)
     payment_method = Column(String, nullable=True, default="Card")
     amount = Column(Float, nullable=False)
     notes = Column(Text, nullable=True)
     paid = Column(Boolean, nullable=False, default=True)  # False = bill still to pay
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=now_utc)
 
 
 # ---- derived values exposed to the API (read by pydantic via from_attributes) ----
@@ -523,3 +525,14 @@ Subscription.paid_amount = property(_sub_paid)
 Appointment.notify_result = None
 Appointment.series_created = None
 Appointment.series_skipped = None
+
+
+def unpaid_sessions(db, query=None):
+    """Completed, pay-per-session appointments with money still owed, using one query for the payments."""
+    from sqlalchemy import func
+    paid = (db.query(Payment.appointment_id, func.sum(Payment.amount).label("paid"))
+            .group_by(Payment.appointment_id).subquery())
+    q = (query if query is not None else db.query(Appointment)).filter(
+        Appointment.status == "completed", Appointment.subscription_id.is_(None), Appointment.price > 0)
+    rows = q.outerjoin(paid, paid.c.appointment_id == Appointment.id).add_columns(func.coalesce(paid.c.paid, 0)).all()
+    return [a for a, p in rows if float(a.price or 0) - float(p) > 0]

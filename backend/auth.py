@@ -74,10 +74,6 @@ def parse_token(token: str) -> Optional[dict]:
         return None
 
 
-def verify_token(token: str) -> bool:
-    return parse_token(token) is not None
-
-
 # ---------------------------------------------------------------- permissions
 # What each staff role may do, checked on the server for every request (the owner can do everything).
 _ANY, _READ = {"GET", "POST", "PUT", "PATCH", "DELETE"}, {"GET"}
@@ -177,6 +173,9 @@ def too_many_attempts(key: str) -> bool:
     now = time.time()
     recent = [t for t in _FAILS.get(key, []) if t > now - FAIL_WINDOW]
     _FAILS[key] = recent
+    if len(_FAILS) > 10000:  # many different names or addresses: drop the ones with no recent failures
+        for k in [k for k, v in _FAILS.items() if not v or v[-1] <= now - FAIL_WINDOW]:
+            _FAILS.pop(k, None)
     limit = MAX_FAILS_PER_ACCOUNT if key.startswith("account|") else MAX_FAILS
     return len(recent) >= limit
 

@@ -25,7 +25,7 @@ Work lands on `staging` first, then `main` (live) after the owner tries it.
 🔑 47 WhatsApp Business API (Meta account + per-message cost; today: WhatsApp Web bridge / Twilio) · ✅ 48–51 Confirmations, reminders, expiry, follow-up · ✅ 52 Renewal offers · ✅ 53 Owner approval before marketing messages go out (payments are only ever recorded by the owner)
 
 ## 54–60 Client portal
-🔑 54–60 Client accounts (how clients sign in, e.g. a one-time code by WhatsApp). Today: public booking page + per-booking link.
+🟡 54–60 Client page: each client gets a private link (`/c/<token>`, from the client card → **Client link**, sent on WhatsApp) showing upcoming sessions (change/cancel), packages and sessions left, payments with invoices, progress and past sessions. No password; the studio can replace or switch off the link. Not yet: sign-in with a one-time code, renewal request button.
 
 ## 61–65 Staff
 ✅ 61–62 Staff logins and role permissions (server-enforced) · ✅ 63 Trainer performance · ✅ 64 Commissions · 🟡 65 Sessions per trainer (assignment exists)

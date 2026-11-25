@@ -353,7 +353,7 @@ class PaymentCreate(BaseModel):
 
 
 class PaymentUpdate(BaseModel):
-    amount: Optional[float] = None
+    amount: Optional[float] = Field(None, gt=0)
     method: Optional[str] = None
     paid_at: Optional[datetime] = None
     notes: Optional[str] = None

@@ -250,6 +250,11 @@ def book_page():
     return FileResponse(os.path.join(FRONTEND_DIR, "book.html"))
 
 
+@app.get("/c/{token}")
+def client_page(token: str):
+    return FileResponse(os.path.join(FRONTEND_DIR, "portal.html"), headers={"Cache-Control": "no-cache"})
+
+
 @app.get("/a/{token}")
 def manage_page(token: str):
     return FileResponse(os.path.join(FRONTEND_DIR, "manage.html"))

@@ -52,7 +52,7 @@ function renderGrid(from, days) {
       html += `<div class="cal-row ${m % 60 === 0 ? 'hour' : ''} ${closed ? 'closed' : ''}" onclick="openBookingModal(null, {date:'${k}', time:'${fmtMin24(m)}'})"></div>`; }
     CAL.blocks.filter(b => dateKey(parseISO(b.start_time)) <= k && dateKey(parseISO(b.end_time)) >= k).forEach(b => {
       const s = dateKey(parseISO(b.start_time)) < k ? gridStart : minOf(b.start_time), e = dateKey(parseISO(b.end_time)) > k ? gridEnd : minOf(b.end_time);
-      html += `<div class="cal-block" style="top:${px(s - gridStart)}px;height:${px(e - s)}px" onclick="deleteBlock(${b.id}, '${esc(b.reason || 'Blocked')}')">⛔ ${esc(b.reason || 'Blocked')}${b.staff ? ' · ' + esc(b.staff.name) : ''}</div>`; });
+      html += `<div class="cal-block" style="top:${px(s - gridStart)}px;height:${px(e - s)}px" onclick="deleteBlock(${b.id}, ${jsArg(b.reason || 'Blocked')})">⛔ ${esc(b.reason || 'Blocked')}${b.staff ? ' · ' + esc(b.staff.name) : ''}</div>`; });
     CAL.appts.filter(a => dateKey(parseISO(a.start_time)) === k).forEach(a => {
       const s = minOf(a.start_time), e = minOf(a.end_time);
       const icon = a.status === 'confirmed' ? '✓' : a.status === 'completed' ? '✓✓' : a.status === 'no_show' ? '✗' : a.status === 'cancelled' ? '—' : '';

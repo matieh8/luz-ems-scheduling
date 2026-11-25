@@ -16,22 +16,28 @@ def login(req: schemas.LoginRequest, request: Request, db: Session = Depends(get
     if AUTH_DISABLED:
         return {"token": create_token(), "business_name": business}
     username = (req.username or "").strip().lower()
-    ip = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip() or (request.client.host if request.client else "?")
-    key = f"{ip}|{username}"
-    if too_many_attempts(key):
+    # request.client.host is the real address: uvicorn takes it from the proxy's X-Forwarded-For only when
+    # the request comes from the local nginx, so a client can't fake it by sending that header itself.
+    ip = request.client.host if request.client else "?"
+    key, account_key = f"{ip}|{username}", f"account|{username}"
+    if too_many_attempts(key) or too_many_attempts(account_key):
         raise HTTPException(status_code=429, detail="Too many wrong passwords. Wait 15 minutes and try again.")
+
+    def fail(detail):
+        record_failure(key)
+        record_failure(account_key)
+        raise HTTPException(status_code=401, detail=detail)
+
     if username:  # staff account
         s = db.query(models.Staff).filter(func.lower(models.Staff.login_username) == username).first()
         if not s or not s.active or not s.access_role or not verify_password(req.password, s.password_hash):
-            record_failure(key)
-            raise HTTPException(status_code=401, detail="Incorrect username or password")
+            fail("Incorrect username or password")
         clear_failures(key)
         return {"token": create_token(s.access_role, s.id, _pw_stamp(s.password_hash)), "business_name": business}
     if not settings or not verify_password(req.password, settings.admin_password_hash):
-        record_failure(key)
-        raise HTTPException(status_code=401, detail="Incorrect password")
+        fail("Incorrect password")
     clear_failures(key)
-    return {"token": create_token(), "business_name": business}
+    return {"token": create_token("owner", 0, _pw_stamp(settings.admin_password_hash)), "business_name": business}
 
 
 @router.get("/me", dependencies=[Depends(require_auth)])
@@ -49,8 +55,10 @@ def change_password(req: schemas.PasswordChange, db: Session = Depends(get_db)):
     settings = db.query(models.Setting).first()
     if not verify_password(req.current_password, settings.admin_password_hash):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
-    if len(req.new_password) < 6:
-        raise HTTPException(status_code=400, detail="New password must be at least 6 characters")
+    if len(req.new_password) < 8:
+        raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
     settings.admin_password_hash = hash_password(req.new_password)
     db.commit()
-    return {"detail": "Password updated"}
+    # Every other session (other phones, a stolen token) is signed out; this one gets a fresh token.
+    return {"detail": "Password updated. Other devices are signed out.",
+            "token": create_token("owner", 0, _pw_stamp(settings.admin_password_hash))}

@@ -42,3 +42,10 @@ Work lands on `staging` first, then `main` (live) after the owner tries it.
 ## 83–90 Security and SaaS
 ✅ 83 Server-side login, roles, lockout after wrong passwords · ✅ 84 Automatic daily database backups (14 kept on the server; download for off-site copy) · 🟡 85 Data protection · ✅ 86 Audit log (every change, secrets hidden, 1 year) ·
 🔑 87–90 Multi-tenant SaaS, subscriptions, super admin, selling to other studios (big business decision)
+
+## Phase 0: hardening (from docs/AUDIT_REPORT.md, 2026-11-25)
+✅ S1 XSS in buttons fixed (`jsArg`) + security headers · ✅ S2 online bookings don't use a package until the studio confirms or completes them; stored name not revealed ·
+✅ S3 a client who paid is archived, never deleted with their payments · ✅ S4 backups include photos (zip) + restore guide `docs/RESTORE.md` (off-site copy still manual) ·
+✅ S5 owner password change signs out other devices; old tokens need one new sign-in · ✅ S6 login lock can't be dodged with a fake header; per-account limit ·
+✅ S7 public booking rate limit + trainer check · ✅ S9 GitHub runs the tests before every deploy · ✅ S10 `/docs` hidden on live/staging ·
+✅ only owner/manager can approve held messages or book over a clash · ✅ tests for expiring packages, expiry and follow-up messages

@@ -140,7 +140,7 @@ async function openAppointment(id) {
       <button class="btn btn-secondary btn-sm" onclick="closeDrawer();openBookingModal(${a.id})">Reschedule</button>
       <button class="btn btn-danger btn-sm" onclick="cancelFlow(${a.id})">Cancel</button>
       ${a.series_id ? `<button class="btn btn-danger btn-sm" onclick="cancelSeriesFlow(${a.id})">Cancel this + all following</button>` : ''}</div>` : ''}
-    ${a.status === 'completed' && a.balance_due > 0 ? `<div class="mt"><button class="btn btn-primary btn-sm" onclick="openPaymentModal({client_id:${a.client_id}, appointment_id:${a.id}, amount:${a.balance_due}, label:'${esc(a.service.name)} on ${fmtDateShort(a.start_time)}'})">Record payment ${money(a.balance_due)}</button></div>` : ''}
+    ${a.status === 'completed' && a.balance_due > 0 ? `<div class="mt"><button class="btn btn-primary btn-sm" onclick="openPaymentModal({client_id:${a.client_id}, appointment_id:${a.id}, amount:${a.balance_due}, label:${jsArg(a.service.name + ' on ' + fmtDateShort(a.start_time))}})">Record payment ${money(a.balance_due)}</button></div>` : ''}
     ${a.status === 'cancelled' || a.status === 'no_show' ? `<div class="mt"><button class="btn btn-secondary btn-sm" onclick="setStatus(${a.id}, 'scheduled')">Re-open as scheduled</button></div>` : ''}
     <div class="mt" style="display:flex;gap:6px;flex-wrap:wrap">
       <button class="btn btn-secondary btn-sm" onclick="sendReminder(${a.id})">Send reminder</button>

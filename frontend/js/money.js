@@ -11,7 +11,7 @@ function subsTable(subs) {
       <td class="small">${fmtDate(s.start_date)} → ${s.end_date ? fmtDate(s.end_date) : 'no expiry'}${expSoon && s.status === 'active' ? '<div class="tiny" style="color:var(--warn)">expires soon</div>' : ''}</td>
       <td class="num">${money(s.price_paid)}${s.discount_code ? `<div class="tiny" style="color:var(--good)">${esc(s.discount_code)} −${money(s.discount_amount)}</div>` : ''}${s.paid_amount < s.price_paid ? `<div class="tiny" style="color:var(--bad)">paid ${money(s.paid_amount)}</div>` : ''}</td>
       <td>${badge(s.status === 'active' ? 'active' : s.status === 'expired' ? 'expired' : 'neutral').replace('neutral', s.status)}</td>
-      <td class="num">${s.status !== 'renewed' && s.status !== 'cancelled' ? `<button class="btn btn-success btn-xs" onclick="renewFlow(${s.id})">Renew</button>` : ''}<button class="btn btn-ghost btn-xs" onclick="editSubscription(${s.id})">Edit</button>${s.paid_amount < s.price_paid ? `<button class="btn btn-ghost btn-xs" onclick="openPaymentModal({client_id:${s.client_id}, subscription_id:${s.id}, amount:${s.price_paid - s.paid_amount}, label:'${esc(s.plan.name)}'})">Pay</button>` : ''}<button class="btn btn-ghost btn-xs" style="color:var(--bad)" onclick="deleteSubscription(${s.id}, '${esc(s.plan.name).replace(/'/g, "\\'")}')">Delete</button></td></tr>`; }).join('') + '</tbody></table></div>';
+      <td class="num">${s.status !== 'renewed' && s.status !== 'cancelled' ? `<button class="btn btn-success btn-xs" onclick="renewFlow(${s.id})">Renew</button>` : ''}<button class="btn btn-ghost btn-xs" onclick="editSubscription(${s.id})">Edit</button>${s.paid_amount < s.price_paid ? `<button class="btn btn-ghost btn-xs" onclick="openPaymentModal({client_id:${s.client_id}, subscription_id:${s.id}, amount:${s.price_paid - s.paid_amount}, label:${jsArg(s.plan.name)}})">Pay</button>` : ''}<button class="btn btn-ghost btn-xs" style="color:var(--bad)" onclick="deleteSubscription(${s.id}, ${jsArg(s.plan.name)})">Delete</button></td></tr>`; }).join('') + '</tbody></table></div>';
 }
 async function renewFlow(id) {
   const [subs, plans] = await Promise.all([api('GET', '/subscriptions/'), api('GET', '/subscriptions/plans?active_only=true')]);
@@ -119,7 +119,7 @@ async function loadCodes() {
       <td class="mono">${d.used_count}${d.max_uses ? ` / ${d.max_uses}` : ''}</td>
       <td class="small">${d.valid_from ? fmtDate(d.valid_from) : 'now'} → ${d.valid_until ? fmtDate(d.valid_until) : 'no end'}</td>
       <td>${codeStatus(d)}</td>
-      <td class="num"><button class="btn btn-ghost btn-xs" onclick="toggleCode(${d.id}, ${!d.active})">${d.active ? 'Switch off' : 'Switch on'}</button><button class="btn btn-ghost btn-xs" style="color:var(--bad)" onclick="deleteCode(${d.id}, '${esc(d.code)}')">Delete</button></td></tr>`).join('')}</tbody></table></div>`
+      <td class="num"><button class="btn btn-ghost btn-xs" onclick="toggleCode(${d.id}, ${!d.active})">${d.active ? 'Switch off' : 'Switch on'}</button><button class="btn btn-ghost btn-xs" style="color:var(--bad)" onclick="deleteCode(${d.id}, ${jsArg(d.code)})">Delete</button></td></tr>`).join('')}</tbody></table></div>`
       : '<div class="card empty">No discount codes yet.</div>');
 }
 async function saveCode() {
@@ -152,7 +152,7 @@ async function loadLapsed() {
       <td>${esc(r.plan)}<div class="tiny muted">${r.sessions_used}/${r.sessions_total} used · ${esc(r.how_it_ended)}</div></td>
       <td class="small">${fmtDate(r.ended_on)}<div class="tiny muted">${r.days_since} day(s) ago</div></td>
       <td class="num">${money(r.total_spent)}</td><td>${offer(r)}</td>
-      <td class="num"><button class="btn btn-success btn-xs" onclick="openSubscriptionModal(null, ${r.client_id})">Sell package</button>${r.offer !== 'sent' ? `<button class="btn btn-ghost btn-xs" onclick="sendRenewalOffer(${r.subscription_id}, '${esc(r.client_name).replace(/'/g, "\\'")}')">Send offer</button>` : ''}</td></tr>`).join('')}</tbody></table></div>`
+      <td class="num"><button class="btn btn-success btn-xs" onclick="openSubscriptionModal(null, ${r.client_id})">Sell package</button>${r.offer !== 'sent' ? `<button class="btn btn-ghost btn-xs" onclick="sendRenewalOffer(${r.subscription_id}, ${jsArg(r.client_name)})">Send offer</button>` : ''}</td></tr>`).join('')}</tbody></table></div>`
       : '<div class="card empty">Everyone with an ended package has renewed. 🎉</div>');
 }
 function sendRenewalOffer(subId, name) {
@@ -185,7 +185,7 @@ async function loadGifts() {
       <td class="small">${g.valid_until ? fmtDate(g.valid_until) : '—'}</td>
       <td class="num">${money(g.price_paid)}</td>
       <td>${giftStatus(g)}${g.redeemed_at ? `<div class="tiny muted">${fmtDate(g.redeemed_at)}</div>` : ''}</td>
-      <td class="num">${g.status === 'active' ? `<button class="btn btn-success btn-xs" onclick="redeemGift(${g.id})">Redeem</button><button class="btn btn-ghost btn-xs" onclick="copyGift(${g.id})">Copy text</button><button class="btn btn-ghost btn-xs" style="color:var(--bad)" onclick="cancelGift(${g.id}, '${esc(g.code)}')">Cancel</button>` : g.redeemed_client_id ? `<button class="btn btn-ghost btn-xs" onclick="openClientDetail(${g.redeemed_client_id}, 'subs')">Open client</button>` : ''}</td></tr>`).join('')}</tbody></table></div>`
+      <td class="num">${g.status === 'active' ? `<button class="btn btn-success btn-xs" onclick="redeemGift(${g.id})">Redeem</button><button class="btn btn-ghost btn-xs" onclick="copyGift(${g.id})">Copy text</button><button class="btn btn-ghost btn-xs" style="color:var(--bad)" onclick="cancelGift(${g.id}, ${jsArg(g.code)})">Cancel</button>` : g.redeemed_client_id ? `<button class="btn btn-ghost btn-xs" onclick="openClientDetail(${g.redeemed_client_id}, 'subs')">Open client</button>` : ''}</td></tr>`).join('')}</tbody></table></div>`
       : '<div class="card empty">No gift cards sold yet.</div>');
   window._gifts = gifts;
 }

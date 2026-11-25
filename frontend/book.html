@@ -85,7 +85,7 @@
       const r = await fetch(`/api/public/availability?service_id=${B.service.id}&date=${B.date}${B.staff ? '&staff_id=' + B.staff : ''}`); const av = await r.json();
       if (!r.ok) { box.innerHTML = `<span class="muted">${esc(av.detail)}</span>`; return; }
       if (!av.slots.length) { box.innerHTML = '<span class="muted">No free times on this day. Try another date.</span>'; return; }
-      box.innerHTML = av.slots.map(s => `<button class="slot" data-t="${s.start_time}" onclick="pickSlot('${s.start_time}','${esc(s.label)}')">${esc(s.label)}</button>`).join('');
+      box.innerHTML = av.slots.map(s => `<button class="slot" data-t="${s.start_time}" onclick="pickSlot('${s.start_time}',${esc(JSON.stringify(s.label))})">${esc(s.label)}</button>`).join('');
     }
     function pickSlot(t, label) { B.slot = { t, label }; document.querySelectorAll('.slot').forEach(b => b.classList.toggle('selected', b.dataset.t === t)); update(); }
     function update() { const ok = B.service && B.slot; document.getElementById('book-btn').disabled = !ok; const s = document.getElementById('summary'); s.style.display = ok ? 'block' : 'none';

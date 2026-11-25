@@ -108,6 +108,9 @@ class ClientSummary(ClientResponse):
     attendance_rate: Optional[float] = None
     avg_gap_days: Optional[float] = None
     days_since_last: Optional[int] = None
+    package_name: Optional[str] = None  # the active package that is used next
+    package_end: Optional[datetime] = None
+    main_trainer: Optional[str] = None  # who trains them most often
 
 
 # ---------- Staff ----------

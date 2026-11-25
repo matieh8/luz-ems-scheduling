@@ -1241,3 +1241,18 @@ def test_editing_a_payment_is_checked_and_unpaid_totals_match(client):
     rows = client.get("/api/appointments/?status=completed&limit=100000").json()
     expected = round(sum(a["balance_due"] for a in rows), 2)
     assert round(client.get("/api/dashboard/overview").json()["due"]["amount"], 2) == expected
+
+
+def test_client_list_shows_package_end_and_main_trainer(client):
+    sid = client.post("/api/staff/", json={"name": "Table Coach"}).json()["id"]
+    cid = client.post("/api/clients/", json={"name": "Table Person", "phone": "0501230099"}).json()["id"]
+    plan = client.get("/api/subscriptions/plans").json()[0]
+    end = (datetime.now(timezone.utc) + timedelta(days=40)).replace(microsecond=0)
+    client.post("/api/subscriptions/", json={"client_id": cid, "plan_id": plan["id"], "end_date": end.isoformat(),
+                                             "payment_method": "cash", "send_notification": False})
+    svc = client.get("/api/services/").json()[0]
+    client.post("/api/appointments/", json={"client_id": cid, "service_id": svc["id"], "staff_id": sid, "force": True,
+                                            "start_time": next_weekday_at(10, 16).isoformat(), "send_notification": False})
+    row = next(c for c in client.get("/api/clients/?q=Table%20Person").json() if c["id"] == cid)
+    assert row["package_name"] == plan["name"] and row["package_end"].startswith(end.strftime("%Y-%m-%d"))
+    assert row["main_trainer"] == "Table Coach" and row["sessions_remaining"] == plan["sessions_included"] - 1

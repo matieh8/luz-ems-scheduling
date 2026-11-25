@@ -16,7 +16,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script>/* theme before first paint: light | dark | auto (follows the phone/computer) */
     (function () { var t = 'auto'; try { t = localStorage.getItem('luz_theme') || 'auto'; } catch (e) {} document.documentElement.setAttribute('data-theme', t); })();</script>
-  <link rel="stylesheet" href="/css/app.css?v=19">
+  <link rel="stylesheet" href="/css/app.css?v=21">
 </head>
 <body>
   <div class="login-overlay" id="login">
@@ -396,7 +396,7 @@
     <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('client-modal')">Cancel</button><button class="btn btn-primary" onclick="saveClient()">Save client</button></div>
   </div></div>
 
-  <div class="modal-overlay" id="client-detail-modal"><div class="modal wide">
+  <div class="modal-overlay" id="client-detail-modal"><div class="modal xwide">
     <div class="modal-header"><h3 id="cd-title">Client</h3><button class="close-btn" onclick="closeModal('client-detail-modal')">&times;</button></div>
     <div class="modal-body" id="cd-body"></div>
     <div class="modal-footer" id="cd-footer"></div>
@@ -540,7 +540,7 @@
   <script src="/js/core.js?v=7"></script>
   <script src="/js/calendar.js?v=7"></script>
   <script src="/js/booking.js?v=5"></script>
-  <script src="/js/clients.js?v=11"></script>
+  <script src="/js/clients.js?v=12"></script>
   <script src="/js/money.js?v=13"></script>
   <script src="/js/finance.js?v=1"></script>
   <script src="/js/expenses.js?v=3"></script>

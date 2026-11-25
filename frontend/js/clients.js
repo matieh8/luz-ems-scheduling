@@ -16,17 +16,46 @@ async function loadClients() {
   $('clients-sub').textContent = `${clients.length} client${clients.length === 1 ? '' : 's'}`;
   const div = $('clients-list');
   if (!clients.length) { div.innerHTML = '<div class="card empty">No clients found.</div>'; return; }
-  div.innerHTML = `<table><thead><tr><th>Client</th><th>Contact</th><th>Status</th><th class="num">Sessions</th><th class="num">Package left</th><th class="num">Spent</th><th>Last visit</th><th>Next visit</th><th></th></tr></thead><tbody>` +
-    clients.map(c => `<tr class="clickable" onclick="openClientDetail(${c.id})">
-      <td><strong>${esc(c.name)}</strong>${!c.active ? ' <span class="chip">inactive</span>' : ''}${c.health_notes ? ' <span class="chip chip-bad" title="' + esc(c.health_notes) + '">health</span>' : ''}<div class="tiny muted">${esc(c.source || '')}${c.no_shows ? ` · ${c.no_shows} no-show${c.no_shows > 1 ? 's' : ''}` : ''}</div></td>
+  div.innerHTML = `<table class="clients-table"><thead><tr><th>Client</th><th>Contact</th><th>Package</th><th>Status</th><th class="num">Sessions left</th><th>Package ends</th><th class="num">Paid</th><th class="num">Owed</th><th></th></tr></thead><tbody>` +
+    clients.map(c => { const soon = c.package_end && (parseISO(c.package_end) - new Date()) < 7 * 864e5; return `<tr class="clickable" onclick="openClientDetail(${c.id})">
+      <td><div class="who">${avatar(c.name)}<div><strong>${esc(c.name)}</strong>${c.health_notes ? ' <span class="chip chip-bad" title="' + esc(c.health_notes) + '">health</span>' : ''}<div class="tiny">${riskBadge(c)}</div></div></div></td>
       <td>${esc(c.phone)}<div class="tiny muted">${esc(c.email || '')}</div></td>
-      <td>${riskBadge(c)}${c.days_since_last !== null && c.days_since_last !== undefined ? `<div class="tiny muted">${c.days_since_last}d ago${c.avg_gap_days ? ` · every ~${Math.round(c.avg_gap_days)}d` : ''}</div>` : ''}</td>
-      <td class="num">${c.completed_appointments}</td>
+      <td>${c.package_name ? esc(c.package_name) : '<span class="muted">Pay per session</span>'}</td>
+      <td>${clientStatus(c)}</td>
       <td class="num">${c.sessions_remaining ? `<strong>${c.sessions_remaining}</strong>` : '<span class="muted">—</span>'}</td>
-      <td class="num">${money(c.total_spent)}${c.outstanding > 0 ? `<div class="tiny" style="color:var(--bad)">owes ${money(c.outstanding)}</div>` : ''}</td>
-      <td>${c.last_visit ? fmtDate(c.last_visit) : '<span class="muted">—</span>'}</td>
-      <td>${c.next_visit ? fmtDT(c.next_visit) : '<span class="muted">—</span>'}</td>
-      <td class="num"><button class="btn btn-primary btn-xs" onclick="event.stopPropagation();openBookingModal(null, {clientId:${c.id}})">Book</button></td></tr>`).join('') + '</tbody></table>';
+      <td>${c.package_end ? `<span${soon ? ' style="color:var(--bad);font-weight:600"' : ''}>${fmtDate(c.package_end)}</span>` : '<span class="muted">—</span>'}</td>
+      <td class="num">${money(c.total_spent)}</td>
+      <td class="num">${c.outstanding > 0 ? `<strong style="color:var(--bad)">${money(c.outstanding)}</strong>` : '<span class="muted">—</span>'}</td>
+      <td class="num nowrap"><button class="btn btn-secondary btn-xs" onclick="event.stopPropagation();openClientDetail(${c.id})">View profile</button></td></tr>`; }).join('') + '</tbody></table>';
+}
+
+// Initials in a colour picked from the name: the same client always gets the same colour.
+function avatar(name, size = '') {
+  const n = String(name || '?').trim(), hue = [...n].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) % 360, 7);
+  const ini = n.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+  return `<span class="avatar ${size}" style="--h:${hue}" aria-hidden="true">${esc(ini)}</span>`;
+}
+// Active = still coming: a package with sessions left, a booking ahead, or a visit in the last 30 days.
+function clientIsActive(c) { return c.active && (c.sessions_remaining > 0 || !!c.next_visit || (c.days_since_last !== null && c.days_since_last !== undefined && c.days_since_last <= 30)); }
+function clientStatus(c) { return clientIsActive(c) ? '<span class="badge badge-active">Active</span>' : '<span class="badge badge-neutral" title="No package left, nothing booked and no visit in 30 days">Inactive</span>'; }
+const ICO = {
+  mail: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>',
+  phone: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2Z"/></svg>',
+  card: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>',
+};
+// Body composition: latest value, the check-in date, and whether it moved the right way since the one before.
+function bodyCards(ms) {
+  const cards = [['weight_kg', 'Weight', 'kg', true], ['body_fat_pct', 'Body fat', '%', true], ['muscle_kg', 'Muscle', 'kg', false], ['waist_cm', 'Waist', 'cm', true]]
+    .map(([k, label, unit, lowerIsBetter]) => {
+      const withK = ms.filter(m => m[k] !== null && m[k] !== undefined); // newest first
+      if (!withK.length) return '';
+      const cur = withK[0][k], prev = withK[1] ? withK[1][k] : null;
+      const tag = prev === null || cur === prev ? ['badge-neutral', prev === null ? 'First' : 'Steady'] : ((cur < prev) === lowerIsBetter ? ['badge-active', 'Good'] : ['badge-queued', 'Watch']);
+      return `<div class="body-card"><div class="body-card-head"><span>${label}</span><span class="badge ${tag[0]}">${tag[1]}</span></div>
+        <div class="body-card-value">${Number(cur).toLocaleString('en', { maximumFractionDigits: 1 })}<small> ${unit}</small></div>
+        <div class="tiny muted">${fmtDate(withK[0].measured_at)} · check-in${prev !== null && cur !== prev ? ` · ${cur > prev ? '+' : ''}${(cur - prev).toFixed(1)} ${unit}` : ''}</div></div>`;
+    }).join('');
+  return cards ? `<div class="section-label">Body composition</div><div class="body-cards">${cards}</div>` : `<div class="section-label">Body composition</div><div class="empty small">No check-ins yet. Add one in the Progress tab.</div>`;
 }
 
 /* ---------- profile ---------- */
@@ -41,20 +70,29 @@ async function openClientDetail(id, tab) {
   const h = await api('GET', `/clients/${id}/history`);
   CD = h;
   const c = h.client;
-  $('cd-title').innerHTML = `${esc(c.name)} ${riskBadge(c)} ${c.active ? '' : '<span class="chip">inactive</span>'}`;
+  $('cd-title').innerHTML = `<span class="muted" style="font-weight:500">Clients /</span> ${esc(c.name)}${c.active ? '' : ' <span class="chip">archived</span>'}`;
   const upcoming = h.appointments.filter(a => ['scheduled', 'confirmed'].includes(a.status) && parseISO(a.start_time) > new Date()).reverse();
   const past = h.appointments.filter(a => !upcoming.includes(a));
   const r = RISK[c.risk] || RISK.new;
-  $('cd-body').innerHTML = `
-    ${c.health_notes ? `<div class="health-flag"><strong>Health &amp; restrictions</strong><div>${esc(c.health_notes)}</div></div>` : ''}
-    <div class="grid grid-4 mb">
-      <div class="stat"><div class="stat-label">Sessions done</div><div class="stat-value">${c.completed_appointments}</div><div class="stat-sub">${c.no_shows} no-shows · ${c.late_count || 0} late${c.attendance_rate !== null && c.attendance_rate !== undefined ? ` · ${c.attendance_rate}% attended` : ''}</div></div>
-      <div class="stat"><div class="stat-label">Total spent</div><div class="stat-value">${money(c.total_spent)}</div><div class="stat-sub">${c.outstanding > 0 ? `<span style="color:var(--bad)">owes ${money(c.outstanding)}</span>` : 'nothing owed'}</div></div>
-      <div class="stat"><div class="stat-label">Package left</div><div class="stat-value">${c.sessions_remaining}</div><div class="stat-sub">sessions</div></div>
-      <div class="stat"><div class="stat-label">Regularity</div><div class="stat-value" style="font-size:1.1rem">${r.label}</div><div class="stat-sub">${c.days_since_last !== null && c.days_since_last !== undefined ? `last ${c.days_since_last}d ago` : 'no sessions yet'}${c.avg_gap_days ? ` · usually every ${Math.round(c.avg_gap_days)}d` : ''}</div></div>
-    </div>
-    <dl class="kv mb"><dt>Phone</dt><dd>${esc(c.phone)}</dd><dt>Email</dt><dd>${esc(c.email || '—')}</dd><dt>Client since</dt><dd>${fmtDate(c.created_at)}${c.source ? ' · ' + esc(c.source) : ''}</dd><dt>Notifications</dt><dd>${[c.notify_whatsapp && 'WhatsApp', c.notify_sms && 'SMS', c.notify_email && 'Email'].filter(Boolean).join(', ') || 'none'}</dd>${c.date_of_birth ? `<dt>Birthday</dt><dd>${esc(c.date_of_birth)}</dd>` : ''}${c.notes ? `<dt>Notes</dt><dd>${esc(c.notes)}</dd>` : ''}</dl>
+  $('cd-body').innerHTML = `<div class="cd-layout">
+    <aside class="cd-side">
+      ${avatar(c.name, 'xl')}
+      <h2 class="cd-name">${esc(c.name)}</h2>
+      <div class="cd-badges">${clientStatus(c)} ${riskBadge(c)}</div>
+      <div class="cd-contact">
+        <div>${ICO.mail}<span>${c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : '<span class="muted">No email</span>'}</span></div>
+        <div>${ICO.phone}<span><a href="tel:${esc(c.phone)}">${esc(c.phone)}</a></span></div>
+        <div>${ICO.card}<span>${c.package_name ? `${esc(c.package_name)}<div class="tiny muted">${c.sessions_remaining} session${c.sessions_remaining === 1 ? '' : 's'} left${c.package_end ? ' · until ' + fmtDate(c.package_end) : ''}</div>` : '<span class="muted">No active package</span>'}</span></div>
+      </div>
+      <div class="section-label">Assigned staff</div>
+      ${c.main_trainer ? `<div class="cd-staff">${avatar(c.main_trainer)}<div><div class="tiny muted">Coach</div><strong>${esc(c.main_trainer)}</strong></div></div>` : '<div class="tiny muted">No trainer yet</div>'}
+      <div class="section-label">Client since</div>
+      <div class="small">${fmtDate(c.created_at)}${c.source ? ' · ' + esc(c.source) : ''}</div>
+      ${c.health_notes ? `<div class="health-flag" style="margin-top:14px"><strong>Health &amp; restrictions</strong><div>${esc(c.health_notes)}</div></div>` : ''}
+    </aside>
+    <div class="cd-main">
     <div class="tabs tabs-scroll">
+      <button class="tab" data-t="overview" onclick="cdTab('overview', this)">Overview</button>
       <button class="tab" data-t="appts" onclick="cdTab('appts', this)">Sessions (${h.appointments.length})</button>
       <button class="tab" data-t="progress" onclick="cdTab('progress', this)">Progress (${h.measurements.length + (h.photos || []).length})</button>
       <button class="tab" data-t="notes" onclick="cdTab('notes', this)">Notes &amp; contact (${h.notes.length})</button>
@@ -62,14 +100,27 @@ async function openClientDetail(id, tab) {
       <button class="tab" data-t="pays" onclick="cdTab('pays', this)">Payments (${h.payments.length})</button>
       <button class="tab" data-t="msgs" onclick="cdTab('msgs', this)">Messages (${h.messages.length})</button>
     </div>
+    <div id="cd-overview" class="subpanel">
+    <div class="grid grid-4 mb">
+      <div class="stat"><div class="stat-label">Sessions done</div><div class="stat-value">${c.completed_appointments}</div><div class="stat-sub">${c.no_shows} no-shows · ${c.late_count || 0} late${c.attendance_rate !== null && c.attendance_rate !== undefined ? ` · ${c.attendance_rate}% attended` : ''}</div></div>
+      <div class="stat"><div class="stat-label">Total paid</div><div class="stat-value">${money(c.total_spent)}</div><div class="stat-sub">${c.outstanding > 0 ? `<span style="color:var(--bad)">owes ${money(c.outstanding)}</span>` : 'nothing owed'}</div></div>
+      <div class="stat"><div class="stat-label">Package left</div><div class="stat-value">${c.sessions_remaining}</div><div class="stat-sub">sessions</div></div>
+      <div class="stat"><div class="stat-label">Regularity</div><div class="stat-value" style="font-size:1.1rem">${r.label}</div><div class="stat-sub">${c.days_since_last !== null && c.days_since_last !== undefined ? `last ${c.days_since_last}d ago` : 'no sessions yet'}${c.avg_gap_days ? ` · usually every ${Math.round(c.avg_gap_days)}d` : ''}</div></div>
+    </div>
+    ${bodyCards(h.measurements)}
+    <div class="section-label">Next sessions</div>
+    ${upcoming.length ? apptTable(upcoming.slice(0, 3), { withDate: true }) : '<div class="empty small">Nothing booked.</div>'}
+    <dl class="kv" style="margin-top:14px"><dt>Notifications</dt><dd>${[c.notify_whatsapp && 'WhatsApp', c.notify_sms && 'SMS', c.notify_email && 'Email'].filter(Boolean).join(', ') || 'none'}</dd>${c.date_of_birth ? `<dt>Birthday</dt><dd>${esc(c.date_of_birth)}</dd>` : ''}${c.notes ? `<dt>Notes</dt><dd>${esc(c.notes)}</dd>` : ''}</dl>
+    </div>
     <div id="cd-appts" class="subpanel">${upcoming.length ? '<div class="agenda-day">Upcoming</div>' + apptTable(upcoming, { withDate: true }) : ''}${past.length ? '<div class="agenda-day">History</div>' + apptTable(past, { withDate: true }) : ''}${!h.appointments.length ? '<div class="empty small">No sessions yet.</div>' : ''}</div>
     <div id="cd-progress" class="subpanel">${progressPanel(h)}</div>
     <div id="cd-notes" class="subpanel">${notesPanel(h)}</div>
     <div id="cd-subs" class="subpanel">${subsTable(h.subscriptions)}</div>
     <div id="cd-pays" class="subpanel">${paymentsTable(h.payments, true)}</div>
-    <div id="cd-msgs" class="subpanel">${messagesTable(h.messages, true)}</div>`;
-  const start = document.querySelector(`#cd-body .tab[data-t="${tab || 'appts'}"]`);
-  cdTab(tab || 'appts', start);
+    <div id="cd-msgs" class="subpanel">${messagesTable(h.messages, true)}</div>
+    </div></div>`;
+  const start = document.querySelector(`#cd-body .tab[data-t="${tab || 'overview'}"]`);
+  cdTab(tab || 'overview', start);
   $('cd-footer').innerHTML = `<div class="left"><button class="btn btn-secondary btn-sm" onclick="editClient(${c.id})">Edit</button><button class="btn btn-danger btn-sm" onclick="deleteClient(${c.id}, ${jsArg(c.name)})">Delete</button><button class="btn btn-secondary btn-sm" onclick="closeModal('client-detail-modal');openCustomMessageModal(${c.id})">Message</button><button class="btn btn-secondary btn-sm" onclick="openClientLink(${c.id}, ${jsArg(c.name)})">Client link</button><button class="btn btn-secondary btn-sm" onclick="closeModal('client-detail-modal');openPaymentModal({client_id:${c.id}})">Record payment</button><button class="btn btn-secondary btn-sm" onclick="closeModal('client-detail-modal');openSubscriptionModal(null, ${c.id})">Sell package</button></div><button class="btn btn-primary" onclick="closeModal('client-detail-modal');openBookingModal(null, {clientId:${c.id}})">Book session</button>`;
   openModal('client-detail-modal');
 }

@@ -1146,3 +1146,43 @@ def test_expiring_package_alerts_and_follow_up_job(client):
         db.close()
     types = [l["type"] for l in client.get(f"/api/notifications/logs?client_id={cid}").json()]
     assert types.count("follow_up") == 1
+
+
+def test_auto_complete_job_uses_the_package_for_online_bookings(client):
+    from backend.database import SessionLocal
+    from backend import models, notifications as n
+    cid = client.post("/api/clients/", json={"name": "Auto Done", "phone": "0501238888"}).json()["id"]
+    plan = client.get("/api/subscriptions/plans").json()[0]
+    sub = client.post("/api/subscriptions/", json={"client_id": cid, "plan_id": plan["id"], "payment_method": "cash",
+                                                   "send_notification": False}).json()
+    svc = client.get("/api/public/info").json()["services"][0]
+    day = next_weekday_at(9, 13)
+    slot = client.get(f"/api/public/availability?service_id={svc['id']}&date={day.astimezone(timezone(timedelta(hours=4))).date()}").json()["slots"][0]["start_time"]
+    with TestClient(app) as anon:
+        assert anon.post("/api/public/book", json={"name": "Auto Done", "phone": "0501238888", "service_id": svc["id"], "start_time": slot}).status_code == 200
+    db = SessionLocal()
+    try:  # the session took place yesterday and nobody marked it
+        a = db.query(models.Appointment).filter(models.Appointment.client_id == cid).one()
+        a.start_time, a.end_time = a.start_time - timedelta(days=30), a.end_time - timedelta(days=30)
+        db.commit()
+        n.run_auto_complete_job(db)
+        db.refresh(a)
+        assert a.status == "completed" and a.subscription_id == sub["id"] and a.price == 0
+    finally:
+        db.close()
+    left = next(s for s in client.get(f"/api/subscriptions/?client_id={cid}").json() if s["id"] == sub["id"])["sessions_remaining"]
+    assert left == plan["sessions_included"] - 1
+
+
+def test_unpaid_list_is_filtered_before_the_limit(client):
+    cid = client.post("/api/clients/", json={"name": "Old Payer", "phone": "0501236666"}).json()["id"]
+    svc = client.get("/api/services/").json()[0]
+    ids = []
+    for days in (20, 21):  # the older one is paid, the newer one isn't
+        a = client.post("/api/appointments/", json={"client_id": cid, "service_id": svc["id"], "price": 100, "use_subscription": False,
+                                                    "start_time": next_weekday_at(10, days).isoformat(), "force": True, "send_notification": False}).json()
+        client.post(f"/api/appointments/{a['id']}/status", json={"status": "completed", "send_notification": False})
+        ids.append(a["id"])
+    client.post("/api/payments/", json={"client_id": cid, "appointment_id": ids[0], "amount": 100, "method": "cash"})
+    rows = client.get(f"/api/appointments/?client_id={cid}&status=completed&unpaid=true&limit=1").json()
+    assert [r["id"] for r in rows] == [ids[1]]

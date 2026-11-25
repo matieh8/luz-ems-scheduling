@@ -57,7 +57,7 @@ function convertLead(id) {
 }
 function deleteLead(id) {
   if (!confirm('Delete this lead? This cannot be undone.')) return;
-  guard(async () => { await api('DELETE', `/leads/${id}`); document.querySelectorAll('.modal-overlay.active').forEach(m => m.classList.remove('active')); toast('Lead deleted'); loadLeads(); });
+  guard(async () => { await api('DELETE', `/leads/${id}`); document.querySelectorAll('.modal-overlay.active').forEach(m => closeModal(m.id)); toast('Lead deleted'); loadLeads(); });
 }
 
 async function loadLeadReport() {

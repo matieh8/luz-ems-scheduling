@@ -16,16 +16,17 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script>/* theme before first paint: light | dark | auto (follows the phone/computer) */
     (function () { var t = 'auto'; try { t = localStorage.getItem('luz_theme') || 'auto'; } catch (e) {} document.documentElement.setAttribute('data-theme', t); })();</script>
-  <link rel="stylesheet" href="/css/app.css?v=21">
+  <link rel="stylesheet" href="/css/app.css?v=22">
 </head>
 <body>
+  <a class="skip-link" href="#main-content" onclick="event.preventDefault(); document.getElementById('main-content').focus()">Skip to content</a>
   <div class="login-overlay" id="login">
     <form class="login-card" onsubmit="return doLogin(event)">
       <div class="wordmark lg" aria-label="LUZ EMS">LUZ<small>EMS</small></div>
       <p class="muted" style="margin:0 0 22px">Sign in to manage your studio</p>
       <div class="form-group"><label>Username <span class="muted">(team members only)</span></label><input type="text" id="login-username" class="input" autocomplete="username" autocapitalize="none" placeholder="Leave empty if you're the owner"></div>
       <div class="form-group"><label>Password</label><input type="password" id="login-password" class="input" autofocus autocomplete="current-password"></div>
-      <div id="login-error" class="small" style="color:var(--bad);min-height:18px;margin-bottom:8px"></div>
+      <div id="login-error" role="alert" aria-live="polite" class="small" style="color:var(--bad);min-height:18px;margin-bottom:8px"></div>
       <button class="btn btn-primary" style="width:100%;justify-content:center" type="submit">Sign in</button>
     </form>
   </div>
@@ -64,7 +65,7 @@
       </div>
     </aside>
 
-    <main class="main">
+    <main class="main" id="main-content" tabindex="-1">
       <!-- Dashboard -->
       <section id="page-dashboard" class="page">
         <div class="header dash-head">
@@ -331,8 +332,8 @@
   </div>
 
   <!-- ===== Modals ===== -->
-  <div class="modal-overlay" id="booking-modal"><div class="modal">
-    <div class="modal-header"><h3 id="booking-title">Book session</h3><button class="close-btn" onclick="closeModal('booking-modal')">&times;</button></div>
+  <div class="modal-overlay" id="booking-modal" role="dialog" aria-modal="true" aria-labelledby="booking-title" aria-hidden="true"><div class="modal">
+    <div class="modal-header"><h3 id="booking-title">Book session</h3><button class="close-btn" aria-label="Close" onclick="closeModal('booking-modal')">&times;</button></div>
     <div class="modal-body">
       <input type="hidden" id="booking-id">
       <div class="form-group" id="booking-client-group">
@@ -370,14 +371,14 @@
   </div></div>
 
   <div class="drawer-backdrop" id="drawer-backdrop" onclick="closeDrawer()"></div>
-  <div class="drawer" id="drawer">
-    <div class="modal-header"><h3 id="drawer-title">Session</h3><button class="close-btn" onclick="closeDrawer()">&times;</button></div>
+  <div class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title" aria-hidden="true">
+    <div class="modal-header"><h3 id="drawer-title">Session</h3><button class="close-btn" aria-label="Close" onclick="closeDrawer()">&times;</button></div>
     <div class="modal-body" id="drawer-body" style="flex:1"></div>
     <div class="modal-footer" id="drawer-footer"></div>
   </div>
 
-  <div class="modal-overlay" id="client-modal"><div class="modal">
-    <div class="modal-header"><h3 id="client-modal-title">Add client</h3><button class="close-btn" onclick="closeModal('client-modal')">&times;</button></div>
+  <div class="modal-overlay" id="client-modal" role="dialog" aria-modal="true" aria-labelledby="client-modal-title" aria-hidden="true"><div class="modal">
+    <div class="modal-header"><h3 id="client-modal-title">Add client</h3><button class="close-btn" aria-label="Close" onclick="closeModal('client-modal')">&times;</button></div>
     <div class="modal-body">
       <input type="hidden" id="client-id">
       <div class="form-row"><div class="form-group"><label>Full name</label><input id="client-name" class="input"></div><div class="form-group"><label>Phone</label><input id="client-phone" class="input" placeholder="05x xxx xxxx"></div></div>
@@ -396,14 +397,14 @@
     <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('client-modal')">Cancel</button><button class="btn btn-primary" onclick="saveClient()">Save client</button></div>
   </div></div>
 
-  <div class="modal-overlay" id="client-detail-modal"><div class="modal xwide">
-    <div class="modal-header"><h3 id="cd-title">Client</h3><button class="close-btn" onclick="closeModal('client-detail-modal')">&times;</button></div>
+  <div class="modal-overlay" id="client-detail-modal" role="dialog" aria-modal="true" aria-labelledby="cd-title" aria-hidden="true"><div class="modal xwide">
+    <div class="modal-header"><h3 id="cd-title">Client</h3><button class="close-btn" aria-label="Close" onclick="closeModal('client-detail-modal')">&times;</button></div>
     <div class="modal-body" id="cd-body"></div>
     <div class="modal-footer" id="cd-footer"></div>
   </div></div>
 
-  <div class="modal-overlay" id="service-modal"><div class="modal">
-    <div class="modal-header"><h3 id="service-modal-title">Add service</h3><button class="close-btn" onclick="closeModal('service-modal')">&times;</button></div>
+  <div class="modal-overlay" id="service-modal" role="dialog" aria-modal="true" aria-labelledby="service-modal-title" aria-hidden="true"><div class="modal">
+    <div class="modal-header"><h3 id="service-modal-title">Add service</h3><button class="close-btn" aria-label="Close" onclick="closeModal('service-modal')">&times;</button></div>
     <div class="modal-body">
       <input type="hidden" id="service-id">
       <div class="form-group"><label>Name</label><input id="service-name" class="input"></div>
@@ -419,8 +420,8 @@
     <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('service-modal')">Cancel</button><button class="btn btn-primary" onclick="saveService()">Save</button></div>
   </div></div>
 
-  <div class="modal-overlay" id="staff-modal"><div class="modal">
-    <div class="modal-header"><h3 id="staff-modal-title">Add trainer</h3><button class="close-btn" onclick="closeModal('staff-modal')">&times;</button></div>
+  <div class="modal-overlay" id="staff-modal" role="dialog" aria-modal="true" aria-labelledby="staff-modal-title" aria-hidden="true"><div class="modal">
+    <div class="modal-header"><h3 id="staff-modal-title">Add trainer</h3><button class="close-btn" aria-label="Close" onclick="closeModal('staff-modal')">&times;</button></div>
     <div class="modal-body">
       <input type="hidden" id="staff-id">
       <div class="form-row"><div class="form-group"><label>Name</label><input id="staff-name" class="input"></div><div class="form-group"><label>Role</label><input id="staff-role" class="input" value="Trainer"></div></div>
@@ -430,8 +431,8 @@
     <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('staff-modal')">Cancel</button><button class="btn btn-primary" onclick="saveStaff()">Save</button></div>
   </div></div>
 
-  <div class="modal-overlay" id="plan-modal"><div class="modal">
-    <div class="modal-header"><h3 id="plan-modal-title">New plan</h3><button class="close-btn" onclick="closeModal('plan-modal')">&times;</button></div>
+  <div class="modal-overlay" id="plan-modal" role="dialog" aria-modal="true" aria-labelledby="plan-modal-title" aria-hidden="true"><div class="modal">
+    <div class="modal-header"><h3 id="plan-modal-title">New plan</h3><button class="close-btn" aria-label="Close" onclick="closeModal('plan-modal')">&times;</button></div>
     <div class="modal-body">
       <input type="hidden" id="plan-id">
       <div class="form-group"><label>Name</label><input id="plan-name" class="input" placeholder="10 Sessions Pack"></div>
@@ -446,8 +447,8 @@
     <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('plan-modal')">Cancel</button><button class="btn btn-primary" onclick="savePlan()">Save</button></div>
   </div></div>
 
-  <div class="modal-overlay" id="subscription-modal"><div class="modal">
-    <div class="modal-header"><h3 id="subscription-modal-title">Sell package</h3><button class="close-btn" onclick="closeModal('subscription-modal')">&times;</button></div>
+  <div class="modal-overlay" id="subscription-modal" role="dialog" aria-modal="true" aria-labelledby="subscription-modal-title" aria-hidden="true"><div class="modal">
+    <div class="modal-header"><h3 id="subscription-modal-title">Sell package</h3><button class="close-btn" aria-label="Close" onclick="closeModal('subscription-modal')">&times;</button></div>
     <div class="modal-body">
       <input type="hidden" id="subscription-id">
       <div class="form-group"><label>Client</label><select id="subscription-client" class="input"></select></div>
@@ -471,8 +472,8 @@
     <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('subscription-modal')">Cancel</button><button class="btn btn-primary" onclick="saveSubscription()">Save</button></div>
   </div></div>
 
-  <div class="modal-overlay" id="payment-modal"><div class="modal">
-    <div class="modal-header"><h3 id="payment-modal-title">Record payment</h3><button class="close-btn" onclick="closeModal('payment-modal')">&times;</button></div>
+  <div class="modal-overlay" id="payment-modal" role="dialog" aria-modal="true" aria-labelledby="payment-modal-title" aria-hidden="true"><div class="modal">
+    <div class="modal-header"><h3 id="payment-modal-title">Record payment</h3><button class="close-btn" aria-label="Close" onclick="closeModal('payment-modal')">&times;</button></div>
     <div class="modal-body">
       <input type="hidden" id="payment-appointment">
       <input type="hidden" id="payment-subscription">
@@ -488,8 +489,8 @@
     <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('payment-modal')">Cancel</button><button class="btn btn-primary" onclick="savePayment()">Record payment</button></div>
   </div></div>
 
-  <div class="modal-overlay" id="block-modal"><div class="modal">
-    <div class="modal-header"><h3>Block time</h3><button class="close-btn" onclick="closeModal('block-modal')">&times;</button></div>
+  <div class="modal-overlay" id="block-modal" role="dialog" aria-modal="true" aria-labelledby="block-modal-title" aria-hidden="true"><div class="modal">
+    <div class="modal-header"><h3 id="block-modal-title">Block time</h3><button class="close-btn" aria-label="Close" onclick="closeModal('block-modal')">&times;</button></div>
     <div class="modal-body">
       <div class="form-group"><label>Applies to</label><select id="block-staff" class="input"><option value="">Whole studio</option></select></div>
       <div class="form-row"><div class="form-group"><label>From</label><input type="datetime-local" id="block-start" class="input"></div><div class="form-group"><label>To</label><input type="datetime-local" id="block-end" class="input"></div></div>
@@ -498,14 +499,14 @@
     <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('block-modal')">Cancel</button><button class="btn btn-primary" onclick="saveBlock()">Block</button></div>
   </div></div>
 
-  <div class="modal-overlay" id="status-modal"><div class="modal">
-    <div class="modal-header"><h3 id="status-modal-title">Update session</h3><button class="close-btn" onclick="closeModal('status-modal')">&times;</button></div>
+  <div class="modal-overlay" id="status-modal" role="dialog" aria-modal="true" aria-labelledby="status-modal-title" aria-hidden="true"><div class="modal">
+    <div class="modal-header"><h3 id="status-modal-title">Update session</h3><button class="close-btn" aria-label="Close" onclick="closeModal('status-modal')">&times;</button></div>
     <div class="modal-body" id="status-modal-body"></div>
     <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('status-modal')">Back</button><button class="btn btn-primary" id="status-modal-ok">Confirm</button></div>
   </div></div>
 
-  <div class="modal-overlay" id="custom-message-modal"><div class="modal">
-    <div class="modal-header"><h3>Send message</h3><button class="close-btn" onclick="closeModal('custom-message-modal')">&times;</button></div>
+  <div class="modal-overlay" id="custom-message-modal" role="dialog" aria-modal="true" aria-labelledby="custom-message-modal-title" aria-hidden="true"><div class="modal">
+    <div class="modal-header"><h3 id="custom-message-modal-title">Send message</h3><button class="close-btn" aria-label="Close" onclick="closeModal('custom-message-modal')">&times;</button></div>
     <div class="modal-body">
       <div class="form-group"><label>Client</label><select id="cm-client" class="input"></select></div>
       <div class="form-group"><label>Subject (email only)</label><input id="cm-subject" class="input"></div>
@@ -515,8 +516,8 @@
     <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('custom-message-modal')">Cancel</button><button class="btn btn-primary" onclick="sendCustomMessage()">Send</button></div>
   </div></div>
 
-  <div class="modal-overlay" id="template-modal"><div class="modal wide">
-    <div class="modal-header"><h3 id="template-title">Edit template</h3><button class="close-btn" onclick="closeModal('template-modal')">&times;</button></div>
+  <div class="modal-overlay" id="template-modal" role="dialog" aria-modal="true" aria-labelledby="template-title" aria-hidden="true"><div class="modal wide">
+    <div class="modal-header"><h3 id="template-title">Edit template</h3><button class="close-btn" aria-label="Close" onclick="closeModal('template-modal')">&times;</button></div>
     <div class="modal-body">
       <input type="hidden" id="template-key">
       <div class="grid grid-2">
@@ -535,20 +536,20 @@
     <div class="modal-footer"><div class="left"><button class="btn btn-ghost" onclick="resetTemplate()">Reset to default</button></div><button class="btn btn-secondary" onclick="closeModal('template-modal')">Cancel</button><button class="btn btn-primary" onclick="saveTemplate()">Save template</button></div>
   </div></div>
 
-  <div class="toast" id="toast"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="/js/core.js?v=7"></script>
+  <script src="/js/core.js?v=8"></script>
   <script src="/js/calendar.js?v=7"></script>
   <script src="/js/booking.js?v=5"></script>
   <script src="/js/clients.js?v=12"></script>
-  <script src="/js/money.js?v=13"></script>
+  <script src="/js/money.js?v=14"></script>
   <script src="/js/finance.js?v=1"></script>
   <script src="/js/expenses.js?v=3"></script>
   <script src="/js/messages.js?v=3"></script>
   <script src="/js/push.js?v=1"></script>
   <script src="/js/settings.js?v=13"></script>
-  <script src="/js/devices.js?v=1"></script>
-  <script src="/js/leads.js?v=2"></script>
+  <script src="/js/devices.js?v=2"></script>
+  <script src="/js/leads.js?v=3"></script>
   <script src="/js/team.js?v=2"></script>
   <script src="/js/dashboard.js?v=5"></script>
   <script>boot();</script>

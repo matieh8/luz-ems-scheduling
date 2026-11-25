@@ -240,18 +240,71 @@ function paymentsTable(list, compact) {
 }
 
 /* ---------- invoices: printed from the browser, so "Save as PDF" works everywhere and Arabic names render ---------- */
+/* UAE tax invoice. The VAT breakdown is shown as soon as a rate is known —
+   from the server (inv.vat_rate) or from the constant below.
+   Set rate: 5 here to switch it on today, without waiting for the backend. */
+const LUZ_VAT = { rate: 0, inclusive: true };
+
+function vatConfig(inv) {
+  const src = (inv && inv.vat_rate !== undefined && inv.vat_rate !== null) ? inv.vat_rate : LUZ_VAT.rate;
+  const inc = (inv && inv.vat_inclusive !== undefined && inv.vat_inclusive !== null) ? inv.vat_inclusive : LUZ_VAT.inclusive;
+  return { rate: Number(src) || 0, inclusive: inc !== false };
+}
+const _r2 = n => Math.round((Number(n) || 0) * 100) / 100;
+
 function invoiceHTML(inv) {
-  const m = v => `${esc(inv.currency)} ${Number(v).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const m = v => `${esc(inv.currency)} ${Number(v || 0).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const b = inv.business, c = inv.client;
+  const { rate, inclusive } = vatConfig(inv);
+  const isTax = rate > 0;
+
+  /* one row per line, split into net + VAT; the client always pays net + VAT */
+  const rows = (inv.lines || []).map(l => {
+    const amt = Number(l.amount) || 0;
+    let net = amt, tax = 0;
+    if (isTax) { if (inclusive) { net = amt / (1 + rate / 100); tax = amt - net; } else { tax = amt * rate / 100; } }
+    net = _r2(net); tax = _r2(tax);
+    return { description: l.description, net, tax, total: _r2(net + tax) };
+  });
+  const sumNet = _r2(rows.reduce((a, r) => a + r.net, 0));
+  const sumTax = _r2(rows.reduce((a, r) => a + r.tax, 0));
+  let sumTotal = _r2(sumNet + sumTax);
+  let netT = sumNet, taxT = sumTax;
+
+  /* inv.total is what the client actually paid. If it disagrees with the lines
+     (an old invoice, a manual adjustment), trust it for the grand total. */
+  if (inv.total !== undefined && inv.total !== null && Math.abs(Number(inv.total) - sumTotal) >= 0.01) {
+    const g = _r2(inv.total);
+    if (isTax) { netT = inclusive ? _r2(g / (1 + rate / 100)) : g; taxT = _r2(g - netT); sumTotal = _r2(netT + taxT); }
+    else { netT = g; taxT = 0; sumTotal = g; }
+  }
+
+  const rateLabel = `${rate % 1 ? rate.toFixed(2) : rate}%`;
+
+  const head = isTax
+    ? `<tr><th>Description</th><th class="num">Net</th><th class="num">VAT ${rateLabel}</th><th class="num">Total</th></tr>`
+    : `<tr><th>Description</th><th class="num">Amount</th></tr>`;
+
+  const body = rows.map(r => isTax
+    ? `<tr><td>${esc(r.description)}</td><td class="num">${r.net < 0 ? '−' : ''}${m(Math.abs(r.net))}</td><td class="num">${r.tax < 0 ? '−' : ''}${m(Math.abs(r.tax))}</td><td class="num">${r.total < 0 ? '−' : ''}${m(Math.abs(r.total))}</td></tr>`
+    : `<tr><td>${esc(r.description)}</td><td class="num">${r.total < 0 ? '−' : ''}${m(Math.abs(r.total))}</td></tr>`).join('');
+
+  const foot = isTax
+    ? `<tr><td>Total excluding VAT</td><td class="num">${m(netT)}</td></tr>
+       <tr><td>VAT ${rateLabel}</td><td class="num">${m(taxT)}</td></tr>
+       <tr class="inv-grand"><td><strong>Total including VAT</strong></td><td class="num"><strong>${m(sumTotal)}</strong></td></tr>`
+    : `<tr><td>Total paid</td><td class="num">${m(sumTotal)}</td></tr>`;
+
   return `<div class="invoice">
     <div class="inv-head"><div><div class="wordmark lg">LUZ<small>EMS</small></div><div class="inv-biz"><strong>${esc(b.name)}</strong>${b.address ? `<br>${esc(b.address)}` : ''}${b.phone ? `<br>${esc(b.phone)}` : ''}${b.email ? `<br>${esc(b.email)}` : ''}${b.trn ? `<br>TRN: ${esc(b.trn)}` : ''}</div></div>
-      <div class="inv-meta"><h1>Invoice</h1><div><span>Number</span><strong>${esc(inv.number)}</strong></div><div><span>Date</span><strong>${esc(inv.date)}</strong></div><div><span>Status</span><strong class="inv-paid">Paid · ${esc(inv.method)}</strong></div></div></div>
+      <div class="inv-meta"><h1>${isTax ? 'Tax Invoice' : 'Invoice'}</h1><div><span>Number</span><strong>${esc(inv.number)}</strong></div><div><span>Date</span><strong>${esc(inv.date)}</strong></div><div><span>Status</span><strong class="inv-paid">Paid · ${esc(inv.method)}</strong></div></div></div>
     <div class="inv-to"><span>Billed to</span><strong>${esc(c.name)}</strong>${c.phone && c.phone !== '-' ? `<br>${esc(c.phone)}` : ''}${c.email ? `<br>${esc(c.email)}` : ''}</div>
-    <table class="inv-lines"><thead><tr><th>Description</th><th class="num">Amount</th></tr></thead><tbody>
-      ${inv.lines.map(l => `<tr><td>${esc(l.description)}</td><td class="num">${l.amount < 0 ? '−' : ''}${m(Math.abs(l.amount))}</td></tr>`).join('')}</tbody>
-      <tfoot><tr><td>Total paid</td><td class="num">${m(inv.total)}</td></tr></tfoot></table>
+    <table class="inv-lines"><thead>${head}</thead><tbody>${body}</tbody>
+      <tfoot>${foot}</tfoot></table>
+    ${isTax ? `<p class="inv-foot small">Amounts in ${esc(inv.currency)}. VAT charged in accordance with UAE Federal Decree-Law No. 8 of 2017.</p>` : ''}
     <p class="inv-foot">Thank you for training with ${esc(b.name)}.</p></div>`;
 }
+
 async function printInvoice(paymentId) {
   guard(async () => {
     const inv = await api('GET', `/payments/${paymentId}/invoice`);

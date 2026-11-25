@@ -124,12 +124,67 @@ function val(id) { return $(id).value; }
 function setVal(id, v) { $(id).value = v === null || v === undefined ? '' : v; }
 function badge(status) { return `<span class="badge badge-${status}">${esc(status.replace('_', ' '))}</span>`; }
 function toast(msg, isError) { const t = $('toast'); t.textContent = msg; t.classList.toggle('error', !!isError); t.classList.add('show'); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), isError ? 5000 : 3000); }
-function openModal(id) { $(id).classList.add('active'); }
-function closeModal(id) { $(id).classList.remove('active'); }
-function closeDrawer() { $('drawer').classList.remove('active'); $('drawer-backdrop').classList.remove('active'); }
-function openDrawer() { $('drawer').classList.add('active'); $('drawer-backdrop').classList.add('active'); }
-document.addEventListener('keydown', e => { if (e.key === 'Escape') { document.querySelectorAll('.modal-overlay.active').forEach(m => m.classList.remove('active')); closeDrawer(); } });
-document.querySelectorAll('.modal-overlay').forEach(m => m.addEventListener('click', e => { if (e.target === m) m.classList.remove('active'); }));
+/* ---------- dialogs: keyboard, screen readers, focus ---------- */
+/* Every modal and the session drawer is a real dialog: focus moves in, Tab stays
+   inside, Escape closes, and focus returns to the button that opened it. */
+const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]):not([type=hidden]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+const _focusStack = []; // one entry per open dialog, so stacked dialogs each give focus back to their own opener
+
+function _focusInto(scope) {
+  if (!scope) return;
+  const first = scope.querySelector('[autofocus]') || scope.querySelector(FOCUSABLE);
+  if (first) setTimeout(() => { try { first.focus({ preventScroll: true }); } catch (e) {} }, 30);
+}
+function _restoreFocus() {
+  const el = _focusStack.pop();
+  if (el && document.contains(el)) { try { el.focus({ preventScroll: true }); } catch (e) {} }
+}
+function _lockScroll(locked) { document.body.classList.toggle('modal-open', locked); }
+
+function openModal(id) {
+  const el = $(id); if (!el) return;
+  if (!el.classList.contains('active')) _focusStack.push(document.activeElement); // re-opening an open dialog keeps its opener
+  el.classList.add('active'); el.setAttribute('aria-hidden', 'false');
+  _lockScroll(true);
+  _focusInto(el.querySelector('.modal') || el);
+}
+function closeModal(id) {
+  const el = $(id); if (!el || !el.classList.contains('active')) return;
+  el.classList.remove('active'); el.setAttribute('aria-hidden', 'true');
+  if (!document.querySelector('.modal-overlay.active') && !$('drawer').classList.contains('active')) _lockScroll(false);
+  _restoreFocus();
+}
+function openDrawer() {
+  const d = $('drawer'); if (!d.classList.contains('active')) _focusStack.push(document.activeElement);
+  d.classList.add('active'); d.setAttribute('aria-hidden', 'false');
+  $('drawer-backdrop').classList.add('active'); _lockScroll(true);
+  _focusInto(d);
+}
+function closeDrawer() {
+  const d = $('drawer'); if (!d.classList.contains('active')) return;
+  d.classList.remove('active'); d.setAttribute('aria-hidden', 'true');
+  $('drawer-backdrop').classList.remove('active');
+  if (!document.querySelector('.modal-overlay.active')) _lockScroll(false);
+  _restoreFocus();
+}
+/* keep Tab inside the dialog that is open */
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    const open = [...document.querySelectorAll('.modal-overlay.active')].pop();
+    if (open) closeModal(open.id); else closeDrawer();
+    return;
+  }
+  if (e.key !== 'Tab') return;
+  const overlay = [...document.querySelectorAll('.modal-overlay.active')].pop();
+  const scope = overlay ? overlay.querySelector('.modal') : ($('drawer').classList.contains('active') ? $('drawer') : null);
+  if (!scope) return;
+  const items = [...scope.querySelectorAll(FOCUSABLE)].filter(n => n.offsetParent !== null || n === document.activeElement);
+  if (!items.length) return;
+  const first = items[0], last = items[items.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+});
+document.querySelectorAll('.modal-overlay').forEach(m => m.addEventListener('click', e => { if (e.target === m) closeModal(m.id); }));
 const _deb = {};
 function debounce(fn, ms) { return () => { clearTimeout(_deb[fn.name]); _deb[fn.name] = setTimeout(fn, ms); }; }
 async function guard(fn) { try { await fn(); } catch (e) { toast(e.message, true); } }

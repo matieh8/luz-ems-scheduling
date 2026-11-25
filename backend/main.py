@@ -234,7 +234,8 @@ def landing_page():
 
 @app.get("/admin")
 def admin_page():
-    return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
+    # no-cache: the page must always be re-checked, or browsers keep loading old ?v= script versions
+    return FileResponse(os.path.join(FRONTEND_DIR, "index.html"), headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/sw.js")

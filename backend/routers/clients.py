@@ -1,5 +1,6 @@
 import os
 import secrets
+from collections import Counter
 from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -46,6 +47,9 @@ def summarize(c: models.Client) -> dict:
     no_shows = len([a for a in appts if a.status == "no_show"])
     outstanding = sum(a.balance_due for a in completed)
     remaining = sum(s.sessions_remaining for s in c.subscriptions if s.status == "active")
+    live = sorted([s for s in c.subscriptions if s.status == "active" and s.sessions_remaining > 0 and (s.end_date is None or s.end_date >= now)],
+                  key=lambda s: s.end_date or datetime.max)  # same order the booking uses them
+    trainers = Counter(a.staff.name for a in appts if a.staff and a.status != "cancelled")
     data = schemas.ClientResponse.model_validate(c).model_dump()
     data.update(
         total_appointments=len(appts),
@@ -57,6 +61,9 @@ def summarize(c: models.Client) -> dict:
         sessions_remaining=int(remaining),
         last_visit=max((a.start_time for a in completed), default=None),
         next_visit=min((a.start_time for a in future), default=None),
+        package_name=live[0].plan.name if live and live[0].plan else None,
+        package_end=live[0].end_date if live else None,
+        main_trainer=trainers.most_common(1)[0][0] if trainers else None,
         **retention([a.start_time for a in completed if a.start_time <= now], no_shows, bool(future), now),
     )
     return data

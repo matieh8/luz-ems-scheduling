@@ -723,7 +723,9 @@ def run_auto_complete_job(db: Session):
         .filter(models.Appointment.end_time <= now)
         .all()
     )
+    from backend.routers.appointments import link_online_booking_to_package  # local import: that module imports this one
     for a in past:
+        link_online_booking_to_package(db, a)
         a.status = "completed"
         a.completed_at = a.end_time
     if past:

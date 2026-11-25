@@ -271,7 +271,7 @@ async function loadPayments() {
   const unpaid = await api('GET', '/appointments/?status=completed&unpaid=true&limit=2000');
   $('unpaid-count').textContent = unpaid.length || '';
   if (PAY.tab === 'unpaid') { $('unpaid-table').innerHTML = unpaid.length ? `<div class="alert alert-serious" style="cursor:default">Total outstanding: <strong>${money(unpaid.reduce((a, x) => a + x.balance_due, 0))}</strong> across ${unpaid.length} session(s)</div>` + apptTable(unpaid.reverse(), { withDate: true }) : '<div class="card empty">Everything is paid up. 🎉</div>'; return; }
-  const q = `from_date=${zonedToDate(val('pay-from'), '00:00').toISOString()}&to_date=${zonedToDate(addDays(val('pay-to'), 1), '00:00').toISOString()}${val('pay-method') ? '&method=' + val('pay-method') : ''}&limit=1000`;
+  const q = `from_date=${zonedToDate(val('pay-from'), '00:00').toISOString()}&to_date=${zonedToDate(addDays(val('pay-to'), 1), '00:00').toISOString()}${val('pay-method') ? '&method=' + val('pay-method') : ''}&limit=100000`;  // the total below must count every payment in the range
   const list = await api('GET', `/payments/?${q}`);
   $('pay-total').textContent = `${list.length} payments · ${money(list.reduce((a, p) => a + p.amount, 0))}`;
   $('payments-table').innerHTML = paymentsTable(list);

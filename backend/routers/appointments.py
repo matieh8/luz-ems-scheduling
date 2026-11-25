@@ -25,6 +25,18 @@ def find_active_subscription(db: Session, client_id: int, at: datetime) -> Optio
     return None
 
 
+def link_online_booking_to_package(db: Session, appt: models.Appointment) -> Optional[models.Subscription]:
+    """Online bookings don't touch a package until the studio has seen the client (see public.book).
+    Called when staff confirm or complete one, and by the auto-complete job."""
+    if appt.source != "online" or appt.subscription_id:
+        return None
+    found = find_active_subscription(db, appt.client_id, appt.start_time)
+    if found:
+        appt.subscription_id, appt.price = found.id, 0.0
+        found.sessions_used += 1
+    return found
+
+
 def may_force(request: Request) -> bool:
     """Only the owner and managers may book over a clash or outside opening hours."""
     ident = getattr(request.state, "identity", None) or {"role": "owner"}
@@ -66,10 +78,10 @@ def list_appointments(
         query = query.filter(models.Appointment.staff_id == staff_id)
     if status:
         query = query.filter(models.Appointment.status.in_(status.split(",")))
-    rows = query.order_by(models.Appointment.start_time).limit(limit).all()
-    if unpaid:
-        rows = [a for a in rows if a.balance_due > 0]
-    return rows
+    query = query.order_by(models.Appointment.start_time)
+    if unpaid:  # filter before the limit, or new unpaid sessions fall off the end
+        return [a for a in query.all() if a.balance_due > 0][:limit]
+    return query.limit(limit).all()
 
 
 @router.get("/availability", response_model=schemas.AvailabilityResponse)
@@ -270,13 +282,8 @@ def change_status(appointment_id: int, body: schemas.AppointmentStatusChange, db
         appt.cancelled_at = None
         appt.cancel_reason = None
         appt.cancelled_by = None
-    if new in ("confirmed", "completed") and appt.source == "online" and not appt.subscription_id:
-        # Online bookings don't touch a package until the studio has seen the client (see public.book).
-        found = find_active_subscription(db, appt.client_id, appt.start_time)
-        if found:
-            appt.subscription_id, appt.price = found.id, 0.0
-            found.sessions_used += 1
-            sub = found
+    if new in ("confirmed", "completed"):
+        sub = link_online_booking_to_package(db, appt) or sub
     if new == "confirmed":
         appt.confirmed_at = now
     if new == "completed":

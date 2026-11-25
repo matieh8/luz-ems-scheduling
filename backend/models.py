@@ -22,6 +22,9 @@ class Client(Base):
     health_notes = Column(Text, nullable=True)  # injuries, medical conditions, training restrictions
     photo_consent = Column(Boolean, default=False)  # client agreed to before/after photos being kept
     photo_consent_at = Column(DateTime, nullable=True)
+    referred_by_client_id = Column(Integer, ForeignKey("clients.id"), nullable=True)  # who brought this client
+    referral_reward_given = Column(Boolean, default=False)  # the referrer got their reward for this client
+    referral_reward_note = Column(String, nullable=True)
     notify_whatsapp = Column(Boolean, default=True)
     notify_sms = Column(Boolean, default=False)
     notify_email = Column(Boolean, default=True)
@@ -291,6 +294,27 @@ class DiscountCode(Base):
     active = Column(Boolean, nullable=False, default=True)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Lead(Base):
+    """Someone who asked about LUZ but is not a client yet."""
+    __tablename__ = "leads"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    phone = Column(String, nullable=True)
+    email = Column(String, nullable=True)
+    source = Column(String, nullable=False, default="other")  # instagram | whatsapp | referral | google | walk-in | website | tiktok | other
+    interest = Column(String, nullable=True)
+    status = Column(String, nullable=False, default="new", index=True)  # new | contacted | trial_booked | won | lost
+    lost_reason = Column(String, nullable=True)
+    next_follow_up = Column(String, nullable=True)  # YYYY-MM-DD
+    notes = Column(Text, nullable=True)
+    referred_by_client_id = Column(Integer, ForeignKey("clients.id"), nullable=True)
+    converted_client_id = Column(Integer, ForeignKey("clients.id"), nullable=True)
+    won_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class Device(Base):

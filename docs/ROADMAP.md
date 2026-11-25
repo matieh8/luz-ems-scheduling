@@ -28,7 +28,7 @@ Work lands on `staging` first, then `main` (live) after the owner tries it.
 🔑 54–60 Client accounts (how clients sign in, e.g. a one-time code by WhatsApp). Today: public booking page + per-booking link.
 
 ## 61–65 Staff
-⬜ 61–62 Staff logins and permissions · ⬜ 63 Trainer performance · ⬜ 64 Commissions · 🟡 65 Sessions per trainer (assignment exists)
+✅ 61–62 Staff logins and role permissions (server-enforced) · ✅ 63 Trainer performance · ✅ 64 Commissions · 🟡 65 Sessions per trainer (assignment exists)
 
 ## 66–70 Equipment and services
 ✅ 66–67 EMS devices, service schedule, maintenance log (+ expense) · ✅ 68 Services and prices · ⬜ 69 Service locations · ⬜ 70 Multi-branch
@@ -40,5 +40,5 @@ Work lands on `staging` first, then `main` (live) after the owner tries it.
 🔑 77–82 Assistant, natural-language questions, monthly analysis, PDF reports (needs an AI API key and a monthly cost)
 
 ## 83–90 Security and SaaS
-🟡 83 Server-side login (single admin password today) · ✅ 84 Automatic daily database backups (14 kept on the server; download for off-site copy) · 🟡 85 Data protection · ✅ 86 Audit log (every change, secrets hidden, 1 year) ·
+✅ 83 Server-side login, roles, lockout after wrong passwords · ✅ 84 Automatic daily database backups (14 kept on the server; download for off-site copy) · 🟡 85 Data protection · ✅ 86 Audit log (every change, secrets hidden, 1 year) ·
 🔑 87–90 Multi-tenant SaaS, subscriptions, super admin, selling to other studios (big business decision)

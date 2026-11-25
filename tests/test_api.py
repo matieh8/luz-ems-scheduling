@@ -903,3 +903,80 @@ def test_leads_referrals_and_conversion(client):
     client.put(f"/api/clients/{new_cid}", json={"referral_reward_given": True, "referral_reward_note": "1 free session"})
     assert {r["client_id"]: r for r in client.get("/api/leads/referrals").json()}[referrer]["rewards_pending"] == 0
     assert client.delete(f"/api/leads/{c['id']}").status_code == 200
+
+
+def _login_as(username, password):
+    c = TestClient(app)
+    c.__enter__()
+    r = c.post("/api/auth/login", json={"username": username, "password": password})
+    assert r.status_code == 200, r.text
+    c.headers["Authorization"] = f"Bearer {r.json()['token']}"
+    return c
+
+
+def test_staff_accounts_and_permissions(client):
+    sid = client.post("/api/staff/", json={"name": "Coach Test"}).json()["id"]
+    rid = client.post("/api/staff/", json={"name": "Front Desk"}).json()["id"]
+    mid = client.post("/api/staff/", json={"name": "Studio Manager"}).json()["id"]
+    assert client.put(f"/api/staff/{sid}/account", json={"username": "coach", "password": "short", "access": "trainer"}).status_code == 422
+    for i, (s, u, a) in enumerate(((sid, "Coach", "trainer"), (rid, "desk", "reception"), (mid, "boss", "manager"))):
+        r = client.put(f"/api/staff/{s}/account", json={"username": u, "password": f"pass-{a}-123", "access": a})
+        assert r.status_code == 200 and r.json()["access_role"] == a and r.json()["has_password"] and "password_hash" not in r.json()
+    assert client.put(f"/api/staff/{rid}/account", json={"username": "COACH", "password": "another-123", "access": "reception"}).status_code == 409
+
+    with TestClient(app) as anon:
+        assert anon.post("/api/auth/login", json={"username": "coach", "password": "wrong-pass"}).status_code == 401
+    trainer = _login_as("coach", "pass-trainer-123")   # usernames are not case sensitive
+    me = trainer.get("/api/auth/me").json()
+    assert me["role"] == "trainer" and me["name"] == "Coach Test" and "calendar" in me["pages"] and "reports" not in me["pages"]
+    ok = lambda c, m, p, **kw: getattr(c, m)(p, **kw).status_code
+    assert ok(trainer, "get", "/api/appointments/") == 200 and ok(trainer, "get", "/api/clients/") == 200
+    assert ok(trainer, "get", "/api/settings/hours") == 200
+    for m, p in (("get", "/api/expenses/"), ("get", "/api/reports/summary"), ("get", "/api/backups/"), ("get", "/api/dashboard/overview"),
+                 ("get", "/api/audit/"), ("get", "/api/leads/")):
+        assert ok(trainer, m, p) == 403, p
+    assert trainer.post("/api/payments/", json={"client_id": 1, "amount": 1}).status_code == 403
+    assert trainer.put(f"/api/staff/{sid}/account", json={"username": "x", "password": "pass-123456", "access": "manager"}).status_code == 403
+    assert trainer.post("/api/auth/password", json={"current_password": "x", "new_password": "yyyyyyyy"}).status_code == 403
+    s = trainer.get("/api/settings/").json()   # settings without secrets
+    assert all(not s.get(k) for k in s if "token" in k or "password" in k or "secret" in k)
+
+    desk = _login_as("desk", "pass-reception-123")
+    assert ok(desk, "get", "/api/leads/") == 200 and ok(desk, "get", "/api/expenses/") == 403
+    cid = desk.post("/api/clients/", json={"name": "Desk Client", "phone": "0509990030"}).json()["id"]
+    assert desk.post("/api/payments/", json={"client_id": cid, "amount": 50, "method": "cash"}).status_code == 200
+
+    boss = _login_as("boss", "pass-manager-123")
+    assert ok(boss, "get", "/api/expenses/") == 200 and ok(boss, "get", "/api/reports/finance") == 200
+    for m, p in (("get", "/api/backups/"), ("get", "/api/audit/")):
+        assert ok(boss, m, p) == 403
+    assert boss.put("/api/settings/", json={"business_name": "Hacked"}).status_code == 403
+
+    # The activity log says who did it; switching an account off locks them out at once
+    log = client.get("/api/audit/?entity=clients&limit=50").json()
+    assert any(r["actor"] == "Front Desk (reception)" and r["entity_id"] == cid for r in log)
+    client.put(f"/api/staff/{rid}/account", json={"access": "none"})
+    assert desk.get("/api/clients/").status_code == 401
+    for c in (trainer, desk, boss):
+        c.__exit__(None, None, None)
+
+    # Too many wrong passwords from one place: locked for a while
+    with TestClient(app) as anon:
+        codes = [anon.post("/api/auth/login", json={"username": "boss", "password": f"guess-{i}"}).status_code for i in range(12)]
+        assert codes[0] == 401 and codes[-1] == 429
+
+
+def test_trainer_performance_and_commission(client):
+    sid = client.post("/api/staff/", json={"name": "Commission Coach"}).json()["id"]
+    assert client.put(f"/api/staff/{sid}", json={"commission_type": "percent", "commission_value": 10}).json()["commission_value"] == 10
+    cid = client.post("/api/clients/", json={"name": "Comm Client", "phone": "0509990031"}).json()["id"]
+    svc = client.get("/api/services/").json()[0]
+    a = client.post("/api/appointments/", json={"client_id": cid, "service_id": svc["id"], "staff_id": sid, "price": 200,
+                                                "start_time": next_weekday_at(9, days_ahead=12).isoformat(), "force": True}).json()
+    client.post(f"/api/appointments/{a['id']}/status", json={"status": "completed", "send_notification": False})
+    start = a["start_time"][:10]
+    rows = {r["staff_id"]: r for r in client.get(f"/api/reports/staff?from={start}&to={start}").json()["staff"]}
+    r = rows[sid]
+    assert r["completed"] == 1 and r["value"] == 200 and r["commission"] == 20 and r["clients"] == 1
+    client.put(f"/api/staff/{sid}", json={"commission_type": "per_session", "commission_value": 35})
+    assert {r["staff_id"]: r for r in client.get(f"/api/reports/staff?from={start}&to={start}").json()["staff"]}[sid]["commission"] == 35

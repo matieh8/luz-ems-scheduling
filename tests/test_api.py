@@ -869,3 +869,37 @@ def test_devices_and_maintenance(client):
     assert "devices" not in [a["key"] for a in client.get("/api/dashboard/").json()["alerts"]]
     assert client.delete(f"/api/devices/{d['id']}").status_code == 200
     assert client.get(f"/api/devices/{d['id']}").status_code == 404
+
+
+def test_leads_referrals_and_conversion(client):
+    referrer = client.post("/api/clients/", json={"name": "Happy Referrer", "phone": "0509990020", "source": "instagram"}).json()["id"]
+    a = client.post("/api/leads/", json={"name": "Lead A", "phone": "0509990021", "source": "instagram", "interest": "Weight loss",
+                                         "next_follow_up": "2026-12-01"}).json()
+    b = client.post("/api/leads/", json={"name": "Lead B", "phone": "0509990022", "source": "referral", "referred_by_client_id": referrer}).json()
+    c = client.post("/api/leads/", json={"name": "Lead C", "phone": "0509990023", "source": "whatsapp"}).json()
+    assert a["status"] == "new" and client.post("/api/leads/", json={"name": "X", "source": "pigeon"}).status_code == 422
+    client.put(f"/api/leads/{a['id']}", json={"status": "contacted", "notes": "Called, wants trial"})
+    client.put(f"/api/leads/{c['id']}", json={"status": "lost", "lost_reason": "Too expensive"})
+    assert [l["name"] for l in client.get("/api/leads/?status=contacted").json()] == ["Lead A"]
+
+    # Convert: the lead becomes a client with its source and referrer; can't convert twice
+    conv = client.post(f"/api/leads/{b['id']}/convert").json()
+    assert conv["client"]["name"] == "Lead B" and conv["client"]["source"] == "referral" and conv["lead"]["status"] == "won"
+    new_cid = conv["client"]["id"]
+    assert client.get(f"/api/clients/{new_cid}").json()["referred_by_client_id"] == referrer
+    assert client.post(f"/api/leads/{b['id']}/convert").status_code == 409
+
+    # Conversion report by source
+    rep = client.get("/api/leads/report?days=365").json()
+    by = {r["source"]: r for r in rep["by_source"]}
+    assert by["referral"]["won"] >= 1 and by["whatsapp"]["lost"] >= 1 and by["instagram"]["open"] >= 1
+    assert 0 <= rep["total"]["conversion_pct"] <= 100
+    assert any(r["source"] == "instagram" for r in rep["clients_by_source"])
+
+    # Referrals: the referrer is credited; a reward is pending once the new client pays, then marked as given
+    client.post("/api/payments/", json={"client_id": new_cid, "amount": 500, "method": "cash"})
+    ref = {r["client_id"]: r for r in client.get("/api/leads/referrals").json()}[referrer]
+    assert ref["referred"] == 1 and ref["referred_revenue"] >= 500 and ref["rewards_pending"] == 1
+    client.put(f"/api/clients/{new_cid}", json={"referral_reward_given": True, "referral_reward_note": "1 free session"})
+    assert {r["client_id"]: r for r in client.get("/api/leads/referrals").json()}[referrer]["rewards_pending"] == 0
+    assert client.delete(f"/api/leads/{c['id']}").status_code == 200

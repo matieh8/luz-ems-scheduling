@@ -58,7 +58,7 @@ async function refreshLookups() {
 const PAGES = { dashboard: () => loadDashboard(), calendar: () => loadCalendar(), clients: () => loadClients(),
   subscriptions: () => loadSubscriptions(), payments: () => loadPayments(), expenses: () => loadExpenses(),
   reports: () => loadReports(), messages: () => loadMessages(), catalog: () => loadCatalog(),
-  settings: () => loadSettings() };
+  settings: () => loadSettings(), leads: () => loadLeads() };
 /* Theme: light, dark, or auto (follow the device). Saved on this device only. */
 function setTheme(t) {
   document.documentElement.setAttribute('data-theme', t);

@@ -13,6 +13,9 @@ class ClientBase(BaseModel):
     source: Optional[str] = None
     health_notes: Optional[str] = None
     photo_consent: bool = False
+    referred_by_client_id: Optional[int] = None
+    referral_reward_given: bool = False
+    referral_reward_note: Optional[str] = None
     notify_whatsapp: bool = True
     notify_sms: bool = False
     notify_email: bool = True
@@ -65,6 +68,9 @@ class ClientUpdate(BaseModel):
     source: Optional[str] = None
     health_notes: Optional[str] = None
     photo_consent: Optional[bool] = None
+    referred_by_client_id: Optional[int] = None
+    referral_reward_given: Optional[bool] = None
+    referral_reward_note: Optional[str] = None
     notify_whatsapp: Optional[bool] = None
     notify_sms: Optional[bool] = None
     notify_email: Optional[bool] = None

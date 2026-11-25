@@ -228,6 +228,7 @@ function openClientModal() {
   $('client-modal-title').textContent = 'Add client';
   ['client-id', 'client-name', 'client-phone', 'client-email', 'client-notes', 'client-dob', 'client-health'].forEach(i => setVal(i, ''));
   setVal('client-source', 'walk-in'); setVal('client-active', 'true');
+  fillSelect('client-referrer', '<option value="">—</option>' + clientOptions()); setVal('client-referrer', '');
   $('client-nwa').checked = true; $('client-nsms').checked = false; $('client-nemail').checked = true;
   openModal('client-modal');
 }
@@ -237,6 +238,7 @@ async function editClient(id) {
   $('client-modal-title').textContent = 'Edit client';
   setVal('client-id', c.id); setVal('client-name', c.name); setVal('client-phone', c.phone); setVal('client-email', c.email); setVal('client-notes', c.notes);
   setVal('client-dob', c.date_of_birth); setVal('client-source', c.source || ''); setVal('client-active', String(c.active)); setVal('client-health', c.health_notes);
+  setVal('client-referrer', c.referred_by_client_id || '');
   $('client-nwa').checked = c.notify_whatsapp; $('client-nsms').checked = c.notify_sms; $('client-nemail').checked = c.notify_email;
 }
 async function saveClient() {
@@ -245,6 +247,7 @@ async function saveClient() {
     const payload = { name: val('client-name').trim(), phone: val('client-phone').trim(), email: val('client-email').trim() || null, notes: val('client-notes') || null,
       date_of_birth: val('client-dob') || null, source: val('client-source') || null, active: val('client-active') === 'true',
       health_notes: val('client-health').trim() || null,
+      referred_by_client_id: val('client-referrer') && +val('client-referrer') !== +id ? +val('client-referrer') : null,
       notify_whatsapp: $('client-nwa').checked, notify_sms: $('client-nsms').checked, notify_email: $('client-nemail').checked };
     if (!payload.name || !payload.phone) throw new Error('Name and phone are required');
     if (id) await api('PUT', `/clients/${id}`, payload); else await api('POST', '/clients/', payload);

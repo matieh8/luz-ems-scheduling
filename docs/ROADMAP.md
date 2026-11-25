@@ -34,7 +34,7 @@ Work lands on `staging` first, then `main` (live) after the owner tries it.
 ✅ 66–67 EMS devices, service schedule, maintenance log (+ expense) · ✅ 68 Services and prices · ⬜ 69 Service locations · ⬜ 70 Multi-branch
 
 ## 71–76 Marketing
-⬜ 71 Leads · ✅ 72 Client source · ⬜ 73–74 Referrals and rewards · ⬜ 75 Enquiry → subscription conversion · ✅ 76 Clients who did not renew
+✅ 71 Leads pipeline · ✅ 72 Client source · ✅ 73–74 Referrals and rewards · ✅ 75 Conversion by source · ✅ 76 Clients who did not renew
 
 ## 77–82 AI
 🔑 77–82 Assistant, natural-language questions, monthly analysis, PDF reports (needs an AI API key and a monthly cost)

@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from backend import models
 from backend.database import SessionLocal, get_db
+from backend.tz import now_utc
 
 SKIP = ("/api/auth/", "/api/public/", "/api/audit")
 SECRET = re.compile(r"pass|token|secret|auth|sid|api_?key|private", re.I)
@@ -164,7 +165,7 @@ def prune_old(days: int = 365) -> int:
     from datetime import timedelta
     db = SessionLocal()
     try:
-        n = db.query(models.AuditLog).filter(models.AuditLog.at < datetime.utcnow() - timedelta(days=days)).delete()
+        n = db.query(models.AuditLog).filter(models.AuditLog.at < now_utc() - timedelta(days=days)).delete()
         db.commit()
         return n
     finally:

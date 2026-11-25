@@ -1,5 +1,6 @@
 from backend.database import SessionLocal
 from backend import models
+from backend.tz import now_utc
 from backend.notifications import ensure_templates
 
 
@@ -52,7 +53,7 @@ def seed_data():
 
         if db.query(models.Expense).count() == 0:
             from datetime import datetime, timedelta
-            base = datetime.utcnow().replace(day=1)
+            base = now_utc().replace(day=1)
             demo = [
                 ("Fast food", 45.00, "Lunch break", "Card"),
                 ("Fast food", 32.50, "Drive-through", "Card"),

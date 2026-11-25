@@ -8,6 +8,7 @@ from backend.database import get_db
 from backend import models, schemas
 from backend.scheduling import get_settings
 from backend.tz import local_day_bounds, local_today, to_local, utcnow
+from backend.tz import now_utc
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
 
@@ -30,7 +31,7 @@ def _dismissed(settings) -> dict:
 def dismiss_alert(key: str, db: Session = Depends(get_db)):
     settings = db.query(models.Setting).first()
     d = {k: v.isoformat() for k, v in _dismissed(settings).items()}
-    d[key] = datetime.utcnow().isoformat()  # full precision: a failure logged the same second must not re-trigger
+    d[key] = now_utc().isoformat()  # full precision: a failure logged the same second must not re-trigger
     settings.alerts_dismissed = json.dumps(d)
     db.commit()
     return {"detail": "dismissed", "key": key}
@@ -144,7 +145,7 @@ def overview(db: Session = Depends(get_db)):
     sessions_remaining = sum(s.sessions_remaining for s in active + expiring)
 
     # Money still owed for completed sessions
-    unpaid = [a for a in db.query(models.Appointment).filter(models.Appointment.status == "completed").all() if a.balance_due > 0]
+    unpaid = models.unpaid_sessions(db)
 
     # Best sellers this month
     svc = defaultdict(lambda: {"count": 0, "value": 0.0})
@@ -234,7 +235,7 @@ def dashboard(db: Session = Depends(get_db)):
                                                                     models.Appointment.status != "cancelled").scalar() or 0
     sessions_month = db.query(func.count(models.Appointment.id)).filter(models.Appointment.start_time >= month_start,
                                                                         models.Appointment.status == "completed").scalar() or 0
-    unpaid = [a for a in db.query(models.Appointment).filter(models.Appointment.status == "completed").all() if a.balance_due > 0]
+    unpaid = models.unpaid_sessions(db)
     subs = db.query(models.Subscription).filter(models.Subscription.status == "active").all()
     active_subs = [s for s in subs if s.sessions_remaining > 0 and (s.end_date is None or s.end_date >= now)]
     expiring = [s for s in active_subs if (s.end_date and s.end_date <= now + timedelta(days=settings.subscription_expiry_notice_days))

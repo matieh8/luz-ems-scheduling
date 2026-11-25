@@ -8,8 +8,7 @@ from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend import models, notifications, push
 from backend.scheduling import availability, check_conflicts, within_business_hours, get_settings
-from backend.tz import to_utc_naive, utcnow, fmt_date, fmt_time, local_today
-from backend.routers.appointments import find_active_subscription
+from backend.tz import to_utc_naive, utcnow, fmt_date, fmt_time, local_today, to_local
 
 router = APIRouter(prefix="/api/public", tags=["Public"])
 
@@ -89,6 +88,9 @@ def _too_many_bookings(ip: str) -> bool:
     now = time.time()
     recent = [t for t in _BOOKINGS_BY_IP.get(ip, []) if t > now - 3600]
     _BOOKINGS_BY_IP[ip] = recent
+    if len(_BOOKINGS_BY_IP) > 10000:
+        for k in [k for k, v in _BOOKINGS_BY_IP.items() if not v or v[-1] <= now - 3600]:
+            _BOOKINGS_BY_IP.pop(k, None)
     return len(recent) >= MAX_BOOKINGS_PER_HOUR
 
 
@@ -125,6 +127,7 @@ def book(body: PublicBooking, request: Request, db: Session = Depends(get_db)):
 
     phone_norm = notifications.normalize_phone(body.phone)
     client = None
+    # shortcut: compares every client's phone in Python; fine up to a few thousand clients, add an indexed normalised phone column beyond that
     for c in db.query(models.Client).all():
         if notifications.normalize_phone(c.phone) == phone_norm:
             client = c
@@ -208,3 +211,61 @@ def cancel_appointment(token: str, body: CancelBody, db: Session = Depends(get_d
     push.notify(db, "booking", f"{a.client.name} cancelled", notifications.push_line(a, s, with_client=False) + reason,
                 url="/admin#calendar", tag=f"booking-{a.id}")
     return _appt_view(a, s)
+
+
+# ---------------------------------------------------------------- the client's own page (/c/<token>)
+
+def _portal_client(db: Session, token: str) -> models.Client:
+    c = db.query(models.Client).filter(models.Client.portal_token == token).first() if token else None
+    if not c or not c.active:
+        raise HTTPException(status_code=404, detail="This link isn't active. Ask the studio for a new one.")
+    return c
+
+
+@router.get("/portal/{token}")
+def portal(token: str, db: Session = Depends(get_db)):
+    """Read-only view of one client's own bookings, packages, payments and progress.
+    Staff notes, health notes and photos are never included."""
+    c = _portal_client(db, token)
+    s = get_settings(db)
+    tz, now = s.timezone, utcnow()
+    when = lambda dt: {"date": fmt_date(dt, tz), "time": fmt_time(dt, tz)}
+    appts = sorted(c.appointments, key=lambda a: a.start_time)
+    upcoming = [{"token": a.public_token, "service": a.service.name if a.service else "", "status": a.status,
+                 "staff": a.staff.name if a.staff else None, **when(a.start_time)}
+                for a in appts if a.start_time >= now and a.status in ("scheduled", "confirmed")]
+    history = [{"service": a.service.name if a.service else "", "status": a.status, **when(a.start_time)}
+               for a in reversed(appts) if a.start_time < now and a.status in ("completed", "no_show")][:30]
+    packages = [{"name": p.plan.name if p.plan else "Package", "sessions_total": p.sessions_total,
+                 "sessions_used": p.sessions_used, "sessions_remaining": p.sessions_remaining,
+                 "start": fmt_date(p.start_date, tz) if p.start_date else None,
+                 "end": fmt_date(p.end_date, tz) if p.end_date else None,
+                 "active": p.status == "active" and p.sessions_remaining > 0 and (p.end_date is None or p.end_date >= now)}
+                for p in sorted(c.subscriptions, key=lambda p: p.start_date or p.created_at, reverse=True)]
+
+    def paid_for(p):
+        if p.subscription and p.subscription.plan:
+            return p.subscription.plan.name
+        if p.appointment and p.appointment.service:
+            return f"{p.appointment.service.name} session"
+        return "Payment"
+    payments = [{"id": p.id, "date": fmt_date(p.paid_at, tz), "amount": round(float(p.amount), 2), "method": p.method,
+                 "for": paid_for(p)} for p in sorted(c.payments, key=lambda p: (p.paid_at, p.id), reverse=True)]
+    progress = [{"date": to_local(m.measured_at, tz).date().isoformat(), "weight_kg": m.weight_kg,
+                 "body_fat_pct": m.body_fat_pct, "muscle_kg": m.muscle_kg, "waist_cm": m.waist_cm}
+                for m in sorted(c.measurements, key=lambda m: m.measured_at)]
+    owed = models.unpaid_sessions(db, db.query(models.Appointment).filter(models.Appointment.client_id == c.id))
+    return {"name": c.name, "currency": s.currency, "online_booking": bool(s.online_booking_enabled),
+            "business": {"name": s.business_name, "phone": s.business_phone, "address": s.business_address},
+            "upcoming": upcoming, "history": history, "packages": packages, "payments": payments,
+            "progress": progress, "owed": round(sum(a.balance_due for a in owed), 2)}
+
+
+@router.get("/portal/{token}/invoice/{payment_id}")
+def portal_invoice(token: str, payment_id: int, db: Session = Depends(get_db)):
+    from backend.routers.payments import invoice_data
+    c = _portal_client(db, token)
+    p = db.query(models.Payment).filter(models.Payment.id == payment_id, models.Payment.client_id == c.id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    return invoice_data(db, p)

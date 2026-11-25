@@ -12,6 +12,7 @@ from backend.database import get_db
 from backend import models
 from backend.scheduling import get_settings
 from backend.tz import local_day_bounds, local_today, to_local
+from backend.tz import now_utc
 
 router = APIRouter(prefix="/api/reports", tags=["Reports"])
 
@@ -239,7 +240,7 @@ def summary(from_date: Optional[date] = Query(None, alias="from"), to_date: Opti
         status_counts[a.status] += 1
 
     # Outstanding balances are all-time, not range-bound: money still owed today
-    unpaid = [a for a in db.query(models.Appointment).filter(models.Appointment.status == "completed").all() if a.balance_due > 0]
+    unpaid = models.unpaid_sessions(db)
     outstanding = sum(a.balance_due for a in unpaid)
 
     session_value = sum(_session_value(a) for a in completed)
@@ -284,7 +285,7 @@ def timeseries(from_date: Optional[date] = Query(None, alias="from"), to_date: O
     buckets = []
     d = f
     while d <= t:
-        key = bucket(datetime(d.year, d.month, d.day, 12) - timedelta(hours=to_local(datetime.utcnow(), tz).utcoffset().total_seconds() / 3600))
+        key = bucket(datetime(d.year, d.month, d.day, 12) - timedelta(hours=to_local(now_utc(), tz).utcoffset().total_seconds() / 3600))
         if not buckets or buckets[-1] != key:
             buckets.append(key)
         d += timedelta(days=1)

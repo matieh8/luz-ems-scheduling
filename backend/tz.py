@@ -11,8 +11,13 @@ def tzinfo(name: str):
         return ZoneInfo("Asia/Dubai")
 
 
+def now_utc() -> datetime:
+    """Naive UTC with full precision (how the database stores times)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 def utcnow() -> datetime:
-    return datetime.utcnow().replace(microsecond=0)
+    return now_utc().replace(microsecond=0)
 
 
 def to_utc_naive(dt: datetime) -> datetime:

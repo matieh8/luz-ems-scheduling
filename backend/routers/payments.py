@@ -13,10 +13,14 @@ METHODS = ("cash", "card", "transfer", "online", "other")
 
 @router.get("/{payment_id}/invoice")
 def invoice(payment_id: int, db: Session = Depends(get_db)):
-    """Everything needed to print an invoice / receipt for one payment."""
     p = db.query(models.Payment).filter(models.Payment.id == payment_id).first()
     if not p:
         raise HTTPException(status_code=404, detail="Payment not found")
+    return invoice_data(db, p)
+
+
+def invoice_data(db: Session, p: models.Payment) -> dict:
+    """Everything needed to print an invoice / receipt for one payment (admin and the client's own page)."""
     s = get_settings(db)
     lines = []
     sub, appt = p.subscription, p.appointment
@@ -87,6 +91,8 @@ def update_payment(payment_id: int, body: schemas.PaymentUpdate, db: Session = D
     if not p:
         raise HTTPException(status_code=404, detail="Payment not found")
     data = body.model_dump(exclude_unset=True)
+    if "method" in data and data["method"] not in METHODS:
+        raise HTTPException(status_code=400, detail="Invalid payment method")
     if data.get("paid_at"):
         data["paid_at"] = to_utc_naive(data["paid_at"])
     for k, v in data.items():

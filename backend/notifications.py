@@ -653,7 +653,7 @@ def daily_summary(db: Session):
     unconfirmed = (db.query(models.Appointment).filter(models.Appointment.status == "scheduled",
                                                        models.Appointment.start_time >= now,
                                                        models.Appointment.start_time < now + timedelta(hours=24)).count())
-    unpaid = sum(1 for a in db.query(models.Appointment).filter(models.Appointment.status == "completed").all() if a.balance_due > 0)
+    unpaid = len(models.unpaid_sessions(db))
     subs = db.query(models.Subscription).filter(models.Subscription.status == "active").all()
     low = sum(1 for s in subs if s.sessions_remaining > 0 and (s.end_date is None or s.end_date >= now) and (
         s.sessions_remaining <= settings.subscription_low_threshold

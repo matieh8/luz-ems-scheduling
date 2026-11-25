@@ -9,9 +9,10 @@ import os
 import re
 import sqlite3
 import zipfile
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 from backend.database import DATA_DIR, DB_PATH
+from backend.tz import now_utc
 
 BACKUP_DIR = os.path.join(DATA_DIR, "backups")
 PHOTO_DIR = os.path.join(DATA_DIR, "photos")
@@ -35,7 +36,7 @@ def list_backups() -> List[dict]:
         if NAME_RE.match(name):
             path = os.path.join(BACKUP_DIR, name)
             out.append({"name": name, "kind": _kind(name), "size": os.path.getsize(path),
-                        "created_at": datetime.utcfromtimestamp(os.path.getmtime(path)).isoformat()})
+                        "created_at": datetime.fromtimestamp(os.path.getmtime(path), timezone.utc).replace(tzinfo=None).isoformat()})
     stamp = lambda b: b["name"].split("-", 1)[1].rsplit(".", 1)[0]
     return sorted(out, key=lambda b: (stamp(b), b["kind"] == "database"), reverse=True)
 
@@ -56,7 +57,7 @@ def _zip_photos(dest: str) -> bool:
 def make_backup() -> dict:
     """Copy the live database with SQLite's online backup (safe while the app is running), and zip the photos."""
     _ensure_dir()
-    stamp = f"{datetime.utcnow():%Y-%m-%d_%H%M%S}"
+    stamp = f"{now_utc():%Y-%m-%d_%H%M%S}"
     name = f"app-{stamp}.db"
     dest = os.path.join(BACKUP_DIR, name)
     src = sqlite3.connect(DB_PATH)
@@ -66,7 +67,7 @@ def make_backup() -> dict:
     finally:
         dst.close()
         src.close()
-    result = {"name": name, "size": os.path.getsize(dest), "created_at": datetime.utcnow().isoformat(), "photos": None}
+    result = {"name": name, "size": os.path.getsize(dest), "created_at": now_utc().isoformat(), "photos": None}
     photos = os.path.join(BACKUP_DIR, f"photos-{stamp}.zip")
     if _zip_photos(photos):
         result["photos"] = {"name": os.path.basename(photos), "size": os.path.getsize(photos)}
@@ -93,7 +94,7 @@ def path_for(name: str) -> Optional[str]:
 
 def run_daily_backup() -> Optional[dict]:
     """Called by the minute job: makes today's backup if there isn't one yet."""
-    today = f"app-{datetime.utcnow():%Y-%m-%d}_"
+    today = f"app-{now_utc():%Y-%m-%d}_"
     if any(b["name"].startswith(today) for b in list_backups()):
         return None
     return make_backup()

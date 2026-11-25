@@ -185,8 +185,26 @@ async def lifespan(app: FastAPI):
         _stop_bridge(getattr(app.state, "whatsapp_bridge", None))
 
 
-app = FastAPI(title="LUZ EMS Scheduling", lifespan=lifespan)
+_PUBLIC_SERVER = os.environ.get("LUZ_ENV", "local") in ("live", "staging")
+# The API browser (/docs) only on a developer's machine, never on the internet.
+app = FastAPI(title="LUZ EMS Scheduling", lifespan=lifespan,
+              docs_url=None if _PUBLIC_SERVER else "/docs", redoc_url=None if _PUBLIC_SERVER else "/redoc",
+              openapi_url=None if _PUBLIC_SERVER else "/openapi.json")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+
+@app.middleware("http")
+async def security_headers(request, call_next):
+    response = await call_next(request)
+    h = response.headers
+    h.setdefault("X-Content-Type-Options", "nosniff")
+    h.setdefault("Referrer-Policy", "same-origin")  # booking links carry a private token
+    h.setdefault("Content-Security-Policy", "frame-ancestors 'none'; object-src 'none'; base-uri 'self'")
+    h.setdefault("X-Frame-Options", "DENY")
+    proto = request.headers.get("x-forwarded-proto") or request.url.scheme
+    if proto == "https":
+        h.setdefault("Strict-Transport-Security", "max-age=15552000")
+    return response
 from backend.audit import AuditMiddleware, router as audit_router  # noqa: E402
 app.add_middleware(AuditMiddleware)
 

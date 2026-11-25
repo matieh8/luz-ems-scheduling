@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, date
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend import models, schemas, notifications
@@ -23,6 +23,12 @@ def find_active_subscription(db: Session, client_id: int, at: datetime) -> Optio
         if s.sessions_remaining > 0 and (s.end_date is None or s.end_date >= at):
             return s
     return None
+
+
+def may_force(request: Request) -> bool:
+    """Only the owner and managers may book over a clash or outside opening hours."""
+    ident = getattr(request.state, "identity", None) or {"role": "owner"}
+    return ident["role"] in ("owner", "manager")
 
 
 def validate_slot(db: Session, start: datetime, end: datetime, service: models.Service,
@@ -76,7 +82,8 @@ def get_availability(service_id: int, day: date = Query(..., alias="date"), staf
 
 
 @router.post("/", response_model=schemas.AppointmentResponse)
-def create_appointment(body: schemas.AppointmentCreate, db: Session = Depends(get_db)):
+def create_appointment(body: schemas.AppointmentCreate, request: Request, db: Session = Depends(get_db)):
+    body.force = bool(body.force) and may_force(request)
     if body.client_id:
         client = db.query(models.Client).filter(models.Client.id == body.client_id).first()
         if not client:
@@ -213,7 +220,8 @@ def get_appointment(appointment_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/{appointment_id}", response_model=schemas.AppointmentResponse)
-def update_appointment(appointment_id: int, body: schemas.AppointmentUpdate, db: Session = Depends(get_db)):
+def update_appointment(appointment_id: int, body: schemas.AppointmentUpdate, request: Request, db: Session = Depends(get_db)):
+    body.force = bool(body.force) and may_force(request)
     appt = db.query(models.Appointment).filter(models.Appointment.id == appointment_id).first()
     if not appt:
         raise HTTPException(status_code=404, detail="Appointment not found")
@@ -262,6 +270,13 @@ def change_status(appointment_id: int, body: schemas.AppointmentStatusChange, db
         appt.cancelled_at = None
         appt.cancel_reason = None
         appt.cancelled_by = None
+    if new in ("confirmed", "completed") and appt.source == "online" and not appt.subscription_id:
+        # Online bookings don't touch a package until the studio has seen the client (see public.book).
+        found = find_active_subscription(db, appt.client_id, appt.start_time)
+        if found:
+            appt.subscription_id, appt.price = found.id, 0.0
+            found.sessions_used += 1
+            sub = found
     if new == "confirmed":
         appt.confirmed_at = now
     if new == "completed":

@@ -117,6 +117,7 @@ function money(v) { return `${S.currency} ${Number(v || 0).toLocaleString('en', 
 function relTime(s) { const diff = (parseISO(s) - Date.now()) / 60000; const a = Math.abs(diff); const w = a < 60 ? `${Math.round(a)} min` : a < 1440 ? `${Math.round(a / 60)} h` : `${Math.round(a / 1440)} d`; return diff > 0 ? `in ${w}` : `${w} ago`; }
 
 /* ---------- UI helpers ---------- */
+function jsArg(v) { return esc(JSON.stringify(v === null || v === undefined ? '' : String(v))); }  // a safe JS string inside an onclick="..." attribute
 function esc(s) { if (s === null || s === undefined) return ''; return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;'); }
 function $(id) { return document.getElementById(id); }
 function val(id) { return $(id).value; }

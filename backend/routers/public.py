@@ -1,7 +1,8 @@
 """Unauthenticated endpoints for the client self-booking page and manage-booking links."""
+import time
 from datetime import datetime, timedelta, date
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from backend.database import get_db
@@ -80,11 +81,28 @@ def public_availability(service_id: int, date: date, staff_id: Optional[int] = N
     return result
 
 
+_BOOKINGS_BY_IP: dict = {}
+MAX_BOOKINGS_PER_HOUR = 10
+
+
+def _too_many_bookings(ip: str) -> bool:
+    now = time.time()
+    recent = [t for t in _BOOKINGS_BY_IP.get(ip, []) if t > now - 3600]
+    _BOOKINGS_BY_IP[ip] = recent
+    return len(recent) >= MAX_BOOKINGS_PER_HOUR
+
+
 @router.post("/book")
-def book(body: PublicBooking, db: Session = Depends(get_db)):
+def book(body: PublicBooking, request: Request, db: Session = Depends(get_db)):
     s = get_settings(db)
     if not s.online_booking_enabled:
         raise HTTPException(status_code=403, detail="Online booking is disabled")
+    ip = request.client.host if request.client else "?"
+    if _too_many_bookings(ip):
+        raise HTTPException(status_code=429, detail="Too many bookings from this connection. Please call the studio.")
+    if body.staff_id is not None and not db.query(models.Staff).filter(models.Staff.id == body.staff_id,
+                                                                     models.Staff.active == True).first():
+        raise HTTPException(status_code=400, detail="That trainer isn't available")
     service = db.query(models.Service).filter(models.Service.id == body.service_id, models.Service.active == True,
                                               models.Service.online_bookable == True).first()
     if not service:
@@ -120,16 +138,16 @@ def book(body: PublicBooking, db: Session = Depends(get_db)):
     elif body.email and not client.email:
         client.email = body.email.strip()
 
-    sub = find_active_subscription(db, client.id, start)
+    # Anyone can type any phone number here, so an online booking never uses a package session by itself.
+    # The studio links it to the client's package when they confirm or complete the session.
     appt = models.Appointment(client_id=client.id, service_id=service.id, staff_id=body.staff_id,
-                              subscription_id=sub.id if sub else None, start_time=start, end_time=end,
-                              status="scheduled", price=0.0 if sub else float(service.price or 0),
+                              subscription_id=None, start_time=start, end_time=end,
+                              status="scheduled", price=float(service.price or 0),
                               notes=body.notes, source="online")
-    if sub:
-        sub.sessions_used += 1
     db.add(appt)
     db.commit()
     db.refresh(appt)
+    _BOOKINGS_BY_IP.setdefault(ip, []).append(time.time())
     try:
         notifications.send_booking_confirmation(db, appt)
         notifications.notify_admin_new_booking(db, appt)
@@ -137,7 +155,9 @@ def book(body: PublicBooking, db: Session = Depends(get_db)):
         print(f"[notify] online booking notification failed: {e}")
     push.notify(db, "booking", "New online booking", notifications.push_line(appt, s), url="/admin#calendar",
                 tag=f"booking-{appt.id}")
-    return _appt_view(appt, s)
+    view = _appt_view(appt, s)
+    view["client_name"] = body.name.strip()  # never reveal the name stored for that phone number
+    return view
 
 
 @router.get("/appointments/{token}")

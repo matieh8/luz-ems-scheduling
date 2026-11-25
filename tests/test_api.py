@@ -991,3 +991,169 @@ def test_trainer_performance_and_commission(client):
     assert r["completed"] == 1 and r["value"] == 200 and r["commission"] == 20 and r["clients"] == 1
     client.put(f"/api/staff/{sid}", json={"commission_type": "per_session", "commission_value": 35})
     assert {r["staff_id"]: r for r in client.get(f"/api/reports/staff?from={start}&to={start}").json()["staff"]}[sid]["commission"] == 35
+
+
+# ---------------------------------------------------------------- Phase 0: hardening
+
+def test_no_user_text_inside_inline_handlers():
+    """esc() is decoded back before an onclick runs, so text in a JS string there must go through jsArg()."""
+    import re, glob
+    root = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend")
+    bad = []
+    for f in glob.glob(os.path.join(root, "js", "*.js")) + glob.glob(os.path.join(root, "*.html")):
+        for n, line in enumerate(open(f, encoding="utf-8"), 1):
+            if re.search(r"'\$\{esc\(", line):
+                bad.append(f"{os.path.basename(f)}:{n}")
+    assert not bad, bad
+
+
+def test_security_headers(client):
+    r = client.get("/api/health")
+    assert r.headers["x-content-type-options"] == "nosniff" and r.headers["x-frame-options"] == "DENY"
+    assert "frame-ancestors 'none'" in r.headers["content-security-policy"]
+
+
+def test_online_booking_cannot_use_someone_elses_package(client):
+    cid = client.post("/api/clients/", json={"name": "Real Owner Of Number", "phone": "0501231231"}).json()["id"]
+    plan = client.get("/api/subscriptions/plans").json()[0]
+    sub = client.post("/api/subscriptions/", json={"client_id": cid, "plan_id": plan["id"], "payment_method": "cash",
+                                                   "send_notification": False}).json()
+    info = client.get("/api/public/info").json()
+    svc = info["services"][0]
+    day = next_weekday_at(9, 6)
+    slot = client.get(f"/api/public/availability?service_id={svc['id']}&date={day.astimezone(timezone(timedelta(hours=4))).date()}").json()["slots"][0]["start_time"]
+    with TestClient(app) as anon:
+        assert anon.post("/api/public/book", json={"name": "Stranger", "phone": "0501231231", "service_id": svc["id"],
+                                                   "staff_id": 99999, "start_time": slot}).status_code == 400
+        r = anon.post("/api/public/book", json={"name": "Stranger", "phone": "0501231231", "service_id": svc["id"], "start_time": slot})
+        assert r.status_code == 200, r.text
+        assert r.json()["client_name"] == "Stranger"  # the stored name for that number is not revealed
+        anon.post(f"/api/public/appointments/{r.json()['token']}/confirm")  # the link alone doesn't touch the package
+    sessions = lambda: next(s for s in client.get(f"/api/subscriptions/?client_id={cid}").json() if s["id"] == sub["id"])["sessions_remaining"]
+    assert sessions() == plan["sessions_included"]
+    appt = next(a for a in client.get("/api/appointments/").json() if a["client_id"] == cid)
+    assert appt["subscription_id"] is None
+    # The studio completes the session: now it uses the package
+    done = client.post(f"/api/appointments/{appt['id']}/status", json={"status": "completed", "send_notification": False}).json()
+    assert done["subscription_id"] == sub["id"] and done["price"] == 0
+    assert sessions() == plan["sessions_included"] - 1
+
+
+def test_deleting_a_client_who_paid_archives_them(client):
+    cid = client.post("/api/clients/", json={"name": "Paying Leaver", "phone": "0501239876"}).json()["id"]
+    pay = client.post("/api/payments/", json={"client_id": cid, "amount": 321, "method": "cash"}).json()
+    r = client.delete(f"/api/clients/{cid}")
+    assert r.status_code == 200 and r.json()["archived"] is True
+    assert client.get(f"/api/clients/{cid}").json()["active"] is False
+    assert any(p["id"] == pay["id"] for p in client.get("/api/payments/").json())  # revenue history kept
+
+
+def test_trainers_cannot_override_clashes_and_reception_cannot_approve(client):
+    sid = client.post("/api/staff/", json={"name": "Force Coach"}).json()["id"]
+    rid = client.post("/api/staff/", json={"name": "Approve Desk"}).json()["id"]
+    client.put(f"/api/staff/{sid}/account", json={"username": "forcecoach", "password": "pass-force-123", "access": "trainer"})
+    client.put(f"/api/staff/{rid}/account", json={"username": "approvedesk", "password": "pass-desk-1234", "access": "reception"})
+    cid = client.post("/api/clients/", json={"name": "Late Night", "phone": "0501230000"}).json()["id"]
+    svc = client.get("/api/services/").json()[0]
+    late = next_weekday_at(23, 9).isoformat()  # the studio is closed at 23:00
+    body = {"client_id": cid, "service_id": svc["id"], "start_time": late, "force": True, "send_notification": False}
+    trainer = _login_as("forcecoach", "pass-force-123")
+    desk = _login_as("approvedesk", "pass-desk-1234")
+    try:
+        assert trainer.post("/api/appointments/", json=body).status_code == 409
+        assert client.post("/api/appointments/", json=body).status_code == 200  # the owner may
+        assert desk.post("/api/notifications/approve-all").status_code == 403
+        assert desk.post("/api/notifications/logs/1/approve").status_code == 403
+        assert desk.get("/api/notifications/pending").status_code == 200
+        assert desk.post("/api/notifications/custom", json={"client_id": cid, "channels": ["whatsapp"], "body": "hi"}).status_code == 200
+    finally:
+        for c in (trainer, desk):
+            c.__exit__(None, None, None)
+
+
+def test_password_change_signs_out_other_sessions(client):
+    import base64, hashlib, hmac, time
+    from backend.auth import _secret
+    with TestClient(app) as other:
+        other.headers["Authorization"] = "Bearer " + other.post("/api/auth/login", json={"password": "test-pass"}).json()["token"]
+        assert other.get("/api/auth/me").status_code == 200
+        assert client.post("/api/auth/password", json={"current_password": "test-pass", "new_password": "short"}).status_code == 400
+        r = client.post("/api/auth/password", json={"current_password": "test-pass", "new_password": "new-pass-123"})
+        assert r.status_code == 200 and r.json()["token"]
+        assert other.get("/api/auth/me").status_code == 401  # e.g. a lost phone
+        client.headers["Authorization"] = f"Bearer {r.json()['token']}"
+        assert client.get("/api/auth/me").status_code == 200  # this device stays signed in
+        r = client.post("/api/auth/password", json={"current_password": "new-pass-123", "new_password": "test-pass"})
+        client.headers["Authorization"] = f"Bearer {r.json()['token']}"
+        # Old-style owner tokens (no password stamp) no longer work
+        payload = f"{int(time.time()) + 3600}:abcd"
+        sig = hmac.new(_secret(), payload.encode(), hashlib.sha256).hexdigest()
+        old = base64.urlsafe_b64encode(f"{payload}.{sig}".encode()).decode()
+        assert other.get("/api/auth/me", headers={"Authorization": f"Bearer {old}"}).status_code == 401
+        # A fake X-Forwarded-For on every try doesn't get around the lock
+        codes = [other.post("/api/auth/login", json={"username": "nobody", "password": "x"},
+                            headers={"X-Forwarded-For": f"10.0.0.{i}"}).status_code for i in range(10)]
+        assert codes[0] == 401 and codes[-1] == 429
+
+
+def test_backup_restores_clients_payments_and_photos(client):
+    import shutil, sqlite3, zipfile
+    from backend import backups
+    cid = client.post("/api/clients/", json={"name": "Restore Me", "phone": "0501237777", "photo_consent": True}).json()["id"]
+    client.post("/api/payments/", json={"client_id": cid, "amount": 77, "method": "cash"})
+    png = b"\x89PNG\r\n\x1a\n" + b"0" * 64
+    assert client.post(f"/api/clients/{cid}/photos", files={"file": ("p.png", png, "image/png")}, data={"pose": "front"}).status_code == 200
+    b = client.post("/api/backups/").json()
+    assert b["photos"] and b["photos"]["name"].startswith("photos-")
+    listed = [x["name"] for x in client.get("/api/backups/").json()["backups"]]
+    assert listed[0] == b["name"] and b["photos"]["name"] in listed
+    assert client.get(f"/api/backups/{b['photos']['name']}").status_code == 200
+    # Restore the copy into a new file, as docs/RESTORE.md describes, and read it back
+    restored = os.path.join(backups.BACKUP_DIR, "..", "restored-test.db")
+    shutil.copy(os.path.join(backups.BACKUP_DIR, b["name"]), restored)
+    con = sqlite3.connect(restored)
+    try:
+        assert con.execute("SELECT name FROM clients WHERE id=?", (cid,)).fetchone()[0] == "Restore Me"
+        assert con.execute("SELECT amount FROM payments WHERE client_id=?", (cid,)).fetchone()[0] == 77
+        photo = con.execute("SELECT filename FROM progress_photos WHERE client_id=?", (cid,)).fetchone()[0]
+    finally:
+        con.close()
+        os.remove(restored)
+    with zipfile.ZipFile(os.path.join(backups.BACKUP_DIR, b["photos"]["name"])) as z:
+        assert z.read(f"photos/{cid}/{photo}") == png
+
+
+def test_expiring_package_alerts_and_follow_up_job(client):
+    from backend.database import SessionLocal
+    from backend import notifications as n
+    cid = client.post("/api/clients/", json={"name": "Expiring Soon", "phone": "0501235555"}).json()["id"]
+    plan = client.get("/api/subscriptions/plans").json()[0]
+    end = (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()
+    sub = client.post("/api/subscriptions/", json={"client_id": cid, "plan_id": plan["id"], "end_date": end,
+                                                   "payment_method": "cash", "send_notification": False}).json()
+    # 6: the dashboard lists it as expiring
+    assert any(s["id"] == sub["id"] for s in client.get("/api/dashboard/overview").json()["expiring_list"])
+    # 28: the job sends the expiry message once
+    db = SessionLocal()
+    try:
+        n.run_subscription_job(db)
+        n.run_subscription_job(db)
+    finally:
+        db.close()
+    types = [l["type"] for l in client.get(f"/api/notifications/logs?client_id={cid}").json()]
+    assert types.count("subscription_expiring") == 1
+    # 45: a follow-up goes out after a completed session, once
+    client.put("/api/settings/", json={"follow_up_enabled": True, "follow_up_hours_after": 0})
+    svc = client.get("/api/services/").json()[0]
+    start = (datetime.now(timezone.utc) - timedelta(hours=3)).isoformat()
+    a = client.post("/api/appointments/", json={"client_id": cid, "service_id": svc["id"], "start_time": start, "force": True,
+                                                "use_subscription": False, "send_notification": False}).json()
+    client.post(f"/api/appointments/{a['id']}/status", json={"status": "completed", "send_notification": False})
+    db = SessionLocal()
+    try:
+        n.run_follow_up_job(db)
+        n.run_follow_up_job(db)
+    finally:
+        db.close()
+    types = [l["type"] for l in client.get(f"/api/notifications/logs?client_id={cid}").json()]
+    assert types.count("follow_up") == 1

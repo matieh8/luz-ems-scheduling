@@ -81,7 +81,7 @@ async function loadReferrals() {
     (rows.length ? rows.map(r => `<div class="card mb"><div class="card-title"><span><a href="#" onclick="openClientDetail(${r.client_id});return false">${esc(r.name)}</a> <span class="muted small">${r.referred} referred · ${money(r.referred_revenue)} brought in</span></span>
       ${r.rewards_pending ? `<span class="badge badge-queued">${r.rewards_pending} reward(s) due</span>` : r.rewards_given ? '<span class="badge badge-active">rewarded</span>' : ''}</div>
       ${r.referred_clients.map(k => `<div class="pk-row" style="cursor:default"><div><strong>${esc(k.name)}</strong><div class="tiny muted">${k.paid ? 'has paid' : 'not paid yet'}${k.reward_note ? ' · ' + esc(k.reward_note) : ''}</div></div>
-        <div>${k.reward_given ? '<span class="badge badge-active">reward given</span>' : k.paid ? `<button class="btn btn-success btn-xs" onclick="giveReward(${k.id}, '${esc(r.name).replace(/'/g, "\\'")}')">Mark reward given</button>` : ''}</div></div>`).join('')}</div>`).join('')
+        <div>${k.reward_given ? '<span class="badge badge-active">reward given</span>' : k.paid ? `<button class="btn btn-success btn-xs" onclick="giveReward(${k.id}, ${jsArg(r.name)})">Mark reward given</button>` : ''}</div></div>`).join('')}</div>`).join('')
       : '<div class="card empty">No referrals yet. Set "Referred by" on a client or lead to start tracking them.</div>');
 }
 function giveReward(clientId, referrer) {

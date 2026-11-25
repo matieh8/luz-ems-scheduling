@@ -292,6 +292,12 @@ def delete_client(client_id: int, db: Session = Depends(get_db)):
     db_client = db.query(models.Client).filter(models.Client.id == client_id).first()
     if not db_client:
         raise HTTPException(status_code=404, detail="Client not found")
+    if db_client.payments:
+        # Payments are the studio's revenue history: never delete them with the client. Archive instead.
+        db_client.active = False
+        db.commit()
+        return {"detail": "This client has payments, so they were archived instead of deleted. "
+                          "Their history and revenue stay in the reports.", "archived": True}
     db.query(models.NotificationLog).filter(models.NotificationLog.client_id == client_id).delete()
     for p in db_client.photos:
         _remove_photo_file(p)

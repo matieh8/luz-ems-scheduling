@@ -70,7 +70,7 @@ async function openClientDetail(id, tab) {
     <div id="cd-msgs" class="subpanel">${messagesTable(h.messages, true)}</div>`;
   const start = document.querySelector(`#cd-body .tab[data-t="${tab || 'appts'}"]`);
   cdTab(tab || 'appts', start);
-  $('cd-footer').innerHTML = `<div class="left"><button class="btn btn-secondary btn-sm" onclick="editClient(${c.id})">Edit</button><button class="btn btn-danger btn-sm" onclick="deleteClient(${c.id}, '${esc(c.name).replace(/'/g, "\\'")}')">Delete</button><button class="btn btn-secondary btn-sm" onclick="closeModal('client-detail-modal');openCustomMessageModal(${c.id})">Message</button><button class="btn btn-secondary btn-sm" onclick="closeModal('client-detail-modal');openPaymentModal({client_id:${c.id}})">Record payment</button><button class="btn btn-secondary btn-sm" onclick="closeModal('client-detail-modal');openSubscriptionModal(null, ${c.id})">Sell package</button></div><button class="btn btn-primary" onclick="closeModal('client-detail-modal');openBookingModal(null, {clientId:${c.id}})">Book session</button>`;
+  $('cd-footer').innerHTML = `<div class="left"><button class="btn btn-secondary btn-sm" onclick="editClient(${c.id})">Edit</button><button class="btn btn-danger btn-sm" onclick="deleteClient(${c.id}, ${jsArg(c.name)})">Delete</button><button class="btn btn-secondary btn-sm" onclick="closeModal('client-detail-modal');openCustomMessageModal(${c.id})">Message</button><button class="btn btn-secondary btn-sm" onclick="closeModal('client-detail-modal');openPaymentModal({client_id:${c.id}})">Record payment</button><button class="btn btn-secondary btn-sm" onclick="closeModal('client-detail-modal');openSubscriptionModal(null, ${c.id})">Sell package</button></div><button class="btn btn-primary" onclick="closeModal('client-detail-modal');openBookingModal(null, {clientId:${c.id}})">Book session</button>`;
   openModal('client-detail-modal');
 }
 function cdTab(t, el) {
@@ -256,9 +256,9 @@ async function saveClient() {
 }
 
 async function deleteClient(id, name) {
-  if (!confirm(`Delete ${name}?\n\nThis permanently removes the client together with all their sessions, packages, payments, measurements, notes and message history. This cannot be undone.`)) return;
+  if (!confirm(`Delete ${name}?\n\nA client who has paid is archived instead, so their payments stay in your revenue reports. A client with no payments is removed permanently with their sessions, packages, measurements, notes and messages.`)) return;
   guard(async () => {
-    await api('DELETE', `/clients/${id}`);
-    closeModal('client-detail-modal'); toast('Client deleted'); await refreshLookups(); refreshCurrent();
+    const r = await api('DELETE', `/clients/${id}`);
+    closeModal('client-detail-modal'); toast(r && r.archived ? 'Client archived (they have payments)' : 'Client deleted'); await refreshLookups(); refreshCurrent();
   });
 }

@@ -653,3 +653,7 @@ input.flatpickr-input[readonly] { cursor: pointer; }
 .tl-ico { font-size: 1rem; line-height: 1.4; margin-left: -28px; background: var(--surface); width: 26px; text-align: center; }
 .tl-text { font-weight: 600; font-size: .88rem; }
 .tl-date { white-space: nowrap; }
+/* Trainer working hours editor */
+.wh { display: flex; flex-direction: column; gap: 6px; }
+.wh-row { display: grid; grid-template-columns: 96px 1fr 92px 92px; gap: 6px; align-items: center; }
+@media (max-width: 520px) { .wh-row { grid-template-columns: 1fr 1fr; } .wh-row strong { grid-column: 1 / -1; } }

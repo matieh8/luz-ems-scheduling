@@ -1423,3 +1423,111 @@ def test_client_360_goals_and_profile_photo(client):
 def test_backups_in_the_same_second_do_not_overwrite(client):
     names = [client.post("/api/backups/").json()["name"] for _ in range(3)]
     assert len(set(names)) == 3
+
+
+def test_scheduling_conflicts_all_rules(client):
+    """Every way a booking can clash is refused with a clear reason; the owner can still override with force."""
+    svc = client.post("/api/services/", json={"name": "Conflict Check 30", "duration_minutes": 30, "buffer_minutes": 0, "price": 100}).json()
+    mk = lambda n: client.post("/api/clients/", json={"name": f"Sched {n}", "phone": f"05099900{n:02d}"}).json()["id"]
+    c1, c2, c3 = mk(1), mk(2), mk(3)
+    t1 = client.post("/api/staff/", json={"name": "Trainer One"}).json()["id"]
+    t2 = client.post("/api/staff/", json={"name": "Trainer Two"}).json()["id"]
+    for d in client.get("/api/devices/").json():   # start with no machine limits from other tests
+        client.put(f"/api/devices/{d['id']}", json={"needed_for_sessions": False})
+    settings = client.get("/api/settings/").json()
+    client.put("/api/settings/", json={"max_concurrent_sessions": 3})
+    day = next_weekday_at(10, days_ahead=40)
+    at = lambda h, m=0: (day.replace(hour=0) + timedelta(hours=h - 4, minutes=m)).isoformat()   # local Dubai hour -> UTC
+    book = lambda cid, h, m=0, **kw: client.post("/api/appointments/", json={"client_id": cid, "service_id": svc["id"], "start_time": at(h, m),
+                                                                              "send_notification": False, **kw})
+    try:
+        a = book(c1, 10, staff_id=t1)
+        assert a.status_code == 200, a.text
+        a = a.json()
+        assert a["end_time"][11:16] == at(10, 30)[11:16]                     # session length from the service
+        # 1. The same client can't be in two sessions at once, even with another trainer
+        r = book(c1, 10, 15, staff_id=t2)
+        assert r.status_code == 409 and "already has a session" in r.json()["detail"]
+        assert book(c1, 10, 30, staff_id=t2).status_code == 200                # back-to-back is fine
+        # 2. A trainer can't have two clients at once
+        r = book(c2, 10, 0, staff_id=t1)
+        assert r.status_code == 409 and "Trainer One already has" in r.json()["detail"]
+        # 3. Trainer working hours: day off and outside hours
+        dow = str((day + timedelta(hours=4)).weekday())
+        assert client.put(f"/api/staff/{t2}", json={"work_hours": {dow: ["12:00", "18:00"]}}).status_code == 200
+        r = book(c2, 11, staff_id=t2)
+        assert r.status_code == 409 and "works 12:00–18:00" in r.json()["detail"], r.text
+        assert book(c2, 12, staff_id=t2).status_code == 200
+        r = book(c3, 17, 45, staff_id=t2)                                       # would end 18:15
+        assert r.status_code == 409 and "works 12:00–18:00" in r.json()["detail"]
+        client.put(f"/api/staff/{t2}", json={"work_hours": {dow: None}})
+        r = book(c3, 14, staff_id=t2)
+        assert r.status_code == 409 and "doesn't work on" in r.json()["detail"]
+        assert client.put(f"/api/staff/{t2}", json={"work_hours": {dow: ["18:00", "09:00"]}}).status_code == 422
+        slots = client.get(f"/api/appointments/availability?service_id={svc['id']}&date={(day + timedelta(hours=4)).date()}&staff_id={t2}").json()["slots"]
+        assert slots and not any(s["available"] for s in slots)                 # day off: nothing free for that trainer
+        client.put(f"/api/staff/{t2}", json={"work_hours": {}})                 # back to studio hours
+        # 4. Machines: only working machines count; all in repair = nothing can be booked
+        m1 = client.post("/api/devices/", json={"name": "Machine A"}).json()
+        m2 = client.post("/api/devices/", json={"name": "Machine B"}).json()
+        assert m1["needed_for_sessions"] is True
+        assert book(c2, 15).status_code == 200 and book(c3, 15).status_code == 200
+        r = book(mk(4), 15)
+        assert r.status_code == 409 and "All 2 machines are booked" in r.json()["detail"], r.text
+        client.put(f"/api/devices/{m2['id']}", json={"status": "maintenance"})
+        assert book(mk(5), 16).status_code == 200
+        r = book(mk(6), 16)
+        assert r.status_code == 409 and "All 1 machine is booked" in r.json()["detail"], r.text   # only one machine working now
+        client.put(f"/api/devices/{m1['id']}", json={"status": "maintenance"})
+        r = book(mk(7), 17)
+        assert r.status_code == 409 and "every machine is in repair" in r.json()["detail"]
+        client.put(f"/api/devices/{m1['id']}", json={"status": "retired"})
+        client.put(f"/api/devices/{m2['id']}", json={"status": "retired"})
+        # 5. Blocked time and opening hours
+        client.post("/api/blocked-times/", json={"start_time": at(13), "end_time": at(14), "reason": "Team meeting"})
+        r = book(mk(8), 13, 15)
+        assert r.status_code == 409 and "Team meeting" in r.json()["detail"]
+        r = book(mk(9), 3)
+        assert r.status_code == 409 and ("opening hours" in r.json()["detail"] or "closed" in r.json()["detail"])
+        # 6. Custom length: a 60-minute booking blocks the trainer for the whole hour, and keeps its length when moved
+        long = book(c3, 18, staff_id=t1, duration_minutes=60)
+        assert long.status_code == 200 and long.json()["end_time"][11:16] == at(19)[11:16]
+        assert book(c2, 18, 30, staff_id=t1).status_code == 409
+        moved = client.put(f"/api/appointments/{long.json()['id']}", json={"start_time": at(19, 30), "send_notification": False})
+        assert moved.status_code == 200 and moved.json()["end_time"][11:16] == at(20, 30)[11:16]
+        # 7. Rescheduling into a clash is refused; a cancelled session frees its slot
+        r = client.put(f"/api/appointments/{a['id']}", json={"start_time": at(19, 45), "send_notification": False})
+        assert r.status_code == 409 and "Trainer One already has" in r.json()["detail"]
+        client.post(f"/api/appointments/{moved.json()['id']}/status", json={"status": "cancelled", "send_notification": False})
+        assert client.put(f"/api/appointments/{a['id']}", json={"start_time": at(19, 45), "send_notification": False}).status_code == 200
+        # 8. Owner override still works for a real emergency
+        assert book(c1, 19, 45, staff_id=t2, force=True).status_code == 200
+    finally:
+        client.put("/api/settings/", json={"max_concurrent_sessions": settings["max_concurrent_sessions"]})
+
+
+def test_moving_a_package_session_to_another_client_moves_the_package_use(client):
+    plan = client.get("/api/subscriptions/plans").json()[0]
+    svc = [s for s in client.get("/api/services/").json() if s["price"]][0]
+    a_id = client.post("/api/clients/", json={"name": "Pack Owner", "phone": "0509990101"}).json()["id"]
+    b_id = client.post("/api/clients/", json={"name": "No Pack", "phone": "0509990102"}).json()["id"]
+    sub = client.post("/api/subscriptions/", json={"client_id": a_id, "plan_id": plan["id"], "payment_method": "cash", "send_notification": False}).json()
+    ap = client.post("/api/appointments/", json={"client_id": a_id, "service_id": svc["id"], "force": True, "send_notification": False,
+                                                 "start_time": next_weekday_at(11, 3).isoformat()}).json()
+    left = lambda: next(s for s in client.get(f"/api/subscriptions/?client_id={a_id}").json() if s["id"] == sub["id"])["sessions_remaining"]
+    assert ap["subscription_id"] == sub["id"] and left() == plan["sessions_included"] - 1
+    moved = client.put(f"/api/appointments/{ap['id']}", json={"client_id": b_id, "send_notification": False}).json()
+    assert moved["subscription_id"] is None and moved["price"] == svc["price"]       # the new client pays per session
+    assert left() == plan["sessions_included"]                                        # the old package gets its session back
+    assert client.put(f"/api/appointments/{ap['id']}", json={"client_id": 999999}).status_code == 400
+
+
+def test_online_booking_refuses_a_client_double_booking(client):
+    svc = client.get("/api/public/info").json()["services"][0]
+    day = next_weekday_at(11, days_ahead=6)
+    slots = [s for s in client.get(f"/api/public/availability?service_id={svc['id']}&date={(day + timedelta(hours=4)).date()}").json()["slots"] if s["available"]]
+    assert len(slots) >= 2
+    body = {"service_id": svc["id"], "name": "Online Twice", "phone": "0509990201"}
+    assert client.post("/api/public/book", json={**body, "start_time": slots[0]["start_time"]}).status_code == 200
+    r = client.post("/api/public/book", json={**body, "start_time": slots[0]["start_time"]})
+    assert r.status_code == 409

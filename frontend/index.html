@@ -18,7 +18,7 @@
     (function () { var t = 'auto'; try { t = localStorage.getItem('luz_theme') || 'auto'; } catch (e) {} document.documentElement.setAttribute('data-theme', t); })();</script>
   <link rel="stylesheet" href="/vendor/flatpickr/flatpickr.min.css?v=4.6.13">
   <link rel="stylesheet" href="/vendor/flatpickr/monthSelect.css?v=4.6.13">
-  <link rel="stylesheet" href="/css/app.css?v=26">
+  <link rel="stylesheet" href="/css/app.css?v=27">
 </head>
 <body>
   <a class="skip-link" href="#main-content" onclick="event.preventDefault(); document.getElementById('main-content').focus()">Skip to content</a>
@@ -368,6 +368,10 @@
         <div class="form-group"><label>Date</label><input type="date" id="booking-date" class="input" onchange="bookingLoadSlots()"></div>
         <div class="form-group"><label>Time</label><input type="time" id="booking-time" class="input" step="300"></div>
       </div>
+      <div class="form-row">
+        <div class="form-group"><label>Length (minutes)</label><input type="number" id="booking-duration" class="input" min="5" max="240" step="5" onchange="bookingLoadSlots()"><div class="help" id="booking-duration-help"></div></div>
+        <div class="form-group" id="booking-history" aria-live="polite"></div>
+      </div>
       <div class="form-row" id="booking-repeat-group">
         <div class="form-group"><label>Repeat</label><select id="booking-repeat" class="input" onchange="bookingRepeatChanged()"><option value="0">Does not repeat</option><option value="1">Every week, same day and time</option><option value="2">Every 2 weeks, same day and time</option></select></div>
         <div class="form-group" id="booking-repeat-count-group" style="display:none"><label>Number of sessions</label><input type="number" id="booking-repeat-count" class="input" min="2" max="52" step="1" value="8" oninput="bookingRepeatChanged()"><div class="tiny muted" id="booking-repeat-help"></div></div>
@@ -565,18 +569,18 @@
   <script src="/vendor/flatpickr/flatpickr.min.js?v=4.6.13"></script>
   <script src="/vendor/flatpickr/monthSelect.js?v=4.6.13"></script>
   <script src="/js/core.js?v=11"></script>
-  <script src="/js/calendar.js?v=7"></script>
-  <script src="/js/booking.js?v=6"></script>
+  <script src="/js/calendar.js?v=8"></script>
+  <script src="/js/booking.js?v=7"></script>
   <script src="/js/clients.js?v=15"></script>
   <script src="/js/money.js?v=15"></script>
   <script src="/js/finance.js?v=1"></script>
   <script src="/js/expenses.js?v=5"></script>
   <script src="/js/messages.js?v=3"></script>
   <script src="/js/push.js?v=1"></script>
-  <script src="/js/settings.js?v=15"></script>
-  <script src="/js/devices.js?v=3"></script>
+  <script src="/js/settings.js?v=16"></script>
+  <script src="/js/devices.js?v=4"></script>
   <script src="/js/leads.js?v=4"></script>
-  <script src="/js/team.js?v=2"></script>
+  <script src="/js/team.js?v=3"></script>
   <script src="/js/dashboard.js?v=7"></script>
   <script>boot();</script>
 </body>

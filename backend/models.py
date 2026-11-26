@@ -107,6 +107,9 @@ class Staff(Base):
     role = Column(String, nullable=True, default="Trainer")
     active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=now_utc)
+    # Weekly working hours as JSON {"0": ["09:00", "17:00"], "1": null, ...} (0 = Monday, null = day off).
+    # Empty = works whenever the studio is open.
+    work_hours_json = Column("work_hours", Text, nullable=True)
     # Login to the admin app (None = no access)
     login_username = Column(String, nullable=True, unique=True)
     password_hash = Column(String, nullable=True)
@@ -345,6 +348,7 @@ class Device(Base):
     serial_number = Column(String, nullable=True)
     purchased_on = Column(String, nullable=True)  # YYYY-MM-DD
     status = Column(String, nullable=False, default="active")  # active | maintenance | retired
+    needed_for_sessions = Column(Boolean, default=False)  # a machine every session needs: limits how many run at once
     service_every_days = Column(Integer, nullable=True)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=now_utc)
@@ -544,6 +548,20 @@ def _sub_paid(self):
     return float(sum(p.amount for p in self.payments))
 
 
+def _staff_hours(self):
+    import json
+    try:
+        return json.loads(self.work_hours_json) if self.work_hours_json else None
+    except ValueError:
+        return None
+
+
+def _staff_set_hours(self, value):
+    import json
+    self.work_hours_json = json.dumps(value) if value else None
+
+
+Staff.work_hours = property(_staff_hours, _staff_set_hours)
 Appointment.paid_amount = property(_appt_paid_amount)
 Appointment.balance_due = property(_appt_balance_due)
 Subscription.sessions_booked = property(_sub_booked)

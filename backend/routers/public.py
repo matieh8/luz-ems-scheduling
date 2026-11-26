@@ -136,6 +136,9 @@ def book(body: PublicBooking, request: Request, db: Session = Depends(get_db)):
         db.refresh(client)
     elif body.email and not client.email:
         client.email = body.email.strip()
+    from backend.scheduling import client_clash
+    if client_clash(db, client.id, start, end):
+        raise HTTPException(status_code=409, detail="You already have a session at that time. Pick another time or manage your booking.")
 
     # Anyone can type any phone number here, so an online booking never uses a package session by itself.
     # The studio links it to the client's package when they confirm or complete the session.

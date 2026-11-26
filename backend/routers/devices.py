@@ -19,6 +19,7 @@ class DeviceIn(BaseModel):
     serial_number: Optional[str] = None
     purchased_on: Optional[date] = None
     status: str = Field("active", pattern="^(active|maintenance|retired)$")
+    needed_for_sessions: bool = True  # new devices count as machines unless unticked
     service_every_days: Optional[int] = Field(None, ge=1, le=1825)
     notes: Optional[str] = None
 
@@ -29,6 +30,7 @@ class DeviceUpdate(BaseModel):
     serial_number: Optional[str] = None
     purchased_on: Optional[date] = None
     status: Optional[str] = Field(None, pattern="^(active|maintenance|retired)$")
+    needed_for_sessions: Optional[bool] = None
     service_every_days: Optional[int] = Field(None, ge=1, le=1825)
     notes: Optional[str] = None
 
@@ -56,7 +58,7 @@ def service_info(d: models.Device, today: date) -> dict:
 
 def _out(d: models.Device, today: date) -> dict:
     return {"id": d.id, "name": d.name, "model": d.model, "serial_number": d.serial_number, "purchased_on": d.purchased_on,
-            "status": d.status, "service_every_days": d.service_every_days, "notes": d.notes,
+            "status": d.status, "needed_for_sessions": bool(d.needed_for_sessions), "service_every_days": d.service_every_days, "notes": d.notes,
             "maintenance_count": len(d.maintenance),
             "maintenance_cost": round(sum(m.cost or 0 for m in d.maintenance), 2), **service_info(d, today)}
 

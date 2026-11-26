@@ -16,6 +16,23 @@ let EXPENSES = [];
 let EXPENSE_CATS = [];
 let EXP_LOADED_MONTH = null;
 
+// Apps and services get their own logo (the site's icon), e.g. a "Claude" or "CapCut" category.
+const EXP_APPS = { claude: 'claude.ai', anthropic: 'claude.ai', chatgpt: 'openai.com', openai: 'openai.com', capcut: 'capcut.com', 'amazon prime': 'primevideo.com',
+  'prime video': 'primevideo.com', amazon: 'amazon.com', netflix: 'netflix.com', spotify: 'spotify.com', 'youtube': 'youtube.com', canva: 'canva.com',
+  adobe: 'adobe.com', icloud: 'icloud.com', apple: 'apple.com', google: 'google.com', gemini: 'gemini.google.com', microsoft: 'microsoft.com',
+  office: 'office.com', notion: 'notion.so', zoom: 'zoom.us', shahid: 'shahid.mbc.net', osn: 'osnplus.com', anghami: 'anghami.com', 'disney': 'disneyplus.com',
+  meta: 'meta.com', instagram: 'instagram.com', facebook: 'facebook.com', tiktok: 'tiktok.com', whatsapp: 'whatsapp.com', linkedin: 'linkedin.com',
+  dropbox: 'dropbox.com', figma: 'figma.com', github: 'github.com', godaddy: 'godaddy.com', hostinger: 'hostinger.com', shopify: 'shopify.com',
+  muapi: 'muapi.ai', midjourney: 'midjourney.com', elevenlabs: 'elevenlabs.io', grammarly: 'grammarly.com', du: 'du.ae', etisalat: 'etisalat.ae', 'e&': 'etisalat.ae' };
+function expApp(cat) {
+  const key = String(cat || '').toLowerCase().trim();
+  const hit = Object.keys(EXP_APPS).sort((a, b) => b.length - a.length).find(k => key === k || key.split(/[\s,/-]+/).includes(k) || (k.includes(' ') && key.includes(k)));
+  return hit ? EXP_APPS[hit] : null;
+}
+function expLogo(cat) {
+  const d = expApp(cat);
+  return d ? `<img class="exp-logo" src="https://www.google.com/s2/favicons?domain=${d}&sz=64" alt="" loading="lazy" onerror="this.replaceWith(document.createTextNode('${expIcon(null)}'))">` : `<span class="exp-logo-emoji" aria-hidden="true">${expIcon(cat)}</span>`;
+}
 function expIcon(cat) {
   const key = String(cat || '').toLowerCase();
   return EXP_ICONS[key] || EXP_ICONS[Object.keys(EXP_ICONS).find(k => key.includes(k))] || '📝';
@@ -63,8 +80,9 @@ function expVisible() {
 function expRowHTML(e) {
   const cats = expAllCats();
   return `<div class="exp-row ${e.paid === false ? 'unpaid' : ''}" data-id="${e.id}">
+    <span class="exp-row-logo">${expLogo(e.category)}</span>
     <select class="input input-sm exp-cat" aria-label="Category" onchange="expChange(${e.id}, 'category', this)">
-      ${cats.map(c => `<option value="${esc(c)}" ${c === e.category ? 'selected' : ''}>${expIcon(c)} ${esc(c)}</option>`).join('')}
+      ${cats.map(c => `<option value="${esc(c)}" ${c === e.category ? 'selected' : ''}>${expApp(c) ? '' : expIcon(c) + ' '}${esc(c)}</option>`).join('')}
       <option value="__new__">➕ New category…</option></select>
     <select class="input input-sm exp-method" aria-label="Payment method" onchange="expChange(${e.id}, 'payment_method', this)">
       ${[...new Set([...EXP_METHODS, e.payment_method || 'Card'])].map(m => `<option ${m === (e.payment_method || 'Card') ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select>
@@ -118,13 +136,14 @@ function refreshExpenseTotals() {
   for (const e of vis) { const c = e.category || 'Other'; cats[c] = (cats[c] || 0) + e.amount; const p = e.payment_method || 'Card'; methods[p] = (methods[p] || 0) + e.amount; }
   const table = (obj, head, cellFn) => Object.keys(obj).length ? `<table><thead><tr><th>${head}</th><th class="num">Total</th></tr></thead><tbody>` +
     Object.entries(obj).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>${cellFn(k)}</td><td class="num bold">${money(v)}</td></tr>`).join('') + '</tbody></table>' : '<div class="empty small">No spending yet.</div>';
-  $('exp-cats').innerHTML = table(cats, 'Category', k => `<span class="ico">${expIcon(k)}</span> ${esc(k)}`);
+  $('exp-cats').innerHTML = table(cats, 'Category', k => `<span class="ico">${expLogo(k)}</span> ${esc(k)}`);
   $('exp-methods').innerHTML = table(methods, 'Type', k => `<span class="badge badge-neutral">${esc(k)}</span>`);
 }
 
 async function expChange(id, field, el) {
   const e = EXPENSES.find(x => x.id === id); if (!e) return;
   let value;
+  const syncLogo = () => { const r = el.closest('.exp-row'); if (r) r.querySelector('.exp-row-logo').innerHTML = expLogo(e.category); };
   if (field === 'amount') {
     value = el.value.trim() === '' ? 0 : expNum(el.value);
     if (isNaN(value) || value < 0) { el.value = e.amount || ''; return toast('Enter the amount as a number, e.g. 250 or 12.50', true); }
@@ -133,21 +152,22 @@ async function expChange(id, field, el) {
   else if (field === 'category') {
     value = el.value;
     if (value === '__new__') {
-      const name = (prompt('New category name') || '').replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}\u{200D}]/gu, '').replace(/\s+/g, ' ').trim();
+      const name = ((await askText('New category', 'e.g. Rent, or an app like Claude, CapCut, Amazon Prime')) || '').replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}\u{200D}]/gu, '').replace(/\s+/g, ' ').trim();
       if (!name) { el.value = e.category; return; }
       value = name;
-      if (![...el.options].some(o => o.value === name)) el.insertBefore(new Option(`${expIcon(name)} ${name}`, name), el.options[el.options.length - 1]);
+      if (![...el.options].some(o => o.value === name)) el.insertBefore(new Option(`${expApp(name) ? '' : expIcon(name) + ' '}${name}`, name), el.options[el.options.length - 1]);
       el.value = name; if (!EXPENSE_CATS.includes(name)) EXPENSE_CATS.push(name);
     }
   } else value = field === 'notes' ? (el.value.trim() || null) : el.value;
   if (e[field] === value) return;
   const before = e[field];
   e[field] = value;                      // optimistic: totals update at once
+  if (field === 'category') syncLogo();
   if (field === 'paid') { const row = el.closest('.exp-row'); row.classList.toggle('unpaid', !value); row.querySelector('.exp-paid span').textContent = value ? 'Paid' : 'Unpaid'; }
   refreshExpenseTotals();
   try { await api('PUT', `/expenses/${id}`, { [field]: value }); }
   catch (err) {
-    e[field] = before; refreshExpenseTotals();
+    e[field] = before; refreshExpenseTotals(); if (field === 'category') syncLogo();
     if (field === 'paid') { el.checked = before !== false; el.closest('.exp-row').classList.toggle('unpaid', before === false); }
     else el.value = before == null ? '' : before;
     toast(`Not saved: ${err.message}`, true);
@@ -171,7 +191,7 @@ async function addExpenseToDay(key) {
 }
 
 async function deleteExpense(id) {
-  if (!confirm('Delete this expense?')) return;
+  if (!await ask('Delete this expense?')) return;
   await guard(async () => {
     await api('DELETE', `/expenses/${id}`);
     EXPENSES = EXPENSES.filter(e => e.id !== id);

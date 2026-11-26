@@ -82,7 +82,7 @@ async function openClientDetail(id, tab) {
       <div class="cd-contact">
         <div>${ICO.mail}<span>${c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : '<span class="muted">No email</span>'}</span></div>
         <div>${ICO.phone}<span><a href="tel:${esc(c.phone)}">${esc(c.phone)}</a></span></div>
-        <div>${ICO.card}<span>${c.package_name ? `${esc(c.package_name)}<div class="tiny muted">${c.sessions_remaining} session${c.sessions_remaining === 1 ? '' : 's'} left${c.package_end ? ' · until ' + fmtDate(c.package_end) : ''}</div>` : '<span class="muted">No active package</span>'}</span></div>
+        <div class="clickable" onclick="cdGo('subs')">${ICO.card}<span>${c.package_name ? `${esc(c.package_name)}<div class="tiny muted">${c.sessions_remaining} session${c.sessions_remaining === 1 ? '' : 's'} left${c.package_end ? ' · until ' + fmtDate(c.package_end) : ''}</div>` : '<span class="muted">No active package</span>'}</span></div>
       </div>
       <div class="section-label">Assigned staff</div>
       ${c.main_trainer ? `<div class="cd-staff">${avatar(c.main_trainer)}<div><div class="tiny muted">Coach</div><strong>${esc(c.main_trainer)}</strong></div></div>` : '<div class="tiny muted">No trainer yet</div>'}
@@ -102,28 +102,30 @@ async function openClientDetail(id, tab) {
     </div>
     <div id="cd-overview" class="subpanel">
     <div class="grid grid-4 mb">
-      <div class="stat"><div class="stat-label">Sessions done</div><div class="stat-value">${c.completed_appointments}</div><div class="stat-sub">${c.no_shows} no-shows · ${c.late_count || 0} late${c.attendance_rate !== null && c.attendance_rate !== undefined ? ` · ${c.attendance_rate}% attended` : ''}</div></div>
-      <div class="stat"><div class="stat-label">Total paid</div><div class="stat-value">${money(c.total_spent)}</div><div class="stat-sub">${c.outstanding > 0 ? `<span style="color:var(--bad)">owes ${money(c.outstanding)}</span>` : 'nothing owed'}</div></div>
-      <div class="stat"><div class="stat-label">Package left</div><div class="stat-value">${c.sessions_remaining}</div><div class="stat-sub">sessions</div></div>
-      <div class="stat"><div class="stat-label">Regularity</div><div class="stat-value" style="font-size:1.1rem">${r.label}</div><div class="stat-sub">${c.days_since_last !== null && c.days_since_last !== undefined ? `last ${c.days_since_last}d ago` : 'no sessions yet'}${c.avg_gap_days ? ` · usually every ${Math.round(c.avg_gap_days)}d` : ''}</div></div>
+      <div class="stat clickable" role="button" tabindex="0" onclick="cdGo('appts')"><div class="stat-label">Sessions done</div><div class="stat-value">${c.completed_appointments}</div><div class="stat-sub">${c.no_shows} no-shows · ${c.late_count || 0} late${c.attendance_rate !== null && c.attendance_rate !== undefined ? ` · ${c.attendance_rate}% attended` : ''}</div></div>
+      <div class="stat clickable" role="button" tabindex="0" onclick="cdGo('pays')"><div class="stat-label">Total paid</div><div class="stat-value">${money(c.total_spent)}</div><div class="stat-sub">${c.outstanding > 0 ? `<span style="color:var(--bad)">owes ${money(c.outstanding)}</span>` : 'nothing owed'}</div></div>
+      <div class="stat clickable" role="button" tabindex="0" onclick="cdGo('subs')"><div class="stat-label">Package left</div><div class="stat-value">${c.sessions_remaining}</div><div class="stat-sub">sessions</div></div>
+      <div class="stat clickable" role="button" tabindex="0" onclick="cdGo('appts')"><div class="stat-label">Regularity</div><div class="stat-value" style="font-size:1.1rem">${r.label}</div><div class="stat-sub">${c.days_since_last !== null && c.days_since_last !== undefined ? `last ${c.days_since_last}d ago` : 'no sessions yet'}${c.avg_gap_days ? ` · usually every ${Math.round(c.avg_gap_days)}d` : ''}</div></div>
     </div>
     ${bodyCards(h.measurements)}
     <div class="section-label">Next sessions</div>
     ${upcoming.length ? apptTable(upcoming.slice(0, 3), { withDate: true }) : '<div class="empty small">Nothing booked.</div>'}
     <dl class="kv" style="margin-top:14px"><dt>Notifications</dt><dd>${[c.notify_whatsapp && 'WhatsApp', c.notify_sms && 'SMS', c.notify_email && 'Email'].filter(Boolean).join(', ') || 'none'}</dd>${c.date_of_birth ? `<dt>Birthday</dt><dd>${esc(c.date_of_birth)}</dd>` : ''}${c.notes ? `<dt>Notes</dt><dd>${esc(c.notes)}</dd>` : ''}</dl>
     </div>
-    <div id="cd-appts" class="subpanel">${upcoming.length ? '<div class="agenda-day">Upcoming</div>' + apptTable(upcoming, { withDate: true }) : ''}${past.length ? '<div class="agenda-day">History</div>' + apptTable(past, { withDate: true }) : ''}${!h.appointments.length ? '<div class="empty small">No sessions yet.</div>' : ''}</div>
+    <div id="cd-appts" class="subpanel">${cdAdd(`openBookingModal(null, {clientId:${c.id}})`, '+ Book session')}${upcoming.length ? '<div class="agenda-day">Upcoming</div>' + apptTable(upcoming, { withDate: true }) : ''}${past.length ? '<div class="agenda-day">History</div>' + apptTable(past, { withDate: true }) : ''}${!h.appointments.length ? '<div class="empty small">No sessions yet.</div>' : ''}</div>
     <div id="cd-progress" class="subpanel">${progressPanel(h)}</div>
     <div id="cd-notes" class="subpanel">${notesPanel(h)}</div>
-    <div id="cd-subs" class="subpanel">${subsTable(h.subscriptions)}</div>
-    <div id="cd-pays" class="subpanel">${paymentsTable(h.payments, true)}</div>
+    <div id="cd-subs" class="subpanel">${cdAdd(`openSubscriptionModal(null, ${c.id})`, '+ Sell package')}${subsTable(h.subscriptions)}</div>
+    <div id="cd-pays" class="subpanel">${cdAdd(`openPaymentModal({client_id:${c.id}})`, '+ Record payment')}${paymentsTable(h.payments, true)}</div>
     <div id="cd-msgs" class="subpanel">${messagesTable(h.messages, true)}</div>
     </div></div>`;
   const start = document.querySelector(`#cd-body .tab[data-t="${tab || 'overview'}"]`);
   cdTab(tab || 'overview', start);
-  $('cd-footer').innerHTML = `<div class="left"><button class="btn btn-secondary btn-sm" onclick="editClient(${c.id})">Edit</button><button class="btn btn-danger btn-sm" onclick="deleteClient(${c.id}, ${jsArg(c.name)})">Delete</button><button class="btn btn-secondary btn-sm" onclick="closeModal('client-detail-modal');openCustomMessageModal(${c.id})">Message</button><button class="btn btn-secondary btn-sm" onclick="openClientLink(${c.id}, ${jsArg(c.name)})">Client link</button><button class="btn btn-secondary btn-sm" onclick="closeModal('client-detail-modal');openPaymentModal({client_id:${c.id}})">Record payment</button><button class="btn btn-secondary btn-sm" onclick="closeModal('client-detail-modal');openSubscriptionModal(null, ${c.id})">Sell package</button></div><button class="btn btn-primary" onclick="closeModal('client-detail-modal');openBookingModal(null, {clientId:${c.id}})">Book session</button>`;
+  $('cd-footer').innerHTML = `<div class="left"><button class="btn btn-secondary btn-sm" onclick="editClient(${c.id})">Edit</button><button class="btn btn-danger btn-sm" onclick="deleteClient(${c.id}, ${jsArg(c.name)})">Delete</button><button class="btn btn-secondary btn-sm" onclick="openCustomMessageModal(${c.id})">Message</button><button class="btn btn-secondary btn-sm" onclick="openClientLink(${c.id}, ${jsArg(c.name)})">Client link</button><button class="btn btn-secondary btn-sm" onclick="openPaymentModal({client_id:${c.id}})">Record payment</button><button class="btn btn-secondary btn-sm" onclick="openSubscriptionModal(null, ${c.id})">Sell package</button></div><button class="btn btn-primary" onclick="openBookingModal(null, {clientId:${c.id}})">Book session</button>`;
   openModal('client-detail-modal');
 }
+function cdAdd(onclick, label) { return `<div class="cd-add"><button class="btn btn-secondary btn-sm" onclick="${onclick}">${label}</button></div>`; }
+function cdGo(t) { cdTab(t, document.querySelector(`#cd-body .tab[data-t="${t}"]`)); }
 function cdTab(t, el) {
   document.querySelectorAll('#cd-body .tab').forEach(x => x.classList.remove('active')); if (el) el.classList.add('active');
   document.querySelectorAll('#cd-body .subpanel').forEach(p => p.classList.toggle('active', p.id === 'cd-' + t));
@@ -208,11 +210,11 @@ async function uploadPhoto(clientId) {
   });
 }
 async function deletePhoto(id, clientId) {
-  if (!confirm('Delete this photo? It is removed for good.')) return;
+  if (!await ask('Delete this photo? It is removed for good.')) return;
   guard(async () => { await api('DELETE', `/clients/photos/${id}`); openClientDetail(clientId, 'progress'); });
 }
 async function setPhotoConsent(clientId, on) {
-  if (!on && !confirm('Withdraw consent? All of this client\'s progress photos will be deleted for good.')) return;
+  if (!on && !await ask('Withdraw consent? All of this client\'s progress photos will be deleted for good.')) return;
   guard(async () => { await api('PUT', `/clients/${clientId}`, { photo_consent: on }); toast(on ? 'Consent recorded' : 'Consent withdrawn, photos deleted'); openClientDetail(clientId, 'progress'); });
 }
 
@@ -248,7 +250,7 @@ async function saveMeasurement(clientId) {
   });
 }
 async function deleteMeasurement(id, clientId) {
-  if (!confirm('Delete this check-in? This cannot be undone.')) return;
+  if (!await ask('Delete this check-in? This cannot be undone.')) return;
   guard(async () => { await api('DELETE', `/clients/measurements/${id}`); openClientDetail(clientId, 'progress'); });
 }
 
@@ -270,7 +272,7 @@ async function saveNote(clientId) {
   });
 }
 async function deleteNote(id, clientId) {
-  if (!confirm('Delete this note? This cannot be undone.')) return;
+  if (!await ask('Delete this note? This cannot be undone.')) return;
   guard(async () => { await api('DELETE', `/clients/notes/${id}`); openClientDetail(clientId, 'notes'); });
 }
 
@@ -285,7 +287,7 @@ function openClientModal() {
 }
 async function editClient(id) {
   const c = S.clients.find(x => x.id === id) || await api('GET', `/clients/${id}`);
-  closeModal('client-detail-modal'); openClientModal();
+  openClientModal();
   $('client-modal-title').textContent = 'Edit client';
   setVal('client-id', c.id); setVal('client-name', c.name); setVal('client-phone', c.phone); setVal('client-email', c.email); setVal('client-notes', c.notes);
   setVal('client-dob', c.date_of_birth); setVal('client-source', c.source || ''); setVal('client-active', String(c.active)); setVal('client-health', c.health_notes);
@@ -313,7 +315,6 @@ async function openClientLink(id, name, fresh = false) {
     const url = location.origin + r.path;
     const text = `Hi ${name.split(' ')[0]}, here is your personal ${S.business} page with your sessions, package, payments and progress: ${url}`;
     const wa = `https://wa.me/${(r.phone || '').replace(/\D/g, '')}?text=${encodeURIComponent(text)}`;
-    closeModal('client-detail-modal');
     confirmBox('Client link', `<p class="small muted" style="margin-top:0">Send this to ${esc(name)}. They open it on their phone, no password needed, and see their sessions, package, payments, invoices and progress. Staff notes, health notes and photos are never shown.</p>
       <input class="input mono small" readonly value="${esc(url)}" onclick="this.select()">
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><a class="btn btn-success btn-sm" href="${esc(wa)}" target="_blank" rel="noopener">Send on WhatsApp</a>
@@ -323,7 +324,7 @@ async function openClientLink(id, name, fresh = false) {
 }
 
 async function deleteClient(id, name) {
-  if (!confirm(`Delete ${name}?\n\nA client who has paid is archived instead, so their payments stay in your revenue reports. A client with no payments is removed permanently with their sessions, packages, measurements, notes and messages.`)) return;
+  if (!await ask(`Delete ${name}?\n\nA client who has paid is archived instead, so their payments stay in your revenue reports. A client with no payments is removed permanently with their sessions, packages, measurements, notes and messages.`)) return;
   guard(async () => {
     const r = await api('DELETE', `/clients/${id}`);
     closeModal('client-detail-modal'); toast(r && r.archived ? 'Client archived (they have payments)' : 'Client deleted'); await refreshLookups(); refreshCurrent();

@@ -202,11 +202,12 @@ class Payment(Base):
     __tablename__ = "payments"
 
     id = Column(Integer, primary_key=True, index=True)
-    client_id = Column(Integer, ForeignKey("clients.id"), nullable=False)
+    client_id = Column(Integer, ForeignKey("clients.id"), nullable=True)  # empty for income that isn't from a client
     appointment_id = Column(Integer, ForeignKey("appointments.id"), nullable=True)
     subscription_id = Column(Integer, ForeignKey("subscriptions.id"), nullable=True)
     amount = Column(Float, nullable=False)
     method = Column(String, nullable=False, default="cash")  # cash | card | transfer | online | other
+    source = Column(String, nullable=True)  # income without a client: social_media | ads | other
     paid_at = Column(DateTime, nullable=False, default=now_utc, index=True)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=now_utc)
@@ -273,7 +274,8 @@ class Subscription(Base):
     start_date = Column(DateTime, nullable=False, default=now_utc)
     end_date = Column(DateTime, nullable=True)
     sessions_total = Column(Integer, nullable=False)
-    sessions_used = Column(Integer, nullable=False, default=0)
+    legacy_sessions_used = Column("sessions_used", Integer, nullable=False, default=0)  # old hand-kept counter, no longer read
+    sessions_used_before = Column(Integer, nullable=False, default=0)  # used before the system / manual adjustment
     price_paid = Column(Float, nullable=False)
     status = Column(String, nullable=False, default="active")  # active | expired | cancelled | completed | renewed
     notes = Column(Text, nullable=True)
@@ -508,8 +510,22 @@ def _appt_balance_due(self):
     return max(float(self.price or 0) - _appt_paid_amount(self), 0.0)
 
 
+def _sub_booked(self):
+    # Every session linked to the package counts as used unless it was cancelled (no-shows count).
+    return sum(1 for a in self.appointments if a.status != "cancelled")
+
+
+def _sub_used(self):
+    return int(self.sessions_used_before or 0) + _sub_booked(self)
+
+
+def _sub_set_used(self, value):
+    # "Used" typed by staff: whatever the bookings don't explain is kept as used before the system.
+    self.sessions_used_before = max(int(value or 0) - _sub_booked(self), 0)
+
+
 def _sub_remaining(self):
-    return max(int(self.sessions_total) - int(self.sessions_used), 0)
+    return max(int(self.sessions_total) - self.sessions_used, 0)
 
 
 def _sub_paid(self):
@@ -518,6 +534,8 @@ def _sub_paid(self):
 
 Appointment.paid_amount = property(_appt_paid_amount)
 Appointment.balance_due = property(_appt_balance_due)
+Subscription.sessions_booked = property(_sub_booked)
+Subscription.sessions_used = property(_sub_used, _sub_set_used)
 Subscription.sessions_remaining = property(_sub_remaining)
 Subscription.paid_amount = property(_sub_paid)
 

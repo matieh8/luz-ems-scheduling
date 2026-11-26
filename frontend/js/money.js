@@ -5,9 +5,9 @@ function subsTable(subs) {
     const pct = s.sessions_total ? 100 * s.sessions_used / s.sessions_total : 0;
     const expSoon = s.end_date && parseISO(s.end_date) < new Date(Date.now() + 7 * 86400000);
     return `<tr>
-      <td><strong>${esc(s.client.name)}</strong><div class="tiny muted">${esc(s.client.phone)}</div></td>
+      <td><a href="#" onclick="openClientDetail(${s.client_id}, 'subs');return false"><strong>${esc(s.client.name)}</strong></a><div class="tiny muted">${esc(s.client.phone)}</div></td>
       <td>${esc(s.plan.name)}</td>
-      <td style="min-width:140px"><div class="small">${s.sessions_used} / ${s.sessions_total} used · <strong>${s.sessions_remaining} left</strong></div><div class="progress"><div style="width:${pct}%"></div></div></td>
+      <td style="min-width:140px"><div class="small">${s.sessions_used} / ${s.sessions_total} used · <strong>${s.sessions_remaining} left</strong></div>${s.sessions_used_before ? `<div class="tiny muted">${s.sessions_booked} booked here + ${s.sessions_used_before} before</div>` : ''}<div class="progress"><div style="width:${pct}%"></div></div></td>
       <td class="small">${fmtDate(s.start_date)} → ${s.end_date ? fmtDate(s.end_date) : 'no expiry'}${expSoon && s.status === 'active' ? '<div class="tiny" style="color:var(--warn)">expires soon</div>' : ''}</td>
       <td class="num">${money(s.price_paid)}${s.discount_code ? `<div class="tiny" style="color:var(--good)">${esc(s.discount_code)} −${money(s.discount_amount)}</div>` : ''}${s.paid_amount < s.price_paid ? `<div class="tiny" style="color:var(--bad)">paid ${money(s.paid_amount)}</div>` : ''}</td>
       <td>${badge(s.status === 'active' ? 'active' : s.status === 'expired' ? 'expired' : 'neutral').replace('neutral', s.status)}</td>
@@ -55,6 +55,7 @@ async function savePlan() { guard(async () => { const id = val('plan-id'); const
 function deletePlan(id) { confirmBox('Delete plan', '<p>Delete this plan? If it has been sold it will be deactivated instead.</p>', 'Delete', async () => { const r = await api('DELETE', `/subscriptions/plans/${id}`); toast(r.detail); await refreshLookups(); loadPlans(); }, 'btn-danger'); }
 
 function openSubscriptionModal(id, clientId) {
+  $('subscription-used-help').textContent = 'Sessions already used before this package was added here. Bookings count on their own.';
   $('subscription-modal-title').textContent = 'Sell package';
   fillSelect('subscription-client', clientOptions(clientId)); fillSelect('subscription-plan', S.plans.filter(p => p.active).map(p => `<option value="${p.id}">${esc(p.name)} · ${money(p.price)}</option>`).join(''));
   ['subscription-id', 'subscription-end', 'subscription-total', 'subscription-price', 'subscription-notes', 'subscription-code'].forEach(i => setVal(i, ''));
@@ -75,7 +76,7 @@ async function editSubscription(id) {
   openSubscriptionModal(null, s.client_id); $('subscription-modal-title').textContent = 'Edit package';
   fillSelect('subscription-plan', S.plans.map(p => `<option value="${p.id}">${esc(p.name)} · ${money(p.price)}</option>`).join(''));
   setVal('subscription-id', s.id); setVal('subscription-plan', s.plan_id); setVal('subscription-start', dateKey(parseISO(s.start_date))); setVal('subscription-end', s.end_date ? dateKey(parseISO(s.end_date)) : '');
-  setVal('subscription-total', s.sessions_total); setVal('subscription-used', s.sessions_used); setVal('subscription-price', s.price_paid); setVal('subscription-status', s.status); setVal('subscription-notes', s.notes);
+  setVal('subscription-total', s.sessions_total); setVal('subscription-used', s.sessions_used); $('subscription-used-help').textContent = `${s.sessions_booked} booked in the system (cancelled ones don't count). Anything above that counts as used before.`; setVal('subscription-price', s.price_paid); setVal('subscription-status', s.status); setVal('subscription-notes', s.notes);
   $('subscription-payment-row').querySelector('.form-group').style.display = 'none'; $('subscription-notify-row').style.display = 'none'; $('subscription-discount-row').style.display = 'none';
 }
 async function saveSubscription() {
@@ -233,8 +234,8 @@ function payTab(t, el) { PAY.tab = t; document.querySelectorAll('#page-payments 
 function paymentsTable(list, compact) {
   if (!list.length) return '<div class="card empty">No payments.</div>';
   return `<div class="table-wrap"><table><thead><tr><th>Date</th>${compact ? '' : '<th>Client</th>'}<th>For</th><th>Method</th><th class="num">Amount</th><th></th></tr></thead><tbody>` + list.map(p => `<tr>
-    <td class="mono">${fmtDT(p.paid_at)}</td>${compact ? '' : `<td><strong>${esc(p.client.name)}</strong></td>`}
-    <td>${p.appointment_id ? '<span class="chip">session</span>' : p.subscription_id ? '<span class="chip">package</span>' : '<span class="chip">other</span>'} <span class="small muted">${esc(p.notes || '')}</span></td>
+    <td class="mono">${fmtDT(p.paid_at)}</td>${compact ? '' : `<td>${p.client ? `<a href="#" onclick="openClientDetail(${p.client_id}, 'pays');return false"><strong>${esc(p.client.name)}</strong></a>` : `<strong>${esc(PAY_SOURCES[p.source] || 'Other income')}</strong>`}</td>`}
+    <td>${p.appointment_id ? '<span class="chip">session</span>' : p.subscription_id ? '<span class="chip">package</span>' : p.source ? `<span class="chip">${esc(PAY_SOURCES[p.source] || p.source)}</span>` : '<span class="chip">other</span>'} <span class="small muted">${esc(p.notes || '')}</span></td>
     <td>${esc(p.method)}</td><td class="num bold">${money(p.amount)}</td>
     <td class="num"><button class="btn btn-ghost btn-xs" onclick="printInvoice(${p.id})">Invoice</button><button class="btn btn-ghost btn-xs" style="color:var(--bad)" onclick="deletePayment(${p.id})">Delete</button></td></tr>`).join('') + '</tbody></table></div>';
 }
@@ -334,10 +335,17 @@ function openPaymentModal(pre = {}) {
   setVal('payment-appointment', pre.appointment_id || ''); setVal('payment-subscription', pre.subscription_id || '');
   setVal('payment-amount', pre.amount !== undefined ? pre.amount : ''); setVal('payment-method', 'cash'); setVal('payment-date', todayKey()); setVal('payment-notes', pre.label || '');
   $('payment-for').textContent = pre.label ? `For: ${pre.label}` : 'Not linked to a specific session (e.g. deposit, retail, tip).';
+  setVal('payment-source', ''); $('payment-source').disabled = !!(pre.client_id || pre.appointment_id || pre.subscription_id); paySourceChanged();
   openModal('payment-modal');
 }
+function paySourceChanged() {
+  const other = !!val('payment-source'); $('payment-client-row').hidden = other;
+  if (other && !$('payment-source').disabled) $('payment-for').textContent = 'Income that is not from a client. Add who paid in Notes, e.g. "Instagram post for Brand X".';
+}
+const PAY_SOURCES = { social_media: 'Social media', ads: 'Advertising', other: 'Other income' };
 async function savePayment() { guard(async () => { const amt = parseFloat(val('payment-amount')); if (!amt || amt <= 0) throw new Error('Enter an amount');
-  await api('POST', '/payments/', { client_id: +val('payment-client'), appointment_id: val('payment-appointment') ? +val('payment-appointment') : null, subscription_id: val('payment-subscription') ? +val('payment-subscription') : null,
+  const source = val('payment-source') || null;
+  await api('POST', '/payments/', { client_id: source ? null : +val('payment-client'), source, appointment_id: val('payment-appointment') ? +val('payment-appointment') : null, subscription_id: val('payment-subscription') ? +val('payment-subscription') : null,
     amount: amt, method: val('payment-method'), paid_at: zonedToDate(val('payment-date'), timeKey(new Date())).toISOString(), notes: val('payment-notes') || null });
   closeModal('payment-modal'); toast('Payment recorded'); closeDrawer(); refreshCurrent(); }); }
 function deletePayment(id) { confirmBox('Delete payment', '<p>Remove this payment record?</p>', 'Delete', async () => { await api('DELETE', `/payments/${id}`); toast('Payment deleted'); refreshCurrent(); }, 'btn-danger'); }

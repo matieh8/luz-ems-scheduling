@@ -33,7 +33,6 @@ def link_online_booking_to_package(db: Session, appt: models.Appointment) -> Opt
     found = find_active_subscription(db, appt.client_id, appt.start_time)
     if found:
         appt.subscription_id, appt.price = found.id, 0.0
-        found.sessions_used += 1
     return found
 
 
@@ -136,8 +135,6 @@ def create_appointment(body: schemas.AppointmentCreate, request: Request, db: Se
         subscription_id=sub.id if sub else None, start_time=start, end_time=end,
         status="scheduled", price=price, notes=body.notes, source="admin", series_id=series_id,
     )
-    if sub:
-        sub.sessions_used += 1
     db.add(appt)
     db.commit()
     db.refresh(appt)
@@ -161,8 +158,6 @@ def create_appointment(body: schemas.AppointmentCreate, request: Request, db: Se
                 subscription_id=sub_i.id if sub_i else None, start_time=s_i, end_time=e_i,
                 status="scheduled", price=price_i, notes=body.notes, source="admin", series_id=series_id,
             ))
-            if sub_i:
-                sub_i.sessions_used += 1
             db.commit()
             created += 1
             last_start = s_i
@@ -211,8 +206,6 @@ def cancel_series(appointment_id: int, body: SeriesCancel, db: Session = Depends
         a.cancelled_at = now
         a.cancel_reason = body.reason
         a.cancelled_by = "admin"
-        if a.subscription and a.subscription.sessions_used > 0:
-            a.subscription.sessions_used -= 1
     db.commit()
     if rows and body.send_notification:
         try:
@@ -260,7 +253,7 @@ def update_appointment(appointment_id: int, body: schemas.AppointmentUpdate, req
 
 
 @router.post("/{appointment_id}/status", response_model=schemas.AppointmentResponse)
-def change_status(appointment_id: int, body: schemas.AppointmentStatusChange, db: Session = Depends(get_db)):
+def change_status(appointment_id: int, body: schemas.AppointmentStatusChange, request: Request, db: Session = Depends(get_db)):
     appt = db.query(models.Appointment).filter(models.Appointment.id == appointment_id).first()
     if not appt:
         raise HTTPException(status_code=404, detail="Appointment not found")
@@ -275,10 +268,7 @@ def change_status(appointment_id: int, body: schemas.AppointmentStatusChange, db
         appt.cancelled_at = now
         appt.cancel_reason = body.reason
         appt.cancelled_by = "admin"
-        if sub and sub.sessions_used > 0:
-            sub.sessions_used -= 1  # give the session back
-    if old == "cancelled" and new != "cancelled" and sub:
-        sub.sessions_used += 1  # re-booked: consume again
+    if old == "cancelled" and new != "cancelled":  # package use follows the status on its own
         appt.cancelled_at = None
         appt.cancel_reason = None
         appt.cancelled_by = None
@@ -297,6 +287,11 @@ def change_status(appointment_id: int, body: schemas.AppointmentStatusChange, db
     db.commit()
     db.refresh(appt)
 
+    if new in ("confirmed", "cancelled") and old != new:  # every device with notifications on hears about it
+        ident = getattr(request.state, "identity", None) or {}
+        from backend import push
+        push.notify(db, "booking", f"{appt.client.name} {new}" + (f" by {ident['name']}" if ident.get("name") else " by the studio"),
+                    notifications.push_line(appt, get_settings(db), with_client=False), url="/admin#calendar", tag=f"booking-{appt.id}")
     if new == "cancelled" and old != "cancelled" and body.send_notification:
         try:
             notifications.send_cancellation(db, appt)
@@ -310,8 +305,6 @@ def delete_appointment(appointment_id: int, db: Session = Depends(get_db)):
     appt = db.query(models.Appointment).filter(models.Appointment.id == appointment_id).first()
     if not appt:
         raise HTTPException(status_code=404, detail="Appointment not found")
-    if appt.subscription and appt.status != "cancelled" and appt.subscription.sessions_used > 0:
-        appt.subscription.sessions_used -= 1
     for p in appt.payments:
         p.appointment_id = None
     db.delete(appt)

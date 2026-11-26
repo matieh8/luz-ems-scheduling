@@ -102,8 +102,8 @@ def main():
                                        cancelled_by="client" if status == "cancelled" else None)
                 db.add(a)
                 db.flush()
-                if use_sub and status != "cancelled":
-                    sub.sessions_used += 1
+                if use_sub:
+                    db.expire(sub, ["appointments"])  # so sessions_used sees the new booking
                 if status == "completed" and price > 0 and random.random() < 0.9:
                     db.add(models.Payment(client_id=c.id, appointment_id=a.id, amount=price,
                                           method=random.choice(["cash", "card", "card", "transfer"]), paid_at=end + timedelta(minutes=5)))

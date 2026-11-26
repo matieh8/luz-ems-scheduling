@@ -314,6 +314,8 @@ def top_clients(from_date: Optional[date] = Query(None, alias="from"), to_date: 
                                                 models.Appointment.status == "completed").all()
     agg = {}
     for p in payments:
+        if not p.client:  # income not from a client
+            continue
         a = agg.setdefault(p.client_id, {"client_id": p.client_id, "name": p.client.name, "phone": p.client.phone,
                                          "spent": 0.0, "sessions": 0})
         a["spent"] += p.amount
@@ -341,8 +343,8 @@ def export_payments(from_date: Optional[date] = Query(None, alias="from"), to_da
     settings, tz, f, t, start, end = _range(db, from_date, to_date)
     payments = db.query(models.Payment).filter(models.Payment.paid_at >= start, models.Payment.paid_at < end)\
         .order_by(models.Payment.paid_at).all()
-    rows = [[to_local(p.paid_at, tz).strftime("%Y-%m-%d %H:%M"), p.client.name, p.client.phone, p.amount, p.method,
-             "session" if p.appointment_id else ("package" if p.subscription_id else "other"), p.notes or ""]
+    rows = [[to_local(p.paid_at, tz).strftime("%Y-%m-%d %H:%M"), p.client.name if p.client else "", p.client.phone if p.client else "", p.amount, p.method,
+             "session" if p.appointment_id else ("package" if p.subscription_id else (p.source or "other")), p.notes or ""]
             for p in payments]
     return _csv_response(rows, ["Date", "Client", "Phone", f"Amount ({settings.currency})", "Method", "For", "Notes"],
                          f"payments_{f}_{t}.csv")

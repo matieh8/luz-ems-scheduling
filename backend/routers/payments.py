@@ -9,6 +9,7 @@ from backend.tz import to_local, to_utc_naive, utcnow
 
 router = APIRouter(prefix="/api/payments", tags=["Payments"])
 METHODS = ("cash", "card", "transfer", "online", "other")
+SOURCES = {"social_media": "Social media", "ads": "Advertising / sponsorship", "other": "Other income"}
 
 
 @router.get("/{payment_id}/invoice")
@@ -37,7 +38,7 @@ def invoice_data(db: Session, p: models.Payment) -> dict:
         when = to_local(appt.start_time, s.timezone)
         lines = [{"description": f"{appt.service.name} session, {when:%d %b %Y %H:%M}", "amount": round(float(p.amount), 2)}]
     else:
-        lines = [{"description": p.notes or "Payment", "amount": round(float(p.amount), 2)}]
+        lines = [{"description": p.notes or SOURCES.get(p.source) or "Payment", "amount": round(float(p.amount), 2)}]
     paid_local = to_local(p.paid_at, s.timezone)
     return {
         "number": f"INV-{paid_local:%Y}-{p.id:05d}", "date": paid_local.strftime("%d %b %Y"),
@@ -72,13 +73,17 @@ def create_payment(body: schemas.PaymentCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Amount must be positive")
     if body.method not in METHODS:
         raise HTTPException(status_code=400, detail="Invalid payment method")
-    if not db.query(models.Client).filter(models.Client.id == body.client_id).first():
+    if body.client_id is None:
+        if body.source not in SOURCES or body.appointment_id or body.subscription_id:
+            raise HTTPException(status_code=400, detail="Choose a client, or where the income came from")
+    elif not db.query(models.Client).filter(models.Client.id == body.client_id).first():
         raise HTTPException(status_code=400, detail="Client not found")
     if body.appointment_id and not db.query(models.Appointment).filter(models.Appointment.id == body.appointment_id).first():
         raise HTTPException(status_code=400, detail="Appointment not found")
     p = models.Payment(client_id=body.client_id, appointment_id=body.appointment_id,
                        subscription_id=body.subscription_id, amount=body.amount, method=body.method,
-                       paid_at=to_utc_naive(body.paid_at) if body.paid_at else utcnow(), notes=body.notes)
+                       paid_at=to_utc_naive(body.paid_at) if body.paid_at else utcnow(), notes=body.notes,
+                       source=None if body.client_id else body.source)
     db.add(p)
     db.commit()
     db.refresh(p)

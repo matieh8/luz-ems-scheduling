@@ -110,7 +110,13 @@ async function saveBooking(force = false) {
     else toast(e.message, true);
   }
 }
-function refreshCurrent() { if (PAGES[S.page]) PAGES[S.page]().catch(() => {}); }
+function refreshCurrent() {
+  if (PAGES[S.page]) PAGES[S.page]().catch(() => {});
+  // A change made from an open client profile shows there at once, on the same tab.
+  if (typeof CD !== 'undefined' && CD && $('client-detail-modal').classList.contains('active')) {
+    const t = document.querySelector('#cd-body .tab.active'); openClientDetail(CD.client.id, t && t.dataset.t).catch(() => {});
+  }
+}
 
 /* ---------- session drawer ---------- */
 async function openAppointment(id) {

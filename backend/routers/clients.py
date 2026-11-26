@@ -46,9 +46,9 @@ def summarize(c: models.Client) -> dict:
     future = [a for a in appts if a.status in ("scheduled", "confirmed") and a.start_time >= now]
     no_shows = len([a for a in appts if a.status == "no_show"])
     outstanding = sum(a.balance_due for a in completed)
-    remaining = sum(s.sessions_remaining for s in c.subscriptions if s.status == "active")
     live = sorted([s for s in c.subscriptions if s.status == "active" and s.sessions_remaining > 0 and (s.end_date is None or s.end_date >= now)],
                   key=lambda s: s.end_date or datetime.max)  # same order the booking uses them
+    remaining = sum(s.sessions_remaining for s in live)  # expired packages can't be booked, so they don't count
     trainers = Counter(a.staff.name for a in appts if a.staff and a.status != "cancelled")
     data = schemas.ClientResponse.model_validate(c).model_dump()
     data.update(

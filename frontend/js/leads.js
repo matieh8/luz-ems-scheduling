@@ -55,8 +55,8 @@ function convertLead(id) {
     const r = await api('POST', `/leads/${id}/convert`); toast(`${r.client.name} is now a client`); await refreshLookups(); loadLeads(); openClientDetail(r.client.id);
   });
 }
-function deleteLead(id) {
-  if (!confirm('Delete this lead? This cannot be undone.')) return;
+async function deleteLead(id) {
+  if (!await ask('Delete this lead? This cannot be undone.')) return;
   guard(async () => { await api('DELETE', `/leads/${id}`); document.querySelectorAll('.modal-overlay.active').forEach(m => closeModal(m.id)); toast('Lead deleted'); loadLeads(); });
 }
 

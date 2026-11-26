@@ -1,6 +1,6 @@
 import json
 from collections import defaultdict
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from fastapi import APIRouter, Depends
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -125,6 +125,21 @@ def overview(db: Session = Depends(get_db)):
     sessions_today = db.query(func.count(models.Appointment.id)).filter(
         models.Appointment.start_time >= today_start, models.Appointment.start_time < today_end,
         models.Appointment.status != "cancelled").scalar() or 0
+    today_by_status = dict(db.query(models.Appointment.status, func.count(models.Appointment.id)).filter(
+        models.Appointment.start_time >= today_start, models.Appointment.start_time < today_end).group_by(models.Appointment.status).all())
+
+    # Upcoming: booked from now to 7 days ahead, and how many still need the client's confirmation
+    week_end = now + timedelta(days=7)
+    upcoming = dict(db.query(models.Appointment.status, func.count(models.Appointment.id)).filter(
+        models.Appointment.start_time >= now, models.Appointment.start_time < week_end,
+        models.Appointment.status.in_(("scheduled", "confirmed"))).group_by(models.Appointment.status).all())
+
+    # Leads: new this month (same span as the money KPIs), still open, and follow-ups due today or earlier
+    def new_leads(start, end):
+        return int(db.query(func.count(models.Lead.id)).filter(models.Lead.created_at >= start, models.Lead.created_at < end).scalar() or 0)
+    open_q = db.query(models.Lead).filter(models.Lead.status.in_(("new", "contacted", "trial_booked")))
+    leads_open = open_q.count()
+    follow_ups = open_q.filter(models.Lead.next_follow_up.isnot(None), models.Lead.next_follow_up <= today.isoformat()).count()
 
     # Packages
     subs = db.query(models.Subscription).all()
@@ -186,12 +201,18 @@ def overview(db: Session = Depends(get_db)):
             "profit": _kpi(round(rev - exp, 2), round(rev_prev - exp_prev, 2)),
             "active_clients": _kpi(ac, ac_prev),
             "sessions": {**_kpi(ses, ses_prev), "today": int(sessions_today)},
+            "leads": {**_kpi(new_leads(cur_start, cur_end), new_leads(prev_start, prev_end)), "open": leads_open, "follow_ups_due": follow_ups},
         },
+        "today_sessions": {"total": int(sessions_today), "done": int(today_by_status.get("completed", 0)),
+                           "no_show": int(today_by_status.get("no_show", 0)),
+                           "to_come": int(today_by_status.get("scheduled", 0) + today_by_status.get("confirmed", 0))},
+        "upcoming": {"count": int(sum(upcoming.values())), "unconfirmed": int(upcoming.get("scheduled", 0)), "days": 7},
+        "updated_at": now.replace(tzinfo=timezone.utc).isoformat(),
         "months": [months[p] for p in periods],
         "packages": {"active": len(active), "expiring": len(expiring), "ended": ended},
         "expiring_list": [{"id": s.id, "client_id": s.client_id, "client_name": s.client.name if s.client else "",
                            "plan": s.plan.name if s.plan else "", "remaining": s.sessions_remaining,
-                           "end_date": s.end_date.isoformat() if s.end_date else None} for s in expiring[:5]],
+                           "end_date": s.end_date.isoformat() if s.end_date else None} for s in expiring],
         "sessions_remaining": int(sessions_remaining),
         "due": {"count": len(unpaid), "amount": round(float(sum(a.balance_due for a in unpaid)), 2)},
         "top_services": top_services,

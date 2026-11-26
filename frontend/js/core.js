@@ -276,3 +276,9 @@ function askText(title, placeholder = '') {
     _askClosed(resolve, '');
   });
 }
+
+// Keyboard: Enter or Space on anything marked role="button" (cards, rows, tiles) works like a click.
+document.addEventListener('keydown', e => {
+  const t = e.target;
+  if ((e.key === 'Enter' || e.key === ' ') && t && t.getAttribute && t.getAttribute('role') === 'button' && !/^(BUTTON|A|INPUT|SELECT|TEXTAREA)$/.test(t.tagName)) { e.preventDefault(); t.click(); }
+});

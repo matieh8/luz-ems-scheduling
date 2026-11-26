@@ -610,3 +610,23 @@ body.modal-open { overflow: hidden; }
 .flatpickr-day.selected, .flatpickr-day.selected:hover, .flatpickr-monthSelect-month.selected { background: var(--accent); border-color: var(--accent); color: #fff; }
 .flatpickr-calendar { z-index: 600 !important; }
 input.flatpickr-input[readonly] { cursor: pointer; }
+/* Dashboard: live strip, "today at a glance" tiles */
+.dash-live { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--good); box-shadow: 0 0 0 3px var(--good-bg); }
+.pulse-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
+.pulse { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow); min-width: 0; transition: border-color .15s, transform .15s; }
+.pulse:hover, .pulse:focus-visible { border-color: var(--accent); transform: translateY(-1px); }
+.pulse-top { display: flex; align-items: center; gap: 8px; }
+.pulse-ico { width: 30px; height: 30px; border-radius: 9px; background: var(--accent-light); color: var(--accent); display: grid; place-items: center; flex-shrink: 0; }
+.pulse-ico svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.pulse-label { font-size: .78rem; color: var(--text-2); font-weight: 600; line-height: 1.2; }
+.pulse-value { font-size: 1.45rem; font-weight: 750; margin-top: 8px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pulse-sub { font-size: .74rem; color: var(--text-2); margin-top: 2px; }
+.pulse-sub .kpi-change { font-size: .7rem; padding: 1px 6px; }
+.pulse.bad .pulse-value { color: var(--bad); } .pulse.bad .pulse-ico { background: var(--bad-bg); color: var(--bad); }
+.pulse.warn .pulse-ico { background: var(--warn-bg); color: var(--warn); }
+.pulse-sub .warn { color: var(--warn); font-weight: 600; }
+.chart .lbl-now { font-weight: 700; fill: var(--text); }
+.kpi.clickable:focus-visible, .pulse:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 1200px) { .pulse-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .pulse-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } .pulse { padding: 12px; } .pulse-value { font-size: 1.25rem; } }

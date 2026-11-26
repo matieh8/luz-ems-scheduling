@@ -1347,3 +1347,37 @@ def test_offsite_backup_to_s3(client, monkeypatch):
     db.close()
     assert client.get("/api/backups/").json()["offsite"]["last_error"]
     assert client.put("/api/backups/offsite", json={"bucket": ""}).json()["configured"] is False
+
+
+def test_dashboard_live_kpis_match_the_database(client):
+    """Every dashboard number comes from the database: compare each with a direct count."""
+    from backend.database import SessionLocal
+    from backend import models
+    from backend.tz import utcnow
+    before = client.get("/api/dashboard/overview").json()
+    assert client.post("/api/leads/", json={"name": "Dash Lead", "phone": "0507770003", "source": "instagram",
+                                            "next_follow_up": "2000-01-01"}).status_code == 200
+    svc = [s for s in client.get("/api/services/").json() if s["price"]][0]
+    cid = client.post("/api/clients/", json={"name": "Dash Upcoming", "phone": "0507770004"}).json()["id"]
+    client.post("/api/appointments/", json={"client_id": cid, "service_id": svc["id"], "force": True,
+                                            "start_time": (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()})
+    d = client.get("/api/dashboard/overview").json()
+    k = d["kpis"]
+    assert k["leads"]["value"] == before["kpis"]["leads"]["value"] + 1
+    assert k["leads"]["open"] == before["kpis"]["leads"]["open"] + 1
+    assert k["leads"]["follow_ups_due"] == before["kpis"]["leads"]["follow_ups_due"] + 1
+    assert d["upcoming"]["count"] == before["upcoming"]["count"] + 1 and d["upcoming"]["unconfirmed"] >= 1
+    db = SessionLocal()
+    now = utcnow()
+    upcoming = db.query(models.Appointment).filter(models.Appointment.start_time >= now - timedelta(minutes=1),
+                                                   models.Appointment.start_time < now + timedelta(days=7),
+                                                   models.Appointment.status.in_(("scheduled", "confirmed"))).count()
+    assert abs(d["upcoming"]["count"] - upcoming) <= 1  # a booking may cross "now" between the two reads
+    t = d["today_sessions"]
+    assert t["total"] == k["sessions"]["today"] and t["done"] + t["to_come"] + t["no_show"] == t["total"]
+    unpaid = models.unpaid_sessions(db)
+    assert d["due"]["count"] == len(unpaid)
+    assert len(d["expiring_list"]) == d["packages"]["expiring"]
+    assert abs(k["profit"]["value"] - round(k["revenue"]["value"] - k["expenses"]["value"], 2)) < 0.01
+    assert d["updated_at"]
+    db.close()

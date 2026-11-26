@@ -18,7 +18,7 @@
     (function () { var t = 'auto'; try { t = localStorage.getItem('luz_theme') || 'auto'; } catch (e) {} document.documentElement.setAttribute('data-theme', t); })();</script>
   <link rel="stylesheet" href="/vendor/flatpickr/flatpickr.min.css?v=4.6.13">
   <link rel="stylesheet" href="/vendor/flatpickr/monthSelect.css?v=4.6.13">
-  <link rel="stylesheet" href="/css/app.css?v=24">
+  <link rel="stylesheet" href="/css/app.css?v=25">
 </head>
 <body>
   <a class="skip-link" href="#main-content" onclick="event.preventDefault(); document.getElementById('main-content').focus()">Skip to content</a>
@@ -71,16 +71,20 @@
       <!-- Dashboard -->
       <section id="page-dashboard" class="page">
         <div class="header dash-head">
-          <div><h2 id="dash-greeting">Dashboard</h2><div class="sub" id="dash-date"></div></div>
+          <div><h2 id="dash-greeting">Dashboard</h2><div class="sub" id="dash-date"></div>
+            <div class="tiny muted dash-live"><span class="live-dot" aria-hidden="true"></span><span id="dash-updated">Live data</span> <button class="btn btn-ghost btn-xs" onclick="loadDashboard()" aria-label="Refresh dashboard">↻ Refresh</button></div></div>
           <div class="actions">
             <button class="btn btn-primary" onclick="openBookingModal()">+ Book session</button>
             <button class="btn btn-secondary" onclick="openClientModal()">Add client</button>
             <button class="btn btn-secondary" onclick="openPaymentModal()">Record payment</button>
             <button class="btn btn-secondary" onclick="openSubscriptionModal()">Sell package</button>
+            <button class="btn btn-secondary" onclick="go('expenses'); setTimeout(addExpenseRow, 400)">Add expense</button>
+            <button class="btn btn-secondary" onclick="openLeadForm()">Add lead</button>
           </div>
         </div>
         <div id="dash-alerts"></div>
         <div class="kpis" id="dash-stats"></div>
+        <div class="pulse-grid mt" id="dash-pulse"></div>
         <div class="dash-row mt">
           <div class="card"><div class="card-title">Revenue &amp; profit <span class="legend" style="margin:0"><span style="--c:var(--series-1)">Revenue</span><span style="--c:var(--series-2)">Expenses</span><span style="--c:var(--text)">Profit</span></span></div><div id="dash-chart" class="chart"></div><div class="tiny muted" id="dash-chart-note"></div></div>
           <div class="card"><div class="card-title">Today's schedule <a href="#" class="small" onclick="go('calendar');return false">Calendar →</a></div><div id="dash-today"></div></div>
@@ -550,7 +554,7 @@
 
   <script src="/vendor/flatpickr/flatpickr.min.js?v=4.6.13"></script>
   <script src="/vendor/flatpickr/monthSelect.js?v=4.6.13"></script>
-  <script src="/js/core.js?v=10"></script>
+  <script src="/js/core.js?v=11"></script>
   <script src="/js/calendar.js?v=7"></script>
   <script src="/js/booking.js?v=6"></script>
   <script src="/js/clients.js?v=14"></script>
@@ -563,7 +567,7 @@
   <script src="/js/devices.js?v=3"></script>
   <script src="/js/leads.js?v=4"></script>
   <script src="/js/team.js?v=2"></script>
-  <script src="/js/dashboard.js?v=6"></script>
+  <script src="/js/dashboard.js?v=7"></script>
   <script>boot();</script>
 </body>
 </html>

@@ -8,6 +8,7 @@ How to restore: docs/RESTORE.md.
 import os
 import re
 import sqlite3
+import time
 import zipfile
 from datetime import datetime, timezone
 from typing import List, Optional
@@ -57,9 +58,13 @@ def _zip_photos(dest: str) -> bool:
 def make_backup() -> dict:
     """Copy the live database with SQLite's online backup (safe while the app is running), and zip the photos."""
     _ensure_dir()
-    stamp = f"{now_utc():%Y-%m-%d_%H%M%S}"
-    name = f"app-{stamp}.db"
-    dest = os.path.join(BACKUP_DIR, name)
+    while True:  # names are per second: never overwrite a backup made in the same second
+        stamp = f"{now_utc():%Y-%m-%d_%H%M%S}"
+        name = f"app-{stamp}.db"
+        dest = os.path.join(BACKUP_DIR, name)
+        if not os.path.exists(dest):
+            break
+        time.sleep(0.25)
     src = sqlite3.connect(DB_PATH)
     dst = sqlite3.connect(dest)
     try:

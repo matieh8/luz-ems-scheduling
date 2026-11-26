@@ -15,17 +15,21 @@ async function loadLeads() {
   const f = val('lead-status');
   let list = await api('GET', `/leads/${f && f !== 'open' ? '?status=' + f : ''}`);
   if (f === 'open') list = list.filter(l => ['new', 'contacted', 'trial_booked'].includes(l.status));
+  const today = todayKey(), open = l => !['won', 'lost'].includes(l.status), due = l => open(l) && l.next_follow_up && l.next_follow_up <= today;
+  // Due follow-ups first (oldest first), then the next ones by date, then the rest newest first
+  list.sort((a, b) => (due(b) - due(a)) || ((a.next_follow_up && open(a) ? 0 : 1) - (b.next_follow_up && open(b) ? 0 : 1))
+    || (a.next_follow_up || '').localeCompare(b.next_follow_up || '') || (b.created_at || '').localeCompare(a.created_at || ''));
   LEADS.list = list;
-  const today = todayKey();
-  $('leads-sub').textContent = `${list.length} lead${list.length === 1 ? '' : 's'}${f === 'open' ? ' to follow up' : ''}`;
+  const nDue = list.filter(due).length;
+  $('leads-sub').textContent = `${list.length} lead${list.length === 1 ? '' : 's'}${f === 'open' ? ' to follow up' : ''}${nDue ? ` · ${nDue} follow-up${nDue === 1 ? '' : 's'} due` : ''}`;
   $('leads-list').innerHTML = list.length ? `<div class="table-wrap"><table><thead><tr><th>Name</th><th>Source</th><th>Interested in</th><th>Status</th><th>Follow up</th><th></th></tr></thead><tbody>${list.map(l => `<tr>
     <td><strong>${esc(l.name)}</strong><div class="tiny muted">${esc(l.phone || '')}${l.email ? ' · ' + esc(l.email) : ''}</div></td>
     <td><span class="chip">${esc(l.source)}</span>${l.referred_by_name ? `<div class="tiny muted">by ${esc(l.referred_by_name)}</div>` : ''}</td>
-    <td class="small">${esc(l.interest || '')}${l.notes ? `<div class="tiny muted">${esc(l.notes)}</div>` : ''}</td>
+    <td class="small">${esc(l.interest || '')}${l.notes ? `<div class="tiny muted" title="${esc(l.notes)}">${esc(l.notes.trim().split('\n').pop())}</div>` : ''}</td>
     <td>${leadBadge(l.status)}${l.lost_reason ? `<div class="tiny muted">${esc(l.lost_reason)}</div>` : ''}</td>
-    <td class="small">${l.next_follow_up ? `<span style="${l.next_follow_up <= today && !['won', 'lost'].includes(l.status) ? 'color:var(--bad);font-weight:700' : ''}">${fmtKey(l.next_follow_up)}</span>` : '<span class="muted">—</span>'}</td>
+    <td class="small">${l.next_follow_up ? `<span style="${due(l) ? 'color:var(--bad);font-weight:700' : ''}">${fmtKey(l.next_follow_up)}</span>${due(l) ? ` <span class="chip chip-bad">${l.next_follow_up < today ? 'overdue' : 'today'}</span>` : ''}` : '<span class="muted">—</span>'}</td>
     <td class="num">${l.converted_client_id ? `<button class="btn btn-ghost btn-xs" onclick="openClientDetail(${l.converted_client_id})">Open client</button>`
-      : `<button class="btn btn-success btn-xs" onclick="convertLead(${l.id})">Make client</button><button class="btn btn-ghost btn-xs" onclick="openLeadForm(${l.id})">Edit</button>`}</td></tr>`).join('')}</tbody></table></div>`
+      : `<button class="btn btn-success btn-xs" onclick="convertLead(${l.id})">Make client</button><button class="btn btn-secondary btn-xs" onclick="logLeadContact(${l.id})">Log contact</button><button class="btn btn-ghost btn-xs" onclick="openLeadForm(${l.id})">Edit</button>`}</td></tr>`).join('')}</tbody></table></div>`
     : '<div class="card empty">No leads here. Add people who message or call you, so nobody slips through.</div>';
 }
 
@@ -39,7 +43,7 @@ function openLeadForm(id) {
     <div class="form-row"><div class="form-group"><label>Status</label><select id="ld-status" class="input">${Object.entries(LEAD_STATUS).map(([k, [, t]]) => `<option value="${k}" ${k === l.status ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
       <div class="form-group"><label>Next follow-up</label><input type="date" id="ld-next" class="input" value="${esc(l.next_follow_up || '')}"></div></div>
     <div class="form-group"><label>If lost, why?</label><input id="ld-lost" class="input" value="${esc(l.lost_reason || '')}" placeholder="e.g. too expensive, too far, no time"></div>
-    <div class="form-group"><label>Notes</label><input id="ld-notes" class="input" value="${esc(l.notes || '')}"></div>
+    <div class="form-group"><label>Notes</label><textarea id="ld-notes" class="input" style="min-height:70px">${esc(l.notes || '')}</textarea><div class="help">Use "Log contact" to add a dated line each time you speak to them.</div></div>
     ${id ? `<button class="btn btn-ghost btn-xs" style="color:var(--bad)" onclick="deleteLead(${id})">Delete lead</button>` : ''}`, 'Save', async () => {
     const body = { name: val('ld-name').trim(), phone: val('ld-phone').trim() || null, source: val('ld-source'), interest: val('ld-interest').trim() || null,
       status: val('ld-status'), next_follow_up: val('ld-next') || null, lost_reason: val('ld-lost').trim() || null, notes: val('ld-notes').trim() || null,
@@ -47,6 +51,21 @@ function openLeadForm(id) {
     if (!body.name) throw new Error('Enter a name');
     if (id) await api('PUT', `/leads/${id}`, body); else await api('POST', '/leads/', body);
     toast('Lead saved'); loadLeads();
+  });
+}
+// Every call or message is added as a dated line to the notes, with the next follow-up in one step.
+function logLeadContact(id) {
+  const l = LEADS.list.find(x => x.id === id); if (!l) return;
+  confirmBox(`Log contact: ${esc(l.name)}`, `${l.notes ? `<div class="lead-log">${esc(l.notes)}</div>` : ''}
+    <div class="form-row"><div class="form-group"><label>How</label><select id="lc-how" class="input"><option>Call</option><option>WhatsApp</option><option>Instagram</option><option>Visit</option><option>Email</option></select></div>
+      <div class="form-group"><label>Status now</label><select id="lc-status" class="input">${Object.entries(LEAD_STATUS).map(([k, [, t]]) => `<option value="${k}" ${k === (l.status === 'new' ? 'contacted' : l.status) ? 'selected' : ''}>${t}</option>`).join('')}</select></div></div>
+    <div class="form-group"><label>What happened</label><input id="lc-text" class="input" autofocus placeholder="e.g. Interested, wants to try after Eid"></div>
+    <div class="form-group"><label>Next follow-up</label><div style="display:flex;gap:6px;flex-wrap:wrap">${[[1, 'Tomorrow'], [3, 'In 3 days'], [7, 'In a week']].map(([d, t]) => `<button type="button" class="btn btn-secondary btn-sm" onclick="setVal('lc-next', addDays(todayKey(), ${d}))">${t}</button>`).join('')}
+      <input type="date" id="lc-next" class="input" style="max-width:180px" value="${addDays(todayKey(), 3)}"></div><div class="help">Leave empty for no reminder.</div></div>`, 'Save', async () => {
+    const text = val('lc-text').trim(); if (!text) throw new Error('Write what happened');
+    const line = `${fmtKey(todayKey())} · ${val('lc-how')}: ${text}`;
+    await api('PUT', `/leads/${id}`, { notes: (l.notes ? l.notes.trim() + '\n' : '') + line, status: val('lc-status'), next_follow_up: val('lc-next') || null });
+    toast('Contact logged'); loadLeads();
   });
 }
 function convertLead(id) {

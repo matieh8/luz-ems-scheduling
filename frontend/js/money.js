@@ -7,11 +7,23 @@ function subsTable(subs) {
     return `<tr>
       <td><a href="#" onclick="openClientDetail(${s.client_id}, 'subs');return false"><strong>${esc(s.client.name)}</strong></a><div class="tiny muted">${esc(s.client.phone)}</div></td>
       <td>${esc(s.plan.name)}</td>
-      <td style="min-width:140px"><div class="small">${s.sessions_used} / ${s.sessions_total} used · <strong>${s.sessions_remaining} left</strong></div>${s.sessions_used_before ? `<div class="tiny muted">${s.sessions_booked} booked here + ${s.sessions_used_before} before</div>` : ''}<div class="progress"><div style="width:${pct}%"></div></div></td>
+      <td style="min-width:140px"><div class="small">${s.sessions_used} / ${s.sessions_total} used · <strong>${s.sessions_remaining} left</strong></div><div class="tiny muted">${s.sessions_done} done${s.sessions_upcoming ? ` · ${s.sessions_upcoming} booked ahead` : ''}${s.sessions_used_before ? ` · ${s.sessions_used_before} before` : ''}</div><div class="progress"><div style="width:${pct}%"></div></div></td>
       <td class="small">${fmtDate(s.start_date)} → ${s.end_date ? fmtDate(s.end_date) : 'no expiry'}${expSoon && s.status === 'active' ? '<div class="tiny" style="color:var(--warn)">expires soon</div>' : ''}</td>
       <td class="num">${money(s.price_paid)}${s.discount_code ? `<div class="tiny" style="color:var(--good)">${esc(s.discount_code)} −${money(s.discount_amount)}</div>` : ''}${s.paid_amount < s.price_paid ? `<div class="tiny" style="color:var(--bad)">paid ${money(s.paid_amount)}</div>` : ''}</td>
       <td>${badge(s.status === 'active' ? 'active' : s.status === 'expired' ? 'expired' : 'neutral').replace('neutral', s.status)}</td>
-      <td class="num">${s.status !== 'renewed' && s.status !== 'cancelled' ? `<button class="btn btn-success btn-xs" onclick="renewFlow(${s.id})">Renew</button>` : ''}<button class="btn btn-ghost btn-xs" onclick="editSubscription(${s.id})">Edit</button>${s.paid_amount < s.price_paid ? `<button class="btn btn-ghost btn-xs" onclick="openPaymentModal({client_id:${s.client_id}, subscription_id:${s.id}, amount:${s.price_paid - s.paid_amount}, label:${jsArg(s.plan.name)}})">Pay</button>` : ''}<button class="btn btn-ghost btn-xs" style="color:var(--bad)" onclick="deleteSubscription(${s.id}, ${jsArg(s.plan.name)})">Delete</button></td></tr>`; }).join('') + '</tbody></table></div>';
+      <td class="num">${s.status !== 'renewed' && s.status !== 'cancelled' ? `<button class="btn btn-success btn-xs" onclick="renewFlow(${s.id})">Renew</button>` : ''}${s.status === 'active' ? `<button class="btn btn-ghost btn-xs" onclick="extendSubscription(${s.id}, ${jsArg(s.end_date)})">Extend</button>` : ''}<button class="btn btn-ghost btn-xs" onclick="editSubscription(${s.id})">Edit</button>${s.paid_amount < s.price_paid ? `<button class="btn btn-ghost btn-xs" onclick="openPaymentModal({client_id:${s.client_id}, subscription_id:${s.id}, amount:${s.price_paid - s.paid_amount}, label:${jsArg(s.plan.name)}})">Pay</button>` : ''}<button class="btn btn-ghost btn-xs" style="color:var(--bad)" onclick="deleteSubscription(${s.id}, ${jsArg(s.plan.name)})">Delete</button></td></tr>`; }).join('') + '</tbody></table></div>';
+}
+// Extend validity (holiday, illness, a goodwill gesture) without touching the sessions.
+function extendSubscription(id, end) {
+  const base = end ? dateKey(parseISO(end)) : todayKey();
+  confirmBox('Extend package', `<p class="small muted" style="margin-top:0">${end ? `Valid until <strong>${fmtKeyLong(base)}</strong> now.` : 'This package has no end date.'}</p>
+    <div class="form-group"><label>Add days</label><div style="display:flex;gap:6px;flex-wrap:wrap">${[7, 14, 30].map(d => `<button type="button" class="btn btn-secondary btn-sm" onclick="setVal('ext-days', ${d}); $('ext-new').textContent = fmtKeyLong(addDays('${base}', ${d}))">+${d}</button>`).join('')}
+    <input type="number" id="ext-days" class="input" style="width:100px" min="1" max="365" value="14" oninput="$('ext-new').textContent = this.value > 0 ? fmtKeyLong(addDays('${base}', +this.value)) : ''"></div>
+    <div class="help">New end date: <strong id="ext-new">${fmtKeyLong(addDays(base, 14))}</strong></div></div>`, 'Extend', async () => {
+    const d = parseInt(val('ext-days')); if (!d || d < 1) throw new Error('Enter the number of days');
+    await api('PUT', `/subscriptions/${id}`, { end_date: zonedToDate(addDays(base, d), '23:59').toISOString() });
+    toast(`Extended by ${d} days`); await refreshLookups(); refreshCurrent();
+  });
 }
 async function renewFlow(id) {
   const [subs, plans] = await Promise.all([api('GET', '/subscriptions/'), api('GET', '/subscriptions/plans?active_only=true')]);

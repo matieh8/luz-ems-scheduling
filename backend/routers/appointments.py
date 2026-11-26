@@ -36,6 +36,22 @@ def link_online_booking_to_package(db: Session, appt: models.Appointment) -> Opt
     return found
 
 
+def recheck_package(db: Session, appt: models.Appointment):
+    """Keep a session on its package only if the package can still cover it (sessions left, not ended by then);
+    otherwise move it to another usable package of the client, or make it pay-per-session. Never overdraws."""
+    sub = appt.subscription
+    if not sub:
+        return
+    others = sum(1 for a in sub.appointments if a.id != appt.id and a.status != "cancelled")
+    fits = int(sub.sessions_used_before or 0) + others < sub.sessions_total and (sub.end_date is None or sub.end_date >= appt.start_time)
+    if fits and sub.status == "active":
+        return
+    other = find_active_subscription(db, appt.client_id, appt.start_time)
+    other = other if other and other.id != sub.id else None
+    appt.subscription_id = other.id if other else None
+    appt.price = 0.0 if other else float(appt.service.price or 0)
+
+
 def may_force(request: Request) -> bool:
     """Only the owner and managers may book over a clash or outside opening hours."""
     ident = getattr(request.state, "identity", None) or {"role": "owner"}
@@ -256,6 +272,9 @@ def update_appointment(appointment_id: int, body: schemas.AppointmentUpdate, req
         new_sub = find_active_subscription(db, appt.client_id, appt.start_time)
         appt.subscription_id = new_sub.id if new_sub else None
         appt.price = 0.0 if new_sub else float(service.price or 0)
+    if appt.start_time != old_start and appt.status in ("scheduled", "confirmed"):
+        db.flush()
+        recheck_package(db, appt)  # moved past the package's end date: it can't use that package any more
     if (any(k in data for k in ("start_time", "service_id", "staff_id", "client_id")) or body.duration_minutes) \
             and appt.status in ("scheduled", "confirmed"):
         validate_slot(db, appt.start_time, appt.end_time, service, appt.staff_id, body.force, exclude_id=appt.id, client_id=appt.client_id)
@@ -286,6 +305,8 @@ def change_status(appointment_id: int, body: schemas.AppointmentStatusChange, re
         appt.cancel_reason = body.reason
         appt.cancelled_by = "admin"
     if old == "cancelled" and new != "cancelled":  # package use follows the status on its own
+        recheck_package(db, appt)  # the package may be full by now: never take it below zero
+        sub = appt.subscription
         appt.cancelled_at = None
         appt.cancel_reason = None
         appt.cancelled_by = None

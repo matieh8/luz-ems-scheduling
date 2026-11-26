@@ -4,6 +4,12 @@ const DASH_ICONS = {
   profit: '<path d="m22 7-8.5 8.5-5-5L2 17"/><path d="M16 7h6v6"/>',
   clients: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
   sessions: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 15l2 2 4-4"/>',
+  expenses: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/>',
+  today: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  upcoming: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M12 14v4M10 16h4"/>',
+  owed: '<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>',
+  expiring: '<path d="M5 22h14M5 2h14M17 22v-4.2a2 2 0 0 0-.6-1.4L12 12l-4.4 4.4a2 2 0 0 0-.6 1.4V22M7 2v4.2a2 2 0 0 0 .6 1.4L12 12l4.4-4.4a2 2 0 0 0 .6-1.4V2"/>',
+  leads: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/>',
 };
 const dashIcon = k => `<svg viewBox="0 0 24 24" aria-hidden="true">${DASH_ICONS[k]}</svg>`;
 
@@ -61,15 +67,17 @@ function trendChart(el, months) {
   svg += `<path d="${line(prof)}" fill="none" stroke="var(--text)" stroke-width="1.6" stroke-dasharray="5 4"/>`;
   rev.forEach(p => { svg += `<circle cx="${p[0]}" cy="${p[1]}" r="4" fill="var(--surface)" stroke="var(--series-1)" stroke-width="2.2"/>`; });
   months.forEach((m, i) => {
-    svg += `<text class="lbl" x="${x(i)}" y="${H - 9}" text-anchor="middle">${esc(monthLabel(m.period))}</text>`;
+    svg += `<text class="lbl${i === months.length - 1 ? ' lbl-now' : ''}" x="${x(i)}" y="${H - 9}" text-anchor="middle">${esc(monthLabel(m.period))}</text>`;
     svg += `<rect data-i="${i}" x="${padL + step * i}" y="${padT}" width="${step}" height="${ih}" fill="transparent"/>`;
   });
   el.innerHTML = svg + '</svg><div class="chart-tip"></div>';
   const tip = el.querySelector('.chart-tip');
   el.querySelectorAll('[data-i]').forEach(n => {
-    n.addEventListener('mousemove', e => { const m = months[+n.dataset.i]; const r = el.getBoundingClientRect();
+    const show = e => { const m = months[+n.dataset.i]; const r = el.getBoundingClientRect(), p = e.touches ? e.touches[0] : e;
       tip.innerHTML = `<strong>${esc(monthLabel(m.period, true))}</strong><br>Revenue: ${money(m.revenue)}<br>Expenses: ${money(m.expenses)}<br>Profit: ${money(m.profit)}<br>${m.sessions} session(s) done`;
-      tip.style.left = (e.clientX - r.left) + 'px'; tip.style.top = (e.clientY - r.top - 6) + 'px'; tip.style.display = 'block'; });
+      tip.style.left = Math.min(Math.max(p.clientX - r.left, 70), r.width - 70) + 'px'; tip.style.top = (p.clientY - r.top - 6) + 'px'; tip.style.display = 'block'; };
+    n.addEventListener('mousemove', show);
+    n.addEventListener('touchstart', show, { passive: true });  // phones: tap a month to see its numbers
     n.addEventListener('mouseleave', () => tip.style.display = 'none');
   });
 }
@@ -94,7 +102,7 @@ function rankList(rows, emptyText, kind) {
 async function loadDashboard() {
   const [d, o] = await Promise.all([api('GET', '/dashboard/'), api('GET', '/dashboard/overview')]);
   const k = o.kpis, m = o.months;
-  DASH_TODAY = o.today;
+  DASH_TODAY = o.today; DASH_O = o;
   $('dash-greeting').textContent = greeting();
   $('dash-date').textContent = `${fmtKeyLong(o.today)} · here is how ${monthLabel(o.today.slice(0, 7), true)} is going`;
   $('dash-alerts').innerHTML = d.alerts.map(a => `<div class="alert alert-${a.level}" onclick="${a.link ? `dismissAlert('${a.key}', '${a.link}')` : ''}">${esc(a.text)}<span style="margin-left:auto;display:flex;gap:14px;align-items:center;font-size:.8rem">${a.link ? '<span>View →</span>' : ''}<button class="alert-x" title="Dismiss" aria-label="Dismiss" onclick="event.stopPropagation();dismissAlert('${a.key}')">✕</button></span></div>`).join('');
@@ -102,10 +110,23 @@ async function loadDashboard() {
   const cmp = o.compare_label;
   $('dash-stats').innerHTML = [
     kpiCard({ open: "dashDetail('revenue')", icon: 'revenue', label: 'Revenue this month', value: money(k.revenue.value), pct: k.revenue.change_pct, compare: cmp, sub: cmp, spark: m.map(x => x.revenue) }),
-    kpiCard({ open: "dashDetail('profit')", icon: 'profit', label: 'Net profit', value: money(k.profit.value), pct: k.profit.change_pct, compare: cmp, sub: `after ${money(k.expenses.value)} expenses`, spark: m.map(x => x.profit) }),
+    kpiCard({ open: "dashDetail('expenses')", icon: 'expenses', label: 'Expenses this month', value: money(k.expenses.value), pct: k.expenses.change_pct, compare: cmp, sub: cmp, spark: m.map(x => x.expenses), invert: true }),
+    kpiCard({ open: "dashDetail('profit')", icon: 'profit', label: 'Net profit', value: money(k.profit.value), pct: k.profit.change_pct, compare: cmp, sub: 'revenue − expenses', spark: m.map(x => x.profit) }),
     kpiCard({ open: "dashDetail('clients')", icon: 'clients', label: 'Active clients', value: k.active_clients.value, pct: k.active_clients.change_pct, compare: 'vs the 30 days before', sub: 'booked in the last 30 days' }),
-    kpiCard({ open: "dashDetail('sessions')", icon: 'sessions', label: 'Sessions this month', value: k.sessions.value, pct: k.sessions.change_pct, compare: cmp, sub: `${k.sessions.today} today`, spark: m.map(x => x.sessions) }),
   ].join('');
+
+  // Today at a glance: each tile opens the list behind its number
+  const t = o.today_sessions, up = o.upcoming, lead = k.leads, plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+  $('dash-pulse').innerHTML = [
+    pulseTile({ open: "dashDetail('today')", icon: 'today', label: "Today's sessions", value: t.total, sub: t.total ? `${t.done} done · ${t.to_come} to come${t.no_show ? ` · ${t.no_show} no-show` : ''}` : 'nothing booked' }),
+    pulseTile({ open: "dashDetail('upcoming')", icon: 'upcoming', label: 'Upcoming bookings', value: up.count, sub: `next ${up.days} days${up.unconfirmed ? ` · <span class="warn">${up.unconfirmed} not confirmed</span>` : ''}` }),
+    pulseTile({ open: "dashDetail('sessions')", icon: 'sessions', label: 'Sessions this month', value: k.sessions.value, sub: `${changePill(k.sessions.change_pct, cmp)} ${esc(cmp)}` }),
+    pulseTile({ open: "dashDetail('owed')", icon: 'owed', label: 'Outstanding payments', value: money(o.due.amount), sub: o.due.count ? plural(o.due.count, 'unpaid session') : 'all paid up', tone: o.due.amount ? 'bad' : '' }),
+    pulseTile({ open: "dashDetail('expiring')", icon: 'expiring', label: 'Expiring packages', value: o.packages.expiring, sub: o.packages.expiring ? 'running low or ending soon' : 'none right now', tone: o.packages.expiring ? 'warn' : '' }),
+    pulseTile({ open: "setVal('lead-status', ''); go('leads')", icon: 'leads', label: 'New leads', value: lead.value, sub: `this month · ${lead.open} open${lead.follow_ups_due ? ` · <span class="warn">${plural(lead.follow_ups_due, 'follow-up')} due</span>` : ''}` }),
+  ].join('');
+  $('dash-updated').textContent = `Updated ${fmtTime(o.updated_at)} · refreshes every minute`;
+  dashAutoRefresh();
 
   trendChart($('dash-chart'), m);
   window._dashMonths = m;
@@ -130,7 +151,7 @@ async function loadDashboard() {
         <li class="clickable" onclick="go('subscriptions')"><span class="dot" style="background:var(--series-4)"></span>Running low / expiring<b>${pk.expiring}</b></li>
         <li class="clickable" onclick="go('subscriptions')"><span class="dot" style="background:var(--series-2)"></span>Ended, last 30 days<b>${pk.ended}</b></li>
       </ul></div>
-    ${o.expiring_list.length ? `<div class="pk-list"><div class="tiny muted bold" style="margin:6px 0">Follow up soon</div>${o.expiring_list.map(s => `<div class="pk-row" onclick="openClientDetail(${s.client_id}, 'subs')" role="button" tabindex="0"><div><strong>${esc(s.client_name)}</strong><div class="tiny muted">${esc(s.plan)}</div></div><div class="tiny" style="text-align:right">${s.remaining} left${s.end_date ? `<div class="muted">until ${fmtDate(s.end_date)}</div>` : ''}</div></div>`).join('')}</div>` : ''}`;
+    ${o.expiring_list.length ? `<div class="pk-list"><div class="tiny muted bold" style="margin:6px 0">Follow up soon</div>${o.expiring_list.slice(0, 5).map(s => `<div class="pk-row" onclick="openClientDetail(${s.client_id}, 'subs')" role="button" tabindex="0"><div><strong>${esc(s.client_name)}</strong><div class="tiny muted">${esc(s.plan)}</div></div><div class="tiny" style="text-align:right">${s.remaining} left${s.end_date ? `<div class="muted">until ${fmtDate(s.end_date)}</div>` : ''}</div></div>`).join('')}</div>` : ''}`;
 
   $('dash-top-services').innerHTML = rankList(o.top_services, 'No sessions booked this month yet.', 'service');
   $('dash-top-plans').innerHTML = rankList(o.top_plans, 'No packages sold this month yet.', 'plan');
@@ -154,7 +175,23 @@ async function dismissAlert(key, link) {
 }
 
 /* ---------- tap a box: the list behind its number ---------- */
-let DASH_TODAY = null;
+let DASH_TODAY = null, DASH_O = null, _dashTimer = null;
+function pulseTile({ icon, label, value, sub, open, tone }) {
+  return `<div class="pulse clickable${tone ? ' ' + tone : ''}" role="button" tabindex="0" onclick="${open}">
+    <div class="pulse-top"><span class="pulse-ico">${dashIcon(icon)}</span><span class="pulse-label">${esc(label)}</span></div>
+    <div class="pulse-value">${value}</div><div class="pulse-sub">${sub}</div></div>`;
+}
+// Live: reload the numbers every minute while the dashboard is on screen, and as soon as the tab comes back.
+function dashAutoRefresh() {
+  if (_dashTimer) return;
+  _dashTimer = setInterval(() => { if (S.page === 'dashboard' && !document.hidden && !document.querySelector('.modal-overlay.active, .drawer.active')) loadDashboard().catch(() => {}); }, 60000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && S.page === 'dashboard') loadDashboard().catch(() => {}); });
+}
+async function monthExpenses(y, mo, to) {
+  const ex = ((await api('GET', `/expenses/summary?year=${y}&month=${mo}`)).expenses || []).filter(e => parseISO(e.date) < to), outSum = ex.reduce((a, e) => a + e.amount, 0);
+  return [outSum, `<div class="section-label">Expenses · ${money(outSum)}</div>` + (ex.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Category</th><th class="num">Amount</th></tr></thead><tbody>${
+    ex.sort((a, b) => a.date < b.date ? 1 : -1).map(e => `<tr class="clickable" onclick="closeModal('detail-modal');go('expenses')"><td>${fmtDate(e.date)}</td><td>${expLogo(e.category)} ${esc(e.category)}${e.paid === false ? ' <span class="chip chip-bad">unpaid</span>' : ''}${e.notes ? `<div class="tiny muted">${esc(e.notes)}</div>` : ''}</td><td class="num bold">${money(e.amount)}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty small">No expenses.</div>')];
+}
 function showDetail(title, html) { $('detail-title').textContent = title; $('detail-body').innerHTML = html; openModal('detail-modal'); }
 async function dashDetail(kind, arg) {
   guard(async () => {
@@ -165,12 +202,27 @@ async function dashDetail(kind, arg) {
       const pays = await api('GET', `/payments/?${range}&limit=100000`), inSum = pays.reduce((a, p) => a + p.amount, 0);
       let html = `<div class="section-label">Money in · ${money(inSum)}</div>` + paymentsTable(pays);
       if (kind === 'profit') {
-        const ex = ((await api('GET', `/expenses/summary?year=${y}&month=${mo}`)).expenses || []).filter(e => parseISO(e.date) < to), outSum = ex.reduce((a, e) => a + e.amount, 0);
-        html = `<p class="mb">${money(inSum)} in − ${money(outSum)} expenses = <strong>${money(inSum - outSum)}</strong></p>` + html +
-          `<div class="section-label">Expenses · ${money(outSum)}</div>` + (ex.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Category</th><th class="num">Amount</th></tr></thead><tbody>${
-            ex.sort((a, b) => a.date < b.date ? 1 : -1).map(e => `<tr class="clickable" onclick="closeModal('detail-modal');go('expenses')"><td>${fmtDate(e.date)}</td><td>${expIcon(e.category)} ${esc(e.category)}${e.notes ? `<div class="tiny muted">${esc(e.notes)}</div>` : ''}</td><td class="num bold">${money(e.amount)}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty small">No expenses.</div>');
+        const [outSum, exHtml] = await monthExpenses(y, mo, to);
+        html = `<p class="mb">${money(inSum)} in − ${money(outSum)} expenses = <strong>${money(inSum - outSum)}</strong></p>` + html + exHtml;
       }
       return showDetail(`${kind === 'revenue' ? 'Revenue' : 'Net profit'} · ${label}`, html);
+    }
+    if (kind === 'expenses') { const [outSum, exHtml] = await monthExpenses(y, mo, to); return showDetail(`Expenses · ${label} (${money(outSum)})`, exHtml); }
+    if (kind === 'today' || kind === 'upcoming') {
+      const f = kind === 'today' ? zonedToDate(DASH_TODAY, '00:00') : new Date(), t2 = kind === 'today' ? zonedToDate(addDays(DASH_TODAY, 1), '00:00') : new Date(Date.now() + 7 * 864e5);
+      const list = (await api('GET', `/appointments/?from_date=${f.toISOString()}&to_date=${t2.toISOString()}&limit=5000`))
+        .filter(a => kind === 'today' ? a.status !== 'cancelled' : ['scheduled', 'confirmed'].includes(a.status)).sort((a, b) => a.start_time < b.start_time ? -1 : 1);
+      return showDetail(kind === 'today' ? `Today's sessions (${list.length})` : `Upcoming bookings · next 7 days (${list.length})`, list.length ? apptTable(list, { withDate: kind !== 'today' }) : '<div class="empty small">Nothing booked.</div>');
+    }
+    if (kind === 'owed') {
+      const list = await api('GET', '/appointments/?status=completed&unpaid=true&limit=2000');
+      return showDetail(`Outstanding payments (${money(list.reduce((a, x) => a + x.balance_due, 0))})`,
+        list.length ? apptTable(list.reverse(), { withDate: true }) + `<p class="small muted mt">Open a session to record its payment.</p>` : '<div class="empty small">Everything is paid up.</div>');
+    }
+    if (kind === 'expiring') {
+      const rows = (DASH_O && DASH_O.expiring_list) || [];
+      return showDetail(`Expiring packages (${rows.length})`, rows.length ? `<div class="table-wrap"><table><thead><tr><th>Client</th><th>Package</th><th class="num">Left</th><th>Ends</th></tr></thead><tbody>${
+        rows.map(s => `<tr class="clickable" onclick="openClientDetail(${s.client_id}, 'subs')"><td><div class="who">${avatar(s.client_name)}<strong>${esc(s.client_name)}</strong></div></td><td>${esc(s.plan)}</td><td class="num"><strong>${s.remaining}</strong></td><td>${s.end_date ? fmtDate(s.end_date) : '<span class="muted">no end date</span>'}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty small">No packages are running low or ending soon.</div>');
     }
     if (kind === 'sessions' || kind === 'service') {
       let list = await api('GET', `/appointments/?${range}&limit=5000`);

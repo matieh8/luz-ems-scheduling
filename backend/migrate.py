@@ -22,7 +22,26 @@ def _sql_type(col):
     return "TEXT"
 
 
+def _schema_changes_pending(inspector) -> bool:
+    """True when this start will alter an existing table (new column or a table rebuild below)."""
+    names = inspector.get_table_names()
+    for table in Base.metadata.sorted_tables:
+        if table.name in names:
+            existing = {c["name"] for c in inspector.get_columns(table.name)}
+            if any(col.name not in existing for col in table.columns):
+                return True
+    nullable = lambda t, c: {x["name"]: x["nullable"] for x in inspector.get_columns(t)}.get(c) if t in names else None
+    return nullable("payments", "client_id") is False or nullable("notification_logs", "appointment_id") is False
+
+
 def run_migrations():
+    inspector = inspect(engine)
+    if _schema_changes_pending(inspector):
+        # Never change a live database without a fresh copy to go back to. If the copy fails, the app doesn't
+        # start, so the deploy rolls back instead of migrating unprotected.
+        from backend.backups import make_backup
+        made = make_backup()
+        print(f"[migrate] backup before schema change: {made['name']}")
     Base.metadata.create_all(bind=engine)
     inspector = inspect(engine)
     added = []

@@ -12,4 +12,5 @@ if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1 && [ ! -d b
   (cd backend/whatsapp && npm install --omit=dev --no-audit --no-fund) || echo "[whatsapp-bridge] npm install failed; WhatsApp Web will be unavailable"
 fi
 source venv/bin/activate
-exec uvicorn backend.main:app --host 0.0.0.0 --port "${PORT:-8015}" --workers 1
+# Only nginx (on this machine) may reach the app; the port is never open to the internet directly.
+exec uvicorn backend.main:app --host "${HOST:-127.0.0.1}" --port "${PORT:-8015}" --workers 1

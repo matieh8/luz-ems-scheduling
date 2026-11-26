@@ -10,4 +10,5 @@ export WHATSAPP_BRIDGE_PORT="${WHATSAPP_BRIDGE_PORT:-8021}"
 export LUZ_DISABLE_WHATSAPP_BRIDGE="${LUZ_DISABLE_WHATSAPP_BRIDGE:-1}"
 source venv/bin/activate
 if [ "$1" = "--demo-data" ]; then python scripts/seed_demo.py; fi
-exec uvicorn backend.main:app --host 0.0.0.0 --port "${PORT:-8016}" --workers 1
+# Only nginx (on this machine) may reach the app; the port is never open to the internet directly.
+exec uvicorn backend.main:app --host "${HOST:-127.0.0.1}" --port "${PORT:-8016}" --workers 1

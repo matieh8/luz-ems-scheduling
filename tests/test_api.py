@@ -1542,3 +1542,64 @@ def test_online_booking_refuses_a_client_double_booking(client):
     assert client.post("/api/public/book", json={**body, "start_time": slots[0]["start_time"]}).status_code == 200
     r = client.post("/api/public/book", json={**body, "start_time": slots[0]["start_time"]})
     assert r.status_code == 409
+
+
+def test_package_balance_never_negative_and_never_double_counted(client):
+    """Completing, confirming and re-opening sessions use a package exactly once; a full package is never overdrawn."""
+    plan = client.post("/api/subscriptions/plans", json={"name": "Two Pack", "sessions_included": 2, "duration_days": 30, "price": 200}).json()
+    svc = client.post("/api/services/", json={"name": "Pack Check 20", "duration_minutes": 20, "buffer_minutes": 0, "price": 120}).json()
+    cid = client.post("/api/clients/", json={"name": "Balance Check", "phone": "0509990301"}).json()["id"]
+    sub = client.post("/api/subscriptions/", json={"client_id": cid, "plan_id": plan["id"], "payment_method": "cash", "send_notification": False}).json()
+    get = lambda: next(s for s in client.get(f"/api/subscriptions/?client_id={cid}").json() if s["id"] == sub["id"])
+    day = next_weekday_at(9, days_ahead=2)
+    book = lambda h, **kw: client.post("/api/appointments/", json={"client_id": cid, "service_id": svc["id"], "force": True, "send_notification": False,
+                                                                   "start_time": (day + timedelta(hours=h)).isoformat(), **kw})
+    a1, a2 = book(0).json(), book(1).json()
+    assert a1["subscription_id"] == a2["subscription_id"] == sub["id"]
+    s = get()
+    assert s["sessions_used"] == 2 and s["sessions_remaining"] == 0 and s["sessions_upcoming"] == 2 and s["sessions_done"] == 0
+    # Package full: the next booking pays per session, or is refused when the package is required
+    a3 = book(2).json()
+    assert a3["subscription_id"] is None and a3["price"] == svc["price"]
+    assert book(3, use_subscription=True).status_code == 400
+    # Completing (even twice) and confirming don't use another session
+    for _ in range(2):
+        client.post(f"/api/appointments/{a1['id']}/status", json={"status": "completed"})
+    client.post(f"/api/appointments/{a2['id']}/status", json={"status": "confirmed"})
+    s = get()
+    assert s["sessions_used"] == 2 and s["sessions_done"] == 1 and s["sessions_upcoming"] == 1 and s["sessions_remaining"] == 0
+    # Cancel one, rebook into the freed session, then re-open the cancelled one: it must not overdraw the package
+    client.post(f"/api/appointments/{a2['id']}/status", json={"status": "cancelled", "send_notification": False})
+    assert get()["sessions_remaining"] == 1
+    a4 = book(4).json()
+    assert a4["subscription_id"] == sub["id"] and get()["sessions_remaining"] == 0
+    back = client.post(f"/api/appointments/{a2['id']}/status", json={"status": "scheduled"}).json()
+    assert back["subscription_id"] is None and back["price"] == svc["price"]          # pays per session instead
+    s = get()
+    assert s["sessions_used"] == 2 and s["sessions_remaining"] == 0                     # never 3 of 2
+    # Editing can't make it impossible or negative
+    assert client.put(f"/api/subscriptions/{sub['id']}", json={"sessions_total": 1}).status_code == 400
+    assert client.put(f"/api/subscriptions/{sub['id']}", json={"sessions_used": 5}).status_code == 400
+    assert client.put(f"/api/subscriptions/{sub['id']}", json={"sessions_used": -1}).status_code == 422
+    assert client.put(f"/api/subscriptions/{sub['id']}", json={"sessions_total": 0}).status_code == 422
+    assert get()["sessions_total"] == 2                                                 # refused edits changed nothing
+    assert client.post("/api/subscriptions/plans", json={"name": "Bad", "sessions_included": 0, "price": 10}).status_code == 422
+    assert client.post("/api/subscriptions/plans", json={"name": "Bad", "sessions_included": 5, "price": -1}).status_code == 422
+    # Moving a booked session past the package's end date takes it off the package
+    end = (day + timedelta(days=5)).isoformat()
+    client.put(f"/api/subscriptions/{sub['id']}", json={"end_date": end})
+    moved = client.put(f"/api/appointments/{a4['id']}", json={"start_time": (day + timedelta(days=10)).isoformat(), "force": True,
+                                                               "send_notification": False}).json()
+    assert moved["subscription_id"] is None and get()["sessions_remaining"] == 1
+
+
+def test_lead_follow_ups_in_the_morning_summary(client):
+    from backend.database import SessionLocal
+    from backend import notifications
+    client.post("/api/leads/", json={"name": "Due Lead", "phone": "0509990401", "source": "instagram", "next_follow_up": "2000-01-02"})
+    db = SessionLocal()
+    try:
+        title, body = notifications.daily_summary(db)
+        assert "lead follow-up" in body
+    finally:
+        db.close()

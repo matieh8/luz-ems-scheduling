@@ -658,7 +658,10 @@ def daily_summary(db: Session):
     low = sum(1 for s in subs if s.sessions_remaining > 0 and (s.end_date is None or s.end_date >= now) and (
         s.sessions_remaining <= settings.subscription_low_threshold
         or (s.end_date and s.end_date <= now + timedelta(days=settings.subscription_expiry_notice_days))))
-    if not (today or unconfirmed or unpaid or low):
+    follow_ups = (db.query(models.Lead).filter(models.Lead.status.in_(("new", "contacted", "trial_booked")),
+                                               models.Lead.next_follow_up.isnot(None),
+                                               models.Lead.next_follow_up <= local_today(settings.timezone).isoformat()).count())
+    if not (today or unconfirmed or unpaid or low or follow_ups):
         return None
     n = len(today)
     title = f"Today: {n} session{'' if n == 1 else 's'}" if n else "Today: no sessions booked"
@@ -672,6 +675,8 @@ def daily_summary(db: Session):
         lines.append(f"{unpaid} unpaid session{'' if unpaid == 1 else 's'}")
     if low:
         lines.append(f"{low} package{'' if low == 1 else 's'} running low or expiring")
+    if follow_ups:
+        lines.append(f"{follow_ups} lead follow-up{'' if follow_ups == 1 else 's'} due")
     return title, " · ".join(lines)
 
 

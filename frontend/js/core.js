@@ -10,7 +10,9 @@ async function api(method, path, body) {
   if (res.status === 401) { showLogin(); throw new Error('Please sign in'); }
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    const err = new Error(typeof data.detail === 'string' ? data.detail : `Error ${res.status}`);
+    // Validation errors come as a list: show the field and the rule in plain words
+    const list = Array.isArray(data.detail) ? data.detail.map(d => `${String((d.loc || []).slice(-1)[0] || '').replace(/_/g, ' ')}: ${String(d.msg || '').replace(/^Value error, /, '')}`).join(' · ') : '';
+    const err = new Error(typeof data.detail === 'string' ? data.detail : list || `Error ${res.status}`);
     err.status = res.status; throw err;
   }
   return res.status === 204 ? null : res.json();

@@ -223,9 +223,9 @@ class ServiceResponse(ServiceBase):
 # ---------- Subscriptions ----------
 class SubscriptionPlanBase(BaseModel):
     name: str
-    sessions_included: int = 1
-    duration_days: Optional[int] = None
-    price: float
+    sessions_included: int = Field(1, ge=1, le=1000)
+    duration_days: Optional[int] = Field(None, ge=1, le=3650)
+    price: float = Field(..., ge=0)
     description: Optional[str] = None
     active: bool = True
 
@@ -236,9 +236,9 @@ class SubscriptionPlanCreate(SubscriptionPlanBase):
 
 class SubscriptionPlanUpdate(BaseModel):
     name: Optional[str] = None
-    sessions_included: Optional[int] = None
-    duration_days: Optional[int] = None
-    price: Optional[float] = None
+    sessions_included: Optional[int] = Field(None, ge=1, le=1000)
+    duration_days: Optional[int] = Field(None, ge=1, le=3650)
+    price: Optional[float] = Field(None, ge=0)
     description: Optional[str] = None
     active: Optional[bool] = None
 
@@ -254,9 +254,9 @@ class SubscriptionCreate(BaseModel):
     plan_id: int
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
-    sessions_total: Optional[int] = None
-    sessions_used: int = 0
-    price_paid: Optional[float] = None
+    sessions_total: Optional[int] = Field(None, ge=1, le=1000)
+    sessions_used: int = Field(0, ge=0)
+    price_paid: Optional[float] = Field(None, ge=0)
     status: str = "active"
     notes: Optional[str] = None
     payment_method: Optional[str] = "cash"  # records a payment for the sale; None = unpaid
@@ -335,9 +335,9 @@ class SubscriptionUpdate(BaseModel):
     plan_id: Optional[int] = None
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
-    sessions_total: Optional[int] = None
-    sessions_used: Optional[int] = None
-    price_paid: Optional[float] = None
+    sessions_total: Optional[int] = Field(None, ge=1, le=1000)
+    sessions_used: Optional[int] = Field(None, ge=0)
+    price_paid: Optional[float] = Field(None, ge=0)
     status: Optional[str] = None
     notes: Optional[str] = None
 
@@ -373,6 +373,8 @@ class SubscriptionResponse(BaseModel):
     sessions_remaining: int = 0
     sessions_booked: int = 0
     sessions_used_before: int = 0
+    sessions_done: int = 0        # completed or no-show
+    sessions_upcoming: int = 0    # booked ahead, still to happen
     paid_amount: float = 0.0
     model_config = ConfigDict(from_attributes=True)
 

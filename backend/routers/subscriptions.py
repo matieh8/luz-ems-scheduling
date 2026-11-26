@@ -197,6 +197,13 @@ def update_subscription(subscription_id: int, sub: schemas.SubscriptionUpdate, d
             data[k] = to_utc_naive(data[k])
     for key, value in data.items():
         setattr(db_sub, key, value)
+    if db_sub.sessions_total < db_sub.sessions_booked:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"{db_sub.sessions_booked} sessions are already booked on this package: "
+                                                    f"the total can't be lower. Cancel or move sessions first.")
+    if db_sub.sessions_used > db_sub.sessions_total:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Used can't be more than the total")
     db.commit()
     db.refresh(db_sub)
     return db_sub

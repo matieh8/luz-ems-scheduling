@@ -13,7 +13,12 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt
-      - run: python -m pytest -q tests
+      - name: Run tests
+        shell: bash
+        run: |  # failures also show as annotations on the run page
+          set -o pipefail
+          python -m pytest -q tests -rf --tb=short 2>&1 | tee pytest.log || {
+            grep -E '^(FAILED|ERROR)|^E ' pytest.log | head -30 | sed 's/^/::error ::/'; exit 1; }
 
   deploy:
     needs: test  # never deploy a build whose tests fail

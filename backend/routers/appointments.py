@@ -43,14 +43,14 @@ def may_force(request: Request) -> bool:
 
 
 def validate_slot(db: Session, start: datetime, end: datetime, service: models.Service,
-                  staff_id: Optional[int], force: bool, exclude_id: Optional[int] = None):
+                  staff_id: Optional[int], force: bool, exclude_id: Optional[int] = None, client_id: Optional[int] = None):
     settings = get_settings(db)
     if force:
         return
     ok, why = within_business_hours(db, start, end, settings.timezone)
     if not ok:
         raise HTTPException(status_code=409, detail=why)
-    conflict = check_conflicts(db, start, end, service, staff_id, exclude_id)
+    conflict = check_conflicts(db, start, end, service, staff_id, exclude_id, client_id)
     if conflict:
         raise HTTPException(status_code=409, detail=conflict)
 
@@ -85,11 +85,12 @@ def list_appointments(
 
 @router.get("/availability", response_model=schemas.AvailabilityResponse)
 def get_availability(service_id: int, day: date = Query(..., alias="date"), staff_id: Optional[int] = None,
-                     exclude_id: Optional[int] = None, db: Session = Depends(get_db)):
+                     exclude_id: Optional[int] = None, client_id: Optional[int] = None,
+                     minutes: Optional[int] = Query(None, ge=5, le=240), db: Session = Depends(get_db)):
     service = db.query(models.Service).filter(models.Service.id == service_id).first()
     if not service:
         raise HTTPException(status_code=404, detail="Service not found")
-    return availability(db, service, day, staff_id, public=False, exclude_id=exclude_id)
+    return availability(db, service, day, staff_id, public=False, exclude_id=exclude_id, client_id=client_id, minutes=minutes)
 
 
 @router.post("/", response_model=schemas.AppointmentResponse)
@@ -115,8 +116,9 @@ def create_appointment(body: schemas.AppointmentCreate, request: Request, db: Se
         raise HTTPException(status_code=400, detail="Trainer not found")
 
     start = to_utc_naive(body.start_time)
-    end = start + timedelta(minutes=service.duration_minutes)
-    validate_slot(db, start, end, service, body.staff_id, body.force)
+    length = timedelta(minutes=body.duration_minutes or service.duration_minutes)
+    end = start + length
+    validate_slot(db, start, end, service, body.staff_id, body.force, client_id=client.id)
 
     sub = None
     if body.use_subscription is not False:
@@ -145,9 +147,9 @@ def create_appointment(body: schemas.AppointmentCreate, request: Request, db: Se
         local0 = to_local(start, tz).replace(tzinfo=None)
         for i in range(1, count):
             s_i = local_to_utc(local0 + timedelta(weeks=i * interval), tz)
-            e_i = s_i + timedelta(minutes=service.duration_minutes)
+            e_i = s_i + length
             try:
-                validate_slot(db, s_i, e_i, service, body.staff_id, body.force)
+                validate_slot(db, s_i, e_i, service, body.staff_id, body.force, client_id=client.id)
             except HTTPException as ex:
                 skipped.append({"date": fmt_date(s_i, tz), "reason": str(ex.detail)})
                 continue
@@ -230,18 +232,33 @@ def update_appointment(appointment_id: int, body: schemas.AppointmentUpdate, req
     appt = db.query(models.Appointment).filter(models.Appointment.id == appointment_id).first()
     if not appt:
         raise HTTPException(status_code=404, detail="Appointment not found")
-    data = body.model_dump(exclude_unset=True, exclude={"send_notification", "force"})
-    old_start = appt.start_time
+    data = body.model_dump(exclude_unset=True, exclude={"send_notification", "force", "duration_minutes"})
+    old_start, old_length, old_service, old_client = appt.start_time, appt.end_time - appt.start_time, appt.service_id, appt.client_id
     if "start_time" in data and data["start_time"] is not None:
         data["start_time"] = to_utc_naive(data["start_time"])
+    if data.get("client_id") and not db.query(models.Client).filter(models.Client.id == data["client_id"]).first():
+        raise HTTPException(status_code=400, detail="Client not found")
     for k, v in data.items():
         setattr(appt, k, v)
     service = db.query(models.Service).filter(models.Service.id == appt.service_id).first()
     if not service:
         raise HTTPException(status_code=400, detail="Service not found")
-    appt.end_time = appt.start_time + timedelta(minutes=service.duration_minutes)
-    if any(k in data for k in ("start_time", "service_id", "staff_id")) and appt.status in ("scheduled", "confirmed"):
-        validate_slot(db, appt.start_time, appt.end_time, service, appt.staff_id, body.force, exclude_id=appt.id)
+    # Length: as given; else the new service's length when the service changed; else keep this booking's own length
+    if body.duration_minutes:
+        length = timedelta(minutes=body.duration_minutes)
+    elif appt.service_id != old_service:
+        length = timedelta(minutes=service.duration_minutes)
+    else:
+        length = old_length
+    appt.end_time = appt.start_time + length
+    if appt.client_id != old_client and appt.subscription_id:
+        # Moved to another client: the old client's package must not pay for it; use the new client's package if any
+        new_sub = find_active_subscription(db, appt.client_id, appt.start_time)
+        appt.subscription_id = new_sub.id if new_sub else None
+        appt.price = 0.0 if new_sub else float(service.price or 0)
+    if (any(k in data for k in ("start_time", "service_id", "staff_id", "client_id")) or body.duration_minutes) \
+            and appt.status in ("scheduled", "confirmed"):
+        validate_slot(db, appt.start_time, appt.end_time, service, appt.staff_id, body.force, exclude_id=appt.id, client_id=appt.client_id)
     db.commit()
     db.refresh(appt)
     if appt.start_time != old_start and body.send_notification and appt.status in ("scheduled", "confirmed"):

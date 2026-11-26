@@ -1,5 +1,5 @@
 /* Calendar: week / day / agenda views in the business time zone */
-const CAL = { view: 'week', anchor: todayKey(), hours: [], appts: [], blocks: [] };
+const CAL = { view: matchMedia('(max-width: 640px)').matches ? 'day' : 'week', anchor: todayKey(), hours: [], appts: [], blocks: [] };  // phones open on one day
 const ROW_MIN = 30, ROW_PX = 36;
 
 function calView(v) { CAL.view = v; document.querySelectorAll('#cal-view button').forEach(b => b.classList.toggle('active', b.dataset.v === v)); loadCalendar(); }
@@ -16,6 +16,7 @@ function calRange() {
 
 async function loadCalendar() {
   if (!CAL.hours.length) CAL.hours = await api('GET', '/settings/hours');
+  document.querySelectorAll('#cal-view button').forEach(b => b.classList.toggle('active', b.dataset.v === CAL.view));
   fillSelect('cal-staff', '<option value="">All trainers</option>' + S.staff.filter(s => s.active).map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join(''));
   const [from, to] = calRange();
   const staffId = val('cal-staff');
@@ -27,6 +28,11 @@ async function loadCalendar() {
   renderGrid(from, CAL.view === 'day' ? 1 : 7);
 }
 
+function calTrainerDay(key) {
+  const s = val('cal-staff') && S.staff.find(x => x.id == val('cal-staff')); if (!s || !s.work_hours) return undefined;
+  const [y, m, d] = key.split('-').map(Number), dow = (new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7;
+  return s.work_hours[dow];
+}
 function hoursFor(key) { const [y, m, d] = key.split('-').map(Number); const dow = (new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7; return CAL.hours.find(h => h.day_of_week === dow); }
 function hm(s) { const [h, m] = s.split(':').map(Number); return h * 60 + m; }
 
@@ -48,7 +54,8 @@ function renderGrid(from, days) {
   keys.forEach(k => {
     const h = hoursFor(k);
     html += `<div class="cal-col">`;
-    for (let r = 0; r < rows; r++) { const m = gridStart + r * ROW_MIN; const closed = !h || h.closed || m < hm(h.open_time) || m >= hm(h.close_time);
+    const tw = calTrainerDay(k);  // the filtered trainer's own hours that day
+    for (let r = 0; r < rows; r++) { const m = gridStart + r * ROW_MIN; const closed = !h || h.closed || m < hm(h.open_time) || m >= hm(h.close_time) || tw === null || (tw && (m < hm(tw[0]) || m >= hm(tw[1])));
       html += `<div class="cal-row ${m % 60 === 0 ? 'hour' : ''} ${closed ? 'closed' : ''}" onclick="openBookingModal(null, {date:'${k}', time:'${fmtMin24(m)}'})"></div>`; }
     CAL.blocks.filter(b => dateKey(parseISO(b.start_time)) <= k && dateKey(parseISO(b.end_time)) >= k).forEach(b => {
       const s = dateKey(parseISO(b.start_time)) < k ? gridStart : minOf(b.start_time), e = dateKey(parseISO(b.end_time)) > k ? gridEnd : minOf(b.end_time);

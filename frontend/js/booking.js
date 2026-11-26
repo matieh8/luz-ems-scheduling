@@ -22,7 +22,8 @@ async function openBookingModal(appointmentId, prefill = {}) {
     setVal('booking-client', clientLabel(a.client)); $('booking-client-group').style.display = 'none';
     setVal('booking-service', a.service_id); setVal('booking-staff', a.staff_id || ''); setVal('booking-notes', a.notes || '');
     setVal('booking-date', dateKey(parseISO(a.start_time))); setVal('booking-time', timeKey(parseISO(a.start_time))); setVal('booking-price', a.price);
-  }
+    setVal('booking-duration', Math.round((parseISO(a.end_time) - parseISO(a.start_time)) / 60000));
+  } else bookingServiceLength();
   bookingClientChanged(!appointmentId);
   openModal('booking-modal');
   bookingLoadSlots();
@@ -31,6 +32,7 @@ async function openBookingModal(appointmentId, prefill = {}) {
 async function bookingClientChanged(resetPrice = true) {
   const c = findClientByLabel(val('booking-client'));
   BK.clientId = BK.editing ? BK.editing.client_id : (c ? c.id : null);
+  bookingHistory(BK.clientId);
   const isNew = !BK.editing && !c && val('booking-client').trim().length > 0;
   $('new-client-fields').style.display = isNew ? 'grid' : 'none';
   $('booking-client-help').textContent = isNew ? 'New client will be created with this name.' : (c ? `${c.completed_appointments} past sessions · ${c.sessions_remaining} package sessions left` : '');
@@ -46,14 +48,30 @@ function bookingSubToggle() {
   const useSub = BK.sub && $('booking-use-sub').checked;
   setVal('booking-price', useSub ? 0 : (svc ? (svc.price || 0) : 0));
 }
-$('booking-service').addEventListener('change', () => { if (!BK.editing) bookingSubToggle(); });
+$('booking-service').addEventListener('change', () => { if (!BK.editing) bookingSubToggle(); bookingServiceLength(); bookingLoadSlots(); });
+// Length starts at the service's own length and can be changed for this one booking.
+function bookingServiceLength() {
+  const svc = S.services.find(s => s.id == val('booking-service'));
+  if (svc) { setVal('booking-duration', svc.duration_minutes); $('booking-duration-help').textContent = `${svc.name}: ${svc.duration_minutes} min${svc.buffer_minutes ? ` + ${svc.buffer_minutes} min buffer` : ''}`; }
+}
+// The client's record at a glance while booking: visits, no-shows, cancellations, next booking.
+async function bookingHistory(clientId) {
+  const box = $('booking-history'); box.innerHTML = ''; if (!clientId) return;
+  try {
+    const list = await api('GET', `/appointments/?client_id=${clientId}&limit=500`), now = new Date();
+    const n = s => list.filter(a => a.status === s).length, next = list.filter(a => ['scheduled', 'confirmed'].includes(a.status) && parseISO(a.start_time) > now).sort((a, b) => a.start_time < b.start_time ? -1 : 1)[0];
+    box.innerHTML = `<label>Client history</label><div class="small">${n('completed')} done · <span${n('no_show') ? ' style="color:var(--bad);font-weight:600"' : ''}>${n('no_show')} no-show</span> · ${n('cancelled')} cancelled</div>
+      <div class="tiny muted">${next ? 'Next: ' + fmtDateShort(next.start_time) + ' ' + fmtTime(next.start_time) : 'Nothing else booked'}</div>`;
+  } catch (e) { /* history is a hint only */ }
+}
 
 async function bookingLoadSlots() {
   const sid = val('booking-service'), date = val('booking-date'); if (!sid || !date) return;
   const staff = val('booking-staff');
   const box = $('booking-slots'); box.innerHTML = '<span class="muted small">Loading...</span>';
   try {
-    const av = await api('GET', `/appointments/availability?service_id=${sid}&date=${date}${staff ? '&staff_id=' + staff : ''}${BK.editing ? '&exclude_id=' + BK.editing.id : ''}`);
+    const mins = parseInt(val('booking-duration')) || '';
+    const av = await api('GET', `/appointments/availability?service_id=${sid}&date=${date}${staff ? '&staff_id=' + staff : ''}${BK.editing ? '&exclude_id=' + BK.editing.id : ''}${BK.clientId ? '&client_id=' + BK.clientId : ''}${mins ? '&minutes=' + mins : ''}`);
     BK.slots = av.slots;
     $('booking-slots-info').textContent = av.open ? `· open ${av.open_time}–${av.close_time}` : '· closed this day';
     if (!av.slots.length) { box.innerHTML = '<span class="muted small">Studio is closed. You can still type a time and save with override.</span>'; return; }
@@ -87,6 +105,8 @@ async function saveBooking(force = false) {
   const payload = { service_id: +val('booking-service'), staff_id: val('booking-staff') ? +val('booking-staff') : null,
     start_time: zonedToDate(date, time).toISOString(), notes: val('booking-notes') || null, price: parseFloat(val('booking-price')) || 0,
     send_notification: $('booking-notify').checked, force };
+  const svc = S.services.find(s => s.id === payload.service_id), mins = parseInt(val('booking-duration'));
+  if (mins && (BK.editing ? mins !== Math.round((parseISO(BK.editing.end_time) - parseISO(BK.editing.start_time)) / 60000) : svc && mins !== svc.duration_minutes)) payload.duration_minutes = mins;
   if (!BK.editing && +val('booking-repeat') > 0) { payload.repeat_interval_weeks = +val('booking-repeat'); payload.repeat_count = Math.min(Math.max(parseInt(val('booking-repeat-count')) || 2, 2), 52); }
   try {
     if (BK.editing) {
@@ -119,8 +139,18 @@ function refreshCurrent() {
 }
 
 /* ---------- session drawer ---------- */
+async function drawerHistory(a) {
+  try {
+    const list = (await api('GET', `/appointments/?client_id=${a.client_id}&limit=500`)).filter(x => x.id !== a.id).sort((x, y) => x.start_time < y.start_time ? 1 : -1);
+    const n = s => list.filter(x => x.status === s).length, past = list.filter(x => parseISO(x.start_time) <= new Date()).slice(0, 4);
+    const el = $('drawer-history'); if (!el) return;
+    el.innerHTML = `<div class="small">${n('completed')} done · <span${n('no_show') ? ' style="color:var(--bad);font-weight:600"' : ''}>${n('no_show')} no-show</span> · ${n('cancelled')} cancelled</div>${past.map(x =>
+      `<div class="tiny muted"><a href="#" onclick="openAppointment(${x.id});return false">${fmtDateShort(x.start_time)}</a> · ${esc(x.service.name)} · ${x.status.replace('_', ' ')}${x.late_minutes ? ` · ${x.late_minutes}m late` : ''}</div>`).join('')}`;
+  } catch (e) { /* hint only */ }
+}
 async function openAppointment(id) {
   const a = await api('GET', `/appointments/${id}`);
+  setTimeout(() => drawerHistory(a), 0);
   const logs = await api('GET', `/notifications/logs?limit=20&client_id=${a.client_id}`);
   const mine = logs.filter(l => l.appointment_id === a.id);
   const base = S.settings.public_base_url ? S.settings.public_base_url.replace(/\/$/, '') : location.origin;
@@ -129,7 +159,7 @@ async function openAppointment(id) {
   $('drawer-body').innerHTML = `
     <dl class="kv">
       <dt>Client</dt><dd><a href="#" onclick="closeDrawer();openClientDetail(${a.client_id});return false">${esc(a.client.name)}</a><div class="tiny muted">${esc(a.client.phone)}${a.client.email ? ' · ' + esc(a.client.email) : ''}</div></dd>
-      <dt>When</dt><dd>${fmtDateShort(a.start_time)}, ${fmtTime(a.start_time)} – ${fmtTime(a.end_time)}<div class="tiny muted">${relTime(a.start_time)} · ${a.service.duration_minutes} min</div></dd>
+      <dt>When</dt><dd>${fmtDateShort(a.start_time)}, ${fmtTime(a.start_time)} – ${fmtTime(a.end_time)}<div class="tiny muted">${relTime(a.start_time)} · ${Math.round((parseISO(a.end_time) - parseISO(a.start_time)) / 60000)} min</div></dd>
       <dt>Trainer</dt><dd>${a.staff ? esc(a.staff.name) : '<span class="muted">Unassigned</span>'}</dd>
       <dt>Price</dt><dd>${a.subscription_id ? '<span class="chip">Covered by package</span>' : money(a.price)}${!a.subscription_id && a.price > 0 ? ` · paid ${money(a.paid_amount)}${a.balance_due > 0 ? ` · <span style="color:var(--bad)">due ${money(a.balance_due)}</span>` : ' · <span style="color:var(--good)">settled</span>'}` : ''}</dd>
       ${a.status === 'completed' ? `<dt>Arrival</dt><dd>${a.late_minutes ? `<span style="color:var(--warn);font-weight:600">${a.late_minutes} min late</span>` : 'On time'} <a href="#" class="small" onclick="editLate(${a.id}, ${a.late_minutes || 0});return false">change</a></dd>` : ''}
@@ -137,6 +167,7 @@ async function openAppointment(id) {
       <dt>Booked via</dt><dd>${a.source === 'online' ? 'Online booking page' : 'Admin'} · ${fmtDate(a.created_at)}</dd>
       ${a.notes ? `<dt>Notes</dt><dd>${esc(a.notes)}</dd>` : ''}
       ${a.cancel_reason || a.cancelled_by ? `<dt>Cancelled</dt><dd>by ${esc(a.cancelled_by || 'admin')}${a.cancel_reason ? ': ' + esc(a.cancel_reason) : ''}</dd>` : ''}
+      <dt>History</dt><dd id="drawer-history"><span class="muted small">…</span></dd>
       <dt>Client link</dt><dd><input class="input input-sm" value="${esc(manageLink)}" readonly onclick="this.select()"><div class="tiny muted">Client can confirm or cancel from this link (sent in messages).</div></dd>
     </dl>
     ${(a.status === 'scheduled' || a.status === 'confirmed') ? `<div class="mt" style="display:flex;gap:6px;flex-wrap:wrap">

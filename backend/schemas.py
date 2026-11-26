@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 # ---------- Clients ----------
@@ -132,6 +132,25 @@ class StaffCreate(StaffBase):
     pass
 
 
+def _check_work_hours(v):
+    """{"0".."6": ["HH:MM", "HH:MM"] or None for a day off}; empty/None = follows the studio's hours."""
+    if not v:
+        return None
+    import re
+    out = {}
+    for k, day in v.items():
+        if k not in {str(i) for i in range(7)}:
+            raise ValueError("Days are 0 (Monday) to 6 (Sunday)")
+        if day is None:
+            out[k] = None
+            continue
+        if (not isinstance(day, (list, tuple)) or len(day) != 2
+                or not all(isinstance(x, str) and re.match(r"^([01]\d|2[0-3]):[0-5]\d$", x) for x in day) or day[0] >= day[1]):
+            raise ValueError("Each working day needs a start and end time, e.g. 09:00 to 17:00")
+        out[k] = [day[0], day[1]]
+    return out
+
+
 class StaffUpdate(BaseModel):
     name: Optional[str] = None
     phone: Optional[str] = None
@@ -141,6 +160,12 @@ class StaffUpdate(BaseModel):
     active: Optional[bool] = None
     commission_type: Optional[str] = Field(None, pattern="^(none|percent|per_session)$")
     commission_value: Optional[float] = Field(None, ge=0)
+    work_hours: Optional[dict] = None
+
+    @field_validator("work_hours")
+    @classmethod
+    def _hours(cls, v):
+        return _check_work_hours(v)
 
 
 class StaffAccount(BaseModel):
@@ -156,6 +181,7 @@ class StaffResponse(StaffBase):
     has_password: bool = False
     commission_type: Optional[str] = None
     commission_value: Optional[float] = None
+    work_hours: Optional[dict] = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -397,6 +423,7 @@ class AppointmentCreate(BaseModel):
     notes: Optional[str] = None
     use_subscription: Optional[bool] = None  # None = auto (use if the client has one)
     price: Optional[float] = None  # override service price
+    duration_minutes: Optional[int] = Field(None, ge=5, le=240)  # override the service length for this booking
     send_notification: bool = True
     force: bool = False  # admin override for conflicts / outside hours
     repeat_interval_weeks: int = 0  # 0 = single booking, 1 = weekly, 2 = every two weeks
@@ -408,6 +435,7 @@ class AppointmentUpdate(BaseModel):
     service_id: Optional[int] = None
     staff_id: Optional[int] = None
     start_time: Optional[datetime] = None
+    duration_minutes: Optional[int] = Field(None, ge=5, le=240)
     notes: Optional[str] = None
     price: Optional[float] = None
     late_minutes: Optional[int] = Field(None, ge=0, le=240)

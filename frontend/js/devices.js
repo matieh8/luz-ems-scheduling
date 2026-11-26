@@ -9,7 +9,7 @@ async function loadDevices() {
   el.innerHTML = list.length ? `<div class="table-wrap"><table><thead><tr><th>Device</th><th>Status</th><th>Service</th><th class="num">Maintenance</th><th></th></tr></thead><tbody>${list.map(d => {
     const [cls, label] = DEV_STATE[d.service_state] || DEV_STATE.no_schedule;
     return `<tr><td><strong>${esc(d.name)}</strong><div class="tiny muted">${[d.model, d.serial_number && 'S/N ' + d.serial_number, d.purchased_on && 'bought ' + fmtKey(d.purchased_on)].filter(Boolean).map(esc).join(' · ')}</div></td>
-      <td>${d.status === 'active' ? badge('active') : d.status === 'maintenance' ? '<span class="badge badge-queued">in repair</span>' : '<span class="badge badge-neutral">retired</span>'}</td>
+      <td>${d.status === 'active' ? badge('active') : d.status === 'maintenance' ? '<span class="badge badge-queued">in repair</span>' : '<span class="badge badge-neutral">retired</span>'}${d.needed_for_sessions ? '<div class="tiny muted">limits bookings</div>' : ''}</td>
       <td><span class="badge ${cls}">${label}</span><div class="tiny muted">${d.last_service_on ? 'last ' + fmtKey(d.last_service_on) : ''}${d.next_service_due ? ' · next ' + fmtKey(d.next_service_due) : ''}${d.service_every_days ? ` · every ${d.service_every_days} days` : ''}</div></td>
       <td class="num">${d.maintenance_count} · ${money(d.maintenance_cost)}</td>
       <td class="num"><button class="btn btn-success btn-xs" onclick="logMaintenance(${d.id})">Log service</button><button class="btn btn-ghost btn-xs" onclick="deviceHistory(${d.id})">History</button><button class="btn btn-ghost btn-xs" onclick="openDeviceForm(${d.id})">Edit</button></td></tr>`; }).join('')}</tbody></table></div>`
@@ -22,10 +22,11 @@ function openDeviceForm(id) {
     <div class="form-row"><div class="form-group"><label>Model</label><input id="dv-model" class="input" value="${esc(d.model || '')}"></div><div class="form-group"><label>Serial number</label><input id="dv-serial" class="input" value="${esc(d.serial_number || '')}"></div></div>
     <div class="form-row"><div class="form-group"><label>Bought on</label><input type="date" id="dv-bought" class="input" value="${esc(d.purchased_on || '')}"></div><div class="form-group"><label>Service every (days)</label><input type="number" min="1" id="dv-every" class="input" value="${d.service_every_days || ''}" placeholder="e.g. 90"></div></div>
     <div class="form-group"><label>Status</label><select id="dv-status" class="input"><option value="active">In use</option><option value="maintenance">In repair</option><option value="retired">Retired</option></select></div>
+    <label class="check mb"><input type="checkbox" id="dv-machine" ${id ? (d.needed_for_sessions ? 'checked' : '') : 'checked'}> Sessions need this machine (it limits how many sessions can run at the same time; machines in repair don't count)</label>
     <div class="form-group"><label>Notes</label><input id="dv-notes" class="input" value="${esc(d.notes || '')}"></div>
     ${id ? `<button class="btn btn-ghost btn-xs" style="color:var(--bad)" onclick="deleteDevice(${id})">Delete device</button>` : ''}`, 'Save', async () => {
     const body = { name: val('dv-name').trim(), model: val('dv-model').trim() || null, serial_number: val('dv-serial').trim() || null, purchased_on: val('dv-bought') || null,
-      service_every_days: val('dv-every') ? +val('dv-every') : null, status: val('dv-status'), notes: val('dv-notes').trim() || null };
+      service_every_days: val('dv-every') ? +val('dv-every') : null, status: val('dv-status'), notes: val('dv-notes').trim() || null, needed_for_sessions: $('dv-machine').checked };
     if (!body.name) throw new Error('Name is required');
     if (id) await api('PUT', `/devices/${id}`, body); else await api('POST', '/devices/', body);
     toast('Device saved'); loadDevices();

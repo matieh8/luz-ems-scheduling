@@ -40,3 +40,21 @@ async function loadTeamReport() {
       <tfoot><tr><td colspan="7"><strong>Total commission due</strong></td><td class="num"><strong>${money(r.total_commission)}</strong></td></tr></tfoot></table></div>`
     : '<div class="empty small">No trainers with sessions in this period.</div>';
 }
+
+/* Weekly working hours: the calendar and booking refuse times outside them. Empty = whenever the studio is open. */
+function staffHours(id) {
+  const s = S.staff.find(x => x.id === id); if (!s) return;
+  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], wh = s.work_hours || {};
+  const studio = i => (CAL.hours.find(h => h.day_of_week === i) || {});
+  confirmBox(`Working hours: ${esc(s.name)}`, `<p class="small muted" style="margin-top:0">Untick a day they don't work. Leave every day on "Studio hours" for no limits.</p>
+    <div class="wh">${days.map((d, i) => { const v = wh[i] === undefined ? 'studio' : wh[i] === null ? 'off' : 'set';
+      return `<div class="wh-row"><strong>${d}</strong><select id="wh-mode-${i}" class="input input-sm" onchange="whMode(${i})"><option value="studio">Studio hours</option><option value="set">Custom</option><option value="off">Day off</option></select>
+        <input type="time" id="wh-from-${i}" class="input input-sm" value="${v === 'set' ? wh[i][0] : (studio(i).open_time || '09:00')}"><input type="time" id="wh-to-${i}" class="input input-sm" value="${v === 'set' ? wh[i][1] : (studio(i).close_time || '18:00')}"></div>`; }).join('')}</div>`,
+    'Save', async () => {
+      const out = {};
+      for (let i = 0; i < 7; i++) { const m = val(`wh-mode-${i}`); if (m === 'off') out[i] = null; else if (m === 'set') { out[i] = [val(`wh-from-${i}`), val(`wh-to-${i}`)]; if (out[i][0] >= out[i][1]) throw new Error(`${days[i]}: the end must be after the start`); } }
+      await api('PUT', `/staff/${id}`, { work_hours: out }); toast('Working hours saved'); await refreshLookups(); loadCatalog();
+    });
+  days.forEach((_, i) => { setVal(`wh-mode-${i}`, wh[i] === undefined ? 'studio' : wh[i] === null ? 'off' : 'set'); whMode(i); });
+}
+function whMode(i) { const set = val(`wh-mode-${i}`) === 'set'; [`wh-from-${i}`, `wh-to-${i}`].forEach(id => { const el = $(id); el.disabled = !set; if (el._flatpickr) el._flatpickr.altInput.disabled = !set; }); }

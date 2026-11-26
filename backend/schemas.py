@@ -12,6 +12,8 @@ class ClientBase(BaseModel):
     date_of_birth: Optional[str] = None
     source: Optional[str] = None
     health_notes: Optional[str] = None
+    goals: Optional[str] = None
+    target_weight_kg: Optional[float] = Field(None, gt=0, lt=400)
     photo_consent: bool = False
     referred_by_client_id: Optional[int] = None
     referral_reward_given: bool = False
@@ -67,6 +69,8 @@ class ClientUpdate(BaseModel):
     date_of_birth: Optional[str] = None
     source: Optional[str] = None
     health_notes: Optional[str] = None
+    goals: Optional[str] = None
+    target_weight_kg: Optional[float] = Field(None, gt=0, lt=400)
     photo_consent: Optional[bool] = None
     referred_by_client_id: Optional[int] = None
     referral_reward_given: Optional[bool] = None
@@ -88,6 +92,7 @@ class PhotoResponse(BaseModel):
 
 class ClientResponse(ClientBase):
     photo_consent_at: Optional[datetime] = None
+    avatar: Optional[str] = None
     id: int
     created_at: datetime
     updated_at: datetime

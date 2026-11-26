@@ -8,32 +8,83 @@ const RISK = {
 };
 function riskBadge(c) { const r = RISK[c.risk] || RISK.new; return `<span class="badge ${r.cls}" title="${esc(r.tip)}">${r.label}</span>`; }
 
+const CL = { all: [], sort: 'name', dir: 1 };
+const CL_SORT = {  // column -> value to sort by
+  name: c => c.name.toLowerCase(), package: c => (c.package_name || '~').toLowerCase(), status: c => clientIsActive(c) ? 0 : 1,
+  left: c => c.sessions_remaining, ends: c => c.package_end || '9999', paid: c => c.total_spent, owed: c => c.outstanding,
+  last: c => c.last_visit || '',
+};
 async function loadClients() {
-  const q = val('client-search'); const inactive = $('client-inactive').checked; const risk = $('client-risk') ? val('client-risk') : '';
-  let clients = await api('GET', `/clients/?q=${encodeURIComponent(q)}${inactive ? '&include_inactive=true' : ''}`);
-  S.clients = clients.filter(c => c.active);
-  if (risk) clients = clients.filter(c => risk === 'attention' ? ['slipping', 'at_risk', 'lapsed'].includes(c.risk) : c.risk === risk);
-  $('clients-sub').textContent = `${clients.length} client${clients.length === 1 ? '' : 's'}`;
+  const q = val('client-search'), inactive = $('client-inactive').checked;
+  CL.all = await api('GET', `/clients/?q=${encodeURIComponent(q)}${inactive ? '&include_inactive=true' : ''}`);
+  S.clients = CL.all.filter(c => c.active);
+  const trainers = [...new Set(CL.all.map(c => c.main_trainer).filter(Boolean))].sort(), cur = val('client-trainer');
+  fillSelect('client-trainer', '<option value="">Any trainer</option>' + trainers.map(t => `<option ${t === cur ? 'selected' : ''}>${esc(t)}</option>`).join(''));
+  renderClients();
+}
+function sortClients(key) { CL.dir = CL.sort === key ? -CL.dir : (['paid', 'owed', 'left', 'last'].includes(key) ? -1 : 1); CL.sort = key; renderClients(); }
+function renderClients() {
+  const risk = val('client-risk'), status = val('client-status'), pkg = val('client-package'), trainer = val('client-trainer'), owes = $('client-owes').checked;
+  const in14 = c => c.package_end && (parseISO(c.package_end) - new Date()) < 14 * 864e5;
+  let clients = CL.all.filter(c => (!risk || (risk === 'attention' ? ['slipping', 'at_risk', 'lapsed'].includes(c.risk) : c.risk === risk))
+    && (!status || (status === 'active') === clientIsActive(c))
+    && (!pkg || (pkg === 'has' ? !!c.package_name : pkg === 'none' ? !c.package_name : in14(c)))
+    && (!trainer || c.main_trainer === trainer) && (!owes || c.outstanding > 0));
+  const f = CL_SORT[CL.sort] || CL_SORT.name;
+  clients.sort((a, b) => { const x = f(a), y = f(b); return (x < y ? -1 : x > y ? 1 : a.name.localeCompare(b.name)) * CL.dir; });
+  $('clients-sub').textContent = clients.length === CL.all.length ? `${clients.length} client${clients.length === 1 ? '' : 's'}` : `${clients.length} of ${CL.all.length} clients`;
   const div = $('clients-list');
-  if (!clients.length) { div.innerHTML = '<div class="card empty">No clients found.</div>'; return; }
-  div.innerHTML = `<table class="clients-table"><thead><tr><th>Client</th><th>Contact</th><th>Package</th><th>Status</th><th class="num">Sessions left</th><th>Package ends</th><th class="num">Paid</th><th class="num">Owed</th><th></th></tr></thead><tbody>` +
+  if (!clients.length) { div.innerHTML = '<div class="card empty">No clients match. Change the search or filters.</div>'; return; }
+  const th = (key, label, cls = '') => `<th class="${cls}" aria-sort="${CL.sort === key ? (CL.dir > 0 ? 'ascending' : 'descending') : 'none'}"><button class="th-sort${CL.sort === key ? ' on' : ''}" onclick="sortClients('${key}')">${label}<span aria-hidden="true">${CL.sort === key ? (CL.dir > 0 ? ' ▲' : ' ▼') : ' ↕'}</span></button></th>`;
+  div.innerHTML = `<table class="clients-table"><thead><tr>${th('name', 'Client')}<th>Contact</th>${th('package', 'Package')}${th('status', 'Status')}${th('left', 'Sessions left', 'num')}${th('ends', 'Package ends')}${th('last', 'Last visit')}${th('paid', 'Paid', 'num')}${th('owed', 'Owed', 'num')}<th></th></tr></thead><tbody>` +
     clients.map(c => { const soon = c.package_end && (parseISO(c.package_end) - new Date()) < 7 * 864e5; return `<tr class="clickable" onclick="openClientDetail(${c.id})">
-      <td><div class="who">${avatar(c.name)}<div><strong>${esc(c.name)}</strong>${c.health_notes ? ' <span class="chip chip-bad" title="' + esc(c.health_notes) + '">health</span>' : ''}<div class="tiny">${riskBadge(c)}</div></div></div></td>
+      <td><div class="who">${avatar(c.name, '', c)}<div><strong>${esc(c.name)}</strong>${c.health_notes ? ' <span class="chip chip-bad" title="' + esc(c.health_notes) + '">health</span>' : ''}<div class="tiny">${riskBadge(c)}</div></div></div></td>
       <td>${esc(c.phone)}<div class="tiny muted">${esc(c.email || '')}</div></td>
       <td>${c.package_name ? esc(c.package_name) : '<span class="muted">Pay per session</span>'}</td>
       <td>${clientStatus(c)}</td>
       <td class="num">${c.sessions_remaining ? `<strong>${c.sessions_remaining}</strong>` : '<span class="muted">—</span>'}</td>
       <td>${c.package_end ? `<span${soon ? ' style="color:var(--bad);font-weight:600"' : ''}>${fmtDate(c.package_end)}</span>` : '<span class="muted">—</span>'}</td>
+      <td>${c.last_visit ? `${fmtDate(c.last_visit)}<div class="tiny muted">${c.days_since_last}d ago</div>` : '<span class="muted">—</span>'}</td>
       <td class="num">${money(c.total_spent)}</td>
       <td class="num">${c.outstanding > 0 ? `<strong style="color:var(--bad)">${money(c.outstanding)}</strong>` : '<span class="muted">—</span>'}</td>
       <td class="num nowrap"><button class="btn btn-secondary btn-xs" onclick="event.stopPropagation();openClientDetail(${c.id})">View profile</button></td></tr>`; }).join('') + '</tbody></table>';
+  loadAvatars(div);
 }
 
 // Initials in a colour picked from the name: the same client always gets the same colour.
-function avatar(name, size = '') {
+function avatar(name, size = '', c = null) {
   const n = String(name || '?').trim(), hue = [...n].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) % 360, 7);
   const ini = n.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
-  return `<span class="avatar ${size}" style="--h:${hue}" aria-hidden="true">${esc(ini)}</span>`;
+  const img = c && c.avatar ? `<img data-avatar="${c.id}" data-v="${esc(c.avatar)}" alt="">` : '';
+  return `<span class="avatar ${size}" style="--h:${hue}" aria-hidden="true">${esc(ini)}${img}</span>`;
+}
+// Profile photos need the sign-in header, so they are fetched once and shown from memory.
+const _avatarURLs = {};
+async function loadAvatars(root) {
+  await Promise.all([...root.querySelectorAll('img[data-avatar]:not([src])')].map(async img => {
+    const k = img.dataset.avatar + '/' + img.dataset.v;
+    try {
+      if (!_avatarURLs[k]) { const r = await fetch(`${API}/clients/${img.dataset.avatar}/avatar?v=${encodeURIComponent(img.dataset.v)}`, { headers: { Authorization: `Bearer ${S.token}` } }); if (!r.ok) return; _avatarURLs[k] = URL.createObjectURL(await r.blob()); }
+      img.src = _avatarURLs[k];
+    } catch (e) { /* initials stay */ }
+  }));
+}
+async function pickAvatar(id, input) {
+  const f = input.files && input.files[0]; if (!f) return;
+  guard(async () => {
+    // Shrink to 512 px in the browser: a phone photo becomes ~60 KB and loads fast in the list.
+    const bmp = await createImageBitmap(f).catch(() => { throw new Error('This photo type cannot be read here. Use a JPG or PNG.'); });
+    const s = Math.min(1, 512 / Math.max(bmp.width, bmp.height)), cv = document.createElement('canvas');
+    cv.width = Math.round(bmp.width * s); cv.height = Math.round(bmp.height * s); cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height);
+    const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.85)), fd = new FormData(); fd.append('file', blob, 'avatar.jpg');
+    const r = await fetch(`${API}/clients/${id}/avatar`, { method: 'POST', headers: { Authorization: `Bearer ${S.token}` }, body: fd });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || 'Upload failed');
+    toast('Profile photo saved'); await refreshLookups(); refreshCurrent(); if (S.page === 'clients') loadClients();
+  });
+}
+async function removeAvatar(id) {
+  if (!await ask('Remove the profile photo?', 'Remove')) return;
+  guard(async () => { await api('DELETE', `/clients/${id}/avatar`); toast('Photo removed'); refreshCurrent(); if (S.page === 'clients') loadClients(); });
 }
 // Active = still coming: a package with sessions left, a booking ahead, or a visit in the last 30 days.
 function clientIsActive(c) { return c.active && (c.sessions_remaining > 0 || !!c.next_visit || (c.days_since_last !== null && c.days_since_last !== undefined && c.days_since_last <= 30)); }
@@ -76,7 +127,8 @@ async function openClientDetail(id, tab) {
   const r = RISK[c.risk] || RISK.new;
   $('cd-body').innerHTML = `<div class="cd-layout">
     <aside class="cd-side">
-      ${avatar(c.name, 'xl')}
+      ${avatar(c.name, 'xl', c)}
+      <div class="cd-photo-actions"><label class="btn btn-ghost btn-xs">${c.avatar ? 'Change photo' : 'Add photo'}<input type="file" accept="image/*" hidden onchange="pickAvatar(${c.id}, this)"></label>${c.avatar ? `<button class="btn btn-ghost btn-xs" onclick="removeAvatar(${c.id})">Remove</button>` : ''}</div>
       <h2 class="cd-name">${esc(c.name)}</h2>
       <div class="cd-badges">${clientStatus(c)} ${riskBadge(c)}</div>
       <div class="cd-contact">
@@ -88,7 +140,7 @@ async function openClientDetail(id, tab) {
       ${c.main_trainer ? `<div class="cd-staff">${avatar(c.main_trainer)}<div><div class="tiny muted">Coach</div><strong>${esc(c.main_trainer)}</strong></div></div>` : '<div class="tiny muted">No trainer yet</div>'}
       <div class="section-label">Client since</div>
       <div class="small">${fmtDate(c.created_at)}${c.source ? ' · ' + esc(c.source) : ''}</div>
-      ${c.health_notes ? `<div class="health-flag" style="margin-top:14px"><strong>Health &amp; restrictions</strong><div>${esc(c.health_notes)}</div></div>` : ''}
+      ${c.health_notes ? `<div class="health-flag" style="margin-top:14px"><strong>Injuries &amp; restrictions</strong><div>${esc(c.health_notes)}</div></div>` : `<div class="tiny muted" style="margin-top:14px">No injuries or restrictions recorded. <a href="#" onclick="editClient(${c.id});return false">Add</a></div>`}
     </aside>
     <div class="cd-main">
     <div class="tabs tabs-scroll">
@@ -99,6 +151,7 @@ async function openClientDetail(id, tab) {
       <button class="tab" data-t="subs" onclick="cdTab('subs', this)">Packages (${h.subscriptions.length})</button>
       <button class="tab" data-t="pays" onclick="cdTab('pays', this)">Payments (${h.payments.length})</button>
       <button class="tab" data-t="msgs" onclick="cdTab('msgs', this)">Messages (${h.messages.length})</button>
+      <button class="tab" data-t="activity" onclick="cdTab('activity', this)">Activity</button>
     </div>
     <div id="cd-overview" class="subpanel">
     <div class="grid grid-4 mb">
@@ -107,7 +160,9 @@ async function openClientDetail(id, tab) {
       <div class="stat clickable" role="button" tabindex="0" onclick="cdGo('subs')"><div class="stat-label">Package left</div><div class="stat-value">${c.sessions_remaining}</div><div class="stat-sub">sessions</div></div>
       <div class="stat clickable" role="button" tabindex="0" onclick="cdGo('appts')"><div class="stat-label">Regularity</div><div class="stat-value" style="font-size:1.1rem">${r.label}</div><div class="stat-sub">${c.days_since_last !== null && c.days_since_last !== undefined ? `last ${c.days_since_last}d ago` : 'no sessions yet'}${c.avg_gap_days ? ` · usually every ${Math.round(c.avg_gap_days)}d` : ''}</div></div>
     </div>
+    ${goalsCard(c, h.measurements)}
     ${bodyCards(h.measurements)}
+    ${attendanceCard(h.appointments)}
     <div class="section-label">Next sessions</div>
     ${upcoming.length ? apptTable(upcoming.slice(0, 3), { withDate: true }) : '<div class="empty small">Nothing booked.</div>'}
     <dl class="kv" style="margin-top:14px"><dt>Notifications</dt><dd>${[c.notify_whatsapp && 'WhatsApp', c.notify_sms && 'SMS', c.notify_email && 'Email'].filter(Boolean).join(', ') || 'none'}</dd>${c.date_of_birth ? `<dt>Birthday</dt><dd>${esc(c.date_of_birth)}</dd>` : ''}${c.notes ? `<dt>Notes</dt><dd>${esc(c.notes)}</dd>` : ''}</dl>
@@ -116,13 +171,76 @@ async function openClientDetail(id, tab) {
     <div id="cd-progress" class="subpanel">${progressPanel(h)}</div>
     <div id="cd-notes" class="subpanel">${notesPanel(h)}</div>
     <div id="cd-subs" class="subpanel">${cdAdd(`openSubscriptionModal(null, ${c.id})`, '+ Sell package')}${subsTable(h.subscriptions)}</div>
-    <div id="cd-pays" class="subpanel">${cdAdd(`openPaymentModal({client_id:${c.id}})`, '+ Record payment')}${paymentsTable(h.payments, true)}</div>
+    <div id="cd-pays" class="subpanel">${cdAdd(`openPaymentModal({client_id:${c.id}})`, '+ Record payment')}${unpaidBlock(h.appointments)}${paymentsTable(h.payments, true)}</div>
     <div id="cd-msgs" class="subpanel">${messagesTable(h.messages, true)}</div>
+    <div id="cd-activity" class="subpanel">${activityTimeline(h)}</div>
     </div></div>`;
   const start = document.querySelector(`#cd-body .tab[data-t="${tab || 'overview'}"]`);
   cdTab(tab || 'overview', start);
   $('cd-footer').innerHTML = `<div class="left"><button class="btn btn-secondary btn-sm" onclick="editClient(${c.id})">Edit</button><button class="btn btn-danger btn-sm" onclick="deleteClient(${c.id}, ${jsArg(c.name)})">Delete</button><button class="btn btn-secondary btn-sm" onclick="openCustomMessageModal(${c.id})">Message</button><button class="btn btn-secondary btn-sm" onclick="openClientLink(${c.id}, ${jsArg(c.name)})">Client link</button><button class="btn btn-secondary btn-sm" onclick="openPaymentModal({client_id:${c.id}})">Record payment</button><button class="btn btn-secondary btn-sm" onclick="openSubscriptionModal(null, ${c.id})">Sell package</button></div><button class="btn btn-primary" onclick="openBookingModal(null, {clientId:${c.id}})">Book session</button>`;
   openModal('client-detail-modal');
+  loadAvatars($('cd-body'));
+}
+function goalsCard(c, ms) {
+  const w = ms.find(m => m.weight_kg !== null && m.weight_kg !== undefined), first = [...ms].reverse().find(m => m.weight_kg !== null && m.weight_kg !== undefined);
+  let target = '';
+  if (c.target_weight_kg) {
+    if (!w) target = `<div class="small">Target weight <strong>${c.target_weight_kg} kg</strong> · add a check-in to track it</div>`;
+    else {
+      const left = +(w.weight_kg - c.target_weight_kg).toFixed(1), start = first.weight_kg, span = start - c.target_weight_kg;
+      const pct = span ? Math.max(0, Math.min(100, Math.round(100 * (start - w.weight_kg) / span))) : 100;
+      target = `<div class="small">Target <strong>${c.target_weight_kg} kg</strong> · now ${w.weight_kg} kg · ${left === 0 ? '<strong style="color:var(--good)">reached 🎉</strong>' : `<strong>${Math.abs(left)} kg</strong> to ${left > 0 ? 'lose' : 'gain'}`}</div>
+        <div class="progress mt" title="${pct}% of the way from ${start} kg"><div style="width:${pct}%"></div></div>`;
+    }
+  }
+  return `<div class="section-label">Training goals</div><div class="goal-card">${c.goals ? `<div class="goal-text">${esc(c.goals)}</div>` : `<div class="muted small">No goal written yet. <a href="#" onclick="editClient(${c.id});return false">Add one</a></div>`}${target}</div>`;
+}
+// Attendance: totals, plus the last 12 weeks as bars (done / no-show), newest on the right.
+function attendanceCard(appts) {
+  const now = new Date(), past = appts.filter(a => parseISO(a.start_time) <= now);
+  const n = s => past.filter(a => a.status === s).length, done = n('completed'), ns = n('no_show'), cx = n('cancelled'), late = past.filter(a => a.late_minutes > 0).length;
+  if (!past.length) return '';
+  const weeks = Array.from({ length: 12 }, (_, i) => { const end = new Date(now - (11 - i) * 7 * 864e5), start = new Date(end - 7 * 864e5);
+    const inW = past.filter(a => { const t = parseISO(a.start_time); return t > start && t <= end; }); return { d: inW.filter(a => a.status === 'completed').length, x: inW.filter(a => a.status === 'no_show').length, start }; });
+  const max = Math.max(1, ...weeks.map(w => w.d + w.x));
+  return `<div class="section-label">Attendance</div><div class="att">
+    <div class="att-stats"><div><strong>${done + ns ? Math.round(100 * done / (done + ns)) : 100}%</strong><span>attended</span></div><div><strong>${done}</strong><span>done</span></div>
+      <div><strong${ns ? ' style="color:var(--bad)"' : ''}>${ns}</strong><span>no-shows</span></div><div><strong>${cx}</strong><span>cancelled</span></div><div><strong>${late}</strong><span>late</span></div></div>
+    <div class="att-weeks" role="img" aria-label="Sessions per week, last 12 weeks">${weeks.map(w => `<div class="att-w" title="Week of ${w.start.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}: ${w.d} done${w.x ? `, ${w.x} no-show` : ''}">
+      <span class="x" style="height:${28 * w.x / max}px"></span><span class="d" style="height:${28 * w.d / max}px"></span></div>`).join('')}</div>
+    <div class="tiny muted">Last 12 weeks · green done, red no-show</div></div>`;
+}
+function unpaidBlock(appts) {
+  const due = appts.filter(a => a.balance_due > 0);
+  if (!due.length) return '';
+  return `<div class="alert alert-serious" style="cursor:default">Outstanding: <strong>${money(due.reduce((s, a) => s + a.balance_due, 0))}</strong> for ${due.length} session${due.length === 1 ? '' : 's'}</div>
+    <div class="table-wrap mb"><table><thead><tr><th>Session</th><th class="num">Price</th><th class="num">Due</th><th></th></tr></thead><tbody>${due.map(a => `<tr>
+      <td>${fmtDateShort(a.start_time)} ${fmtTime(a.start_time)}<div class="tiny muted">${esc(a.service.name)}</div></td><td class="num">${money(a.price)}</td><td class="num bold" style="color:var(--bad)">${money(a.balance_due)}</td>
+      <td class="num"><button class="btn btn-success btn-xs" onclick="openPaymentModal({client_id:${a.client_id}, appointment_id:${a.id}, amount:${a.balance_due}, label:${jsArg(a.service.name + ', ' + fmtDateShort(a.start_time))}})">Pay</button></td></tr>`).join('')}</tbody></table></div>`;
+}
+// Everything that happened with the client, newest first, grouped by month.
+function activityTimeline(h) {
+  const ev = [], add = (at, icon, text, sub, onclick) => at && ev.push({ at, icon, text, sub, onclick });
+  const now = new Date();
+  add(h.client.created_at, '👋', 'Became a client', h.client.source ? 'from ' + h.client.source : '');
+  h.appointments.forEach(a => add(a.start_time, { completed: '✅', no_show: '⛔', cancelled: '✖️' }[a.status] || '📅',
+    `${a.service.name} · ${parseISO(a.start_time) > now ? 'booked' : a.status.replace('_', ' ')}`, `${fmtTime(a.start_time)}${a.staff ? ' with ' + a.staff.name : ''}${a.cancel_reason ? ' · ' + a.cancel_reason : ''}`, `openAppointment(${a.id})`));
+  h.payments.forEach(p => add(p.paid_at, '💳', `Paid ${money(p.amount)}`, `${p.method}${p.notes ? ' · ' + p.notes : ''}`, `printInvoice(${p.id})`));
+  h.subscriptions.forEach(s => add(s.created_at, '📦', `Package: ${s.plan.name}`, `${s.sessions_total} sessions · ${money(s.price_paid)}`, "cdGo('subs')"));
+  h.measurements.forEach(m => add(m.measured_at, '📏', 'Check-in', [m.weight_kg && m.weight_kg + ' kg', m.body_fat_pct && m.body_fat_pct + '% fat', m.waist_cm && 'waist ' + m.waist_cm + ' cm'].filter(Boolean).join(' · '), "cdGo('progress')"));
+  (h.photos || []).forEach(p => add(p.taken_at, '📷', `Progress photo (${p.pose})`, p.notes || '', "cdGo('progress')"));
+  h.notes.forEach(n => add(n.created_at, n.kind === 'injury' ? '🩹' : '📝', NOTE_KINDS[n.kind] || 'Note', n.text || '', "cdGo('notes')"));
+  h.messages.forEach(m => add(m.created_at, '💬', `${(m.channel || '').replace(/^./, x => x.toUpperCase())}: ${(m.type || '').replace(/_/g, ' ')}`, m.status, "cdGo('msgs')"));
+  if (!ev.length) return '<div class="empty small">Nothing yet.</div>';
+  ev.sort((a, b) => parseISO(b.at) - parseISO(a.at));
+  let month = '', html = '<ol class="timeline">';
+  for (const e of ev) {
+    const m = parseISO(e.at).toLocaleDateString('en-GB', { timeZone: S.tz, month: 'long', year: 'numeric' });
+    if (m !== month) { month = m; html += `<li class="tl-month">${esc(m)}</li>`; }
+    html += `<li class="tl-item${e.onclick ? ' clickable' : ''}"${e.onclick ? ` role="button" tabindex="0" onclick="${e.onclick}"` : ''}><span class="tl-ico" aria-hidden="true">${e.icon}</span>
+      <div><div class="tl-text">${esc(e.text)}</div>${e.sub ? `<div class="tiny muted">${esc(e.sub)}</div>` : ''}</div><span class="tl-date tiny muted">${fmtDateShort(e.at)}</span></li>`;
+  }
+  return html + '</ol>';
 }
 function cdAdd(onclick, label) { return `<div class="cd-add"><button class="btn btn-secondary btn-sm" onclick="${onclick}">${label}</button></div>`; }
 function cdGo(t) { cdTab(t, document.querySelector(`#cd-body .tab[data-t="${t}"]`)); }
@@ -279,7 +397,7 @@ async function deleteNote(id, clientId) {
 /* ---------- add / edit ---------- */
 function openClientModal() {
   $('client-modal-title').textContent = 'Add client';
-  ['client-id', 'client-name', 'client-phone', 'client-email', 'client-notes', 'client-dob', 'client-health'].forEach(i => setVal(i, ''));
+  ['client-id', 'client-name', 'client-phone', 'client-email', 'client-notes', 'client-dob', 'client-health', 'client-goals', 'client-target'].forEach(i => setVal(i, ''));
   setVal('client-source', 'walk-in'); setVal('client-active', 'true');
   fillSelect('client-referrer', '<option value="">—</option>' + clientOptions()); setVal('client-referrer', '');
   $('client-nwa').checked = true; $('client-nsms').checked = false; $('client-nemail').checked = true;
@@ -291,6 +409,7 @@ async function editClient(id) {
   $('client-modal-title').textContent = 'Edit client';
   setVal('client-id', c.id); setVal('client-name', c.name); setVal('client-phone', c.phone); setVal('client-email', c.email); setVal('client-notes', c.notes);
   setVal('client-dob', c.date_of_birth); setVal('client-source', c.source || ''); setVal('client-active', String(c.active)); setVal('client-health', c.health_notes);
+  setVal('client-goals', c.goals); setVal('client-target', c.target_weight_kg);
   setVal('client-referrer', c.referred_by_client_id || '');
   $('client-nwa').checked = c.notify_whatsapp; $('client-nsms').checked = c.notify_sms; $('client-nemail').checked = c.notify_email;
 }
@@ -300,6 +419,7 @@ async function saveClient() {
     const payload = { name: val('client-name').trim(), phone: val('client-phone').trim(), email: val('client-email').trim() || null, notes: val('client-notes') || null,
       date_of_birth: val('client-dob') || null, source: val('client-source') || null, active: val('client-active') === 'true',
       health_notes: val('client-health').trim() || null,
+      goals: val('client-goals').trim() || null, target_weight_kg: val('client-target') ? parseFloat(val('client-target')) : null,
       referred_by_client_id: val('client-referrer') && +val('client-referrer') !== +id ? +val('client-referrer') : null,
       notify_whatsapp: $('client-nwa').checked, notify_sms: $('client-nsms').checked, notify_email: $('client-nemail').checked };
     if (!payload.name || !payload.phone) throw new Error('Name and phone are required');

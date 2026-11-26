@@ -172,6 +172,14 @@ async def lifespan(app: FastAPI):
                 prune_old()  # once a day, alongside the backup
         except Exception as e:
             print(f"[backup] failed: {e}")
+        db = SessionLocal()
+        try:
+            from backend import offsite
+            offsite.sync(db)  # copy the newest backup to S3 when one is set up
+        except Exception as e:
+            print(f"[offsite] error: {e}")
+        finally:
+            db.close()
 
     if os.environ.get("LUZ_DISABLE_JOBS") != "1":
         scheduler.add_job(tick, "interval", minutes=1, id="jobs", replace_existing=True)

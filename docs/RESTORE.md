@@ -26,3 +26,36 @@ Anything after the backup's time (new bookings and payments) has to be entered a
 ## Checking that backups can be restored
 
 The automated test `test_backup_restores_clients_payments_and_photos` makes a backup, restores the database copy into a new file, and checks that the client, their payment and their photo are all there. It runs with every change to the code.
+
+## Off-site copies (Amazon S3)
+
+Every new backup is also uploaded to your own S3 bucket, so losing the server does not lose the data.
+Set it up once (about 10 minutes, in the AWS console, signed in as yourself):
+
+1. **Bucket**: S3 → Create bucket. Name e.g. `luz-ems-backups-<something unique>` (lower case, no dots),
+   region `me-central-1` (UAE). Keep "Block all public access" **on** (the default). Encryption stays on (default).
+2. **Keep 90 days**: open the bucket → Management → Create lifecycle rule → apply to all objects →
+   "Expire current versions of objects" after 90 days.
+3. **Upload-only user**: IAM → Users → Create user `luz-ems-backup` (no console access) →
+   Permissions → Attach policies directly → Create policy → JSON:
+
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [{ "Effect": "Allow", "Action": "s3:PutObject",
+                     "Resource": "arn:aws:s3:::YOUR-BUCKET-NAME/luz-ems/*" }]
+   }
+   ```
+
+   The key can only add files under `luz-ems/`: it cannot read, list or delete anything, so even if it leaked,
+   nobody could take or wipe your backups with it.
+4. Open the user → Security credentials → Create access key → "Application running outside AWS".
+   Copy the Access key ID and Secret access key.
+5. In the app: Settings → Backups → Off-site copy (Amazon S3) → fill in the four fields → **Save and test**.
+   It uploads the newest backup at once; you should then see it in the bucket under `luz-ems/live/`.
+
+If an upload fails, the app tries again every hour and sends one phone notification.
+
+**Restoring from S3**: in the AWS console open the bucket → `luz-ems/live/` → pick the `app-….db` (and the
+`photos-….zip` with the same time) → Download, then follow "Restoring a backup" above, copying the file to
+`data/backups/` on the server first (e.g. `scp app-….db ubuntu@server:luz_ems_scheduling/data/backups/`).

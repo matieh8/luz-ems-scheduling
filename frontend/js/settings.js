@@ -6,11 +6,37 @@ async function loadBackups() {
   const r = await api('GET', '/backups/');
   const kb = n => n > 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`;
   box.innerHTML = `<div class="card-title">Backups <button class="btn btn-secondary btn-sm" id="bk-now" onclick="backupNow()">Back up now</button></div>
-    <p class="small muted" style="margin:0 0 10px">A full copy of the database is made automatically once a day; the newest ${r.keep} are kept on the server. They are on the same server as the app, so download one now and then and keep it somewhere safe (Google Drive, your laptop). Progress photos are saved alongside as a photos-….zip file. How to restore: see docs/RESTORE.md.</p>
+    <p class="small muted" style="margin:0 0 10px">A full copy of the database is made automatically once a day (and before every update that changes the database); the newest ${r.keep} are kept on the server. Progress photos are saved alongside as a photos-….zip file. How to restore: see docs/RESTORE.md.</p>
+    ${offsiteBox(r.offsite)}
     ${r.backups.length ? `<div class="table-wrap"><table class="plain"><thead><tr><th>Backup</th><th>Made</th><th class="num">Size</th><th></th></tr></thead><tbody>${r.backups.map((b, i) => `<tr>
       <td class="mono small">${esc(b.name)}${i === 0 ? ' <span class="chip">latest</span>' : ''}</td><td class="small">${fmtDT(b.created_at)}</td><td class="num small">${kb(b.size)}</td>
       <td class="num"><button class="btn btn-ghost btn-xs" onclick="downloadBackup(${jsArg(b.name)})">Download</button></td></tr>`).join('')}</tbody></table></div>`
       : '<div class="empty small">No backups yet. The first one is made within a minute of the server starting, or press Back up now.</div>'}`;
+}
+// Off-site copy: every new backup also goes to the owner's Amazon S3 bucket, so losing the server doesn't lose the data.
+function offsiteBox(o) {
+  const state = !o.configured ? '<span class="badge badge-queued">Not set up: backups are only on this server</span>'
+    : o.last_error ? `<span class="badge badge-no_show">Last upload failed</span> <span class="small" style="color:var(--bad)">${esc(o.last_error)}</span>`
+    : `<span class="badge badge-active">On</span> <span class="small muted">last copy ${esc(o.last_uploaded || '')}${o.last_uploaded_at ? ' · ' + fmtDT(o.last_uploaded_at) : ''} → ${esc(o.folder || '')}</span>`;
+  return `<details class="add-box mb" ${o.configured ? '' : 'open'}><summary>Off-site copy (Amazon S3) · ${o.configured ? (o.last_error ? 'needs attention' : 'on') : 'off'}</summary>
+    <div class="mb">${state}</div>
+    <div class="form-row"><div class="form-group"><label>Bucket name</label><input id="s3-bucket" class="input" autocomplete="off" placeholder="luz-ems-backups" value="${esc(o.bucket || '')}"></div>
+      <div class="form-group"><label>Region</label><input id="s3-region" class="input" autocomplete="off" placeholder="me-central-1" value="${esc(o.region || '')}"></div></div>
+    <div class="form-row"><div class="form-group"><label>Access key ID</label><input id="s3-key" class="input mono" autocomplete="off" placeholder="AKIA…" value="${esc(o.access_key_id || '')}"></div>
+      <div class="form-group"><label>Secret access key</label><input id="s3-secret" class="input mono" type="password" autocomplete="new-password" placeholder="${o.secret_set ? 'saved · leave empty to keep' : ''}"></div></div>
+    <div class="help mb">Use a key that can only upload to this bucket. Saving uploads the newest backup straight away to prove it works; after that every new backup is sent automatically.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary btn-sm" id="s3-save" onclick="saveOffsite()">Save and test</button>
+      ${o.configured ? '<button class="btn btn-ghost btn-sm" style="color:var(--bad)" onclick="saveOffsite(true)">Turn off</button>' : ''}</div></details>`;
+}
+async function saveOffsite(off) {
+  guard(async () => {
+    if (off && !await ask('Stop sending backups to Amazon S3? Copies already there stay.', 'Turn off')) return;
+    $('s3-save').disabled = true;
+    try {
+      const body = off ? { bucket: '' } : { bucket: val('s3-bucket'), region: val('s3-region'), access_key_id: val('s3-key'), secret_access_key: val('s3-secret') || null };
+      await api('PUT', '/backups/offsite', body); toast(off ? 'Off-site copies turned off' : 'Saved. The newest backup is now in your S3 bucket.');
+    } finally { loadBackups(); }
+  });
 }
 async function backupNow() {
   guard(async () => { $('bk-now').disabled = true; try { const b = await api('POST', '/backups/'); toast(`Backup made: ${b.name}`); } finally { loadBackups(); } });

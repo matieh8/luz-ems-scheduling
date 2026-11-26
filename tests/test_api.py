@@ -1308,3 +1308,42 @@ def test_income_without_a_client(client):
     a = client.post("/api/appointments/", json={"client_id": cid, "service_id": svc["id"], "force": True,
                                                 "start_time": next_weekday_at(12, 6).isoformat()}).json()
     assert client.post(f"/api/appointments/{a['id']}/status", json={"status": "confirmed"}).json()["status"] == "confirmed"
+
+
+def test_offsite_backup_to_s3(client, monkeypatch):
+    """Saving S3 details uploads the newest backup at once (signed PUT); failures are kept and retried hourly."""
+    from backend import offsite
+    from backend.database import SessionLocal
+    from backend import models
+    sent = []
+
+    class Resp:
+        def __init__(self, code, text=""):
+            self.status_code, self.text = code, text
+    monkeypatch.setattr(offsite.requests, "put", lambda url, data, headers, timeout: (sent.append((url, headers)), Resp(200))[1])
+    assert client.put("/api/backups/offsite", json={"bucket": "Bad.Bucket", "region": "me-central-1", "access_key_id": "AKIAEXAMPLE1234567", "secret_access_key": "x"}).status_code == 400
+    body = {"bucket": "luz-test-backups", "region": "me-central-1", "access_key_id": "AKIAEXAMPLE1234567", "secret_access_key": "test-secret"}
+    r = client.put("/api/backups/offsite", json=body)
+    assert r.status_code == 200, r.text
+    st = r.json()
+    assert st["configured"] and st["secret_set"] and st["last_uploaded"] and "secret_access_key" not in st
+    url, headers = sent[0]
+    assert url.startswith("https://luz-test-backups.s3.me-central-1.amazonaws.com/luz-ems/") and url.endswith(".db")
+    assert headers["authorization"].startswith("AWS4-HMAC-SHA256 Credential=AKIAEXAMPLE1234567/") and "/me-central-1/s3/aws4_request" in headers["authorization"]
+    assert "s3_secret_access_key" not in client.get("/api/settings/").text  # never sent back
+    # Nothing new: sync does nothing. A new backup: sync uploads it.
+    db = SessionLocal()
+    n = len(sent); offsite.sync(db); assert len(sent) == n
+    client.post("/api/backups/")
+    offsite.sync(db); assert len(sent) > n
+    # S3 refuses: the error is kept, and the next try waits an hour
+    monkeypatch.setattr(offsite.requests, "put", lambda url, data, headers, timeout: Resp(403, "<Error><Code>AccessDenied</Code></Error>"))
+    import time; time.sleep(1.1)  # backup names are per second
+    client.post("/api/backups/")
+    offsite.sync(db)
+    s = db.query(models.Setting).first(); db.refresh(s)
+    assert "AccessDenied" in s.s3_last_error
+    n = len(sent); offsite.sync(db); assert len(sent) == n
+    db.close()
+    assert client.get("/api/backups/").json()["offsite"]["last_error"]
+    assert client.put("/api/backups/offsite", json={"bucket": ""}).json()["configured"] is False

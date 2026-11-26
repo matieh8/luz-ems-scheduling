@@ -466,6 +466,15 @@ class Setting(Base):
     last_push_summary_on = Column(String, nullable=True)     # local date (YYYY-MM-DD) of the last digest
 
     admin_password_hash = Column(String, nullable=True)
+    # Off-site backups to Amazon S3 (backend/offsite.py). The key should only be allowed to upload.
+    s3_bucket = Column(String, nullable=True)
+    s3_region = Column(String, nullable=True)
+    s3_access_key_id = Column(String, nullable=True)
+    s3_secret_access_key = Column(String, nullable=True)
+    s3_last_uploaded = Column(String, nullable=True)      # name of the last backup that reached S3
+    s3_last_uploaded_at = Column(DateTime, nullable=True)
+    s3_last_attempt_at = Column(DateTime, nullable=True)
+    s3_last_error = Column(Text, nullable=True)
     last_daily_job_at = Column(DateTime, nullable=True)
     alerts_dismissed = Column(Text, nullable=True)  # JSON {alert_key: iso utc timestamp}
     updated_at = Column(DateTime, default=now_utc, onupdate=now_utc)

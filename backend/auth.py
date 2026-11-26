@@ -84,7 +84,7 @@ _COMMON = [  # every signed-in account
 _TRAINER = _COMMON + [
     (_ANY - {"DELETE"}, r"/api/appointments/"),
     (_READ, r"/api/clients/"), ({"PUT"}, r"/api/clients/\d+$"),
-    (_ANY, r"/api/clients/(\d+/)?(notes|measurements|photos)(/|$)"), (_ANY, r"/api/clients/(notes|measurements|photos)/"),
+    (_ANY, r"/api/clients/(\d+/)?(notes|measurements|photos|avatar)(/|$)"), (_ANY, r"/api/clients/(notes|measurements|photos)/"),
     (_READ, r"/api/subscriptions/$"), (_READ, r"/api/notifications/logs"), ({"POST"}, r"/api/notifications/\d+/(reminder|confirmation)$"),
     (_READ, r"/api/devices/"), ({"POST"}, r"/api/devices/\d+/maintenance$"),
 ]

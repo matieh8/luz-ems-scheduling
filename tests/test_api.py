@@ -1392,3 +1392,40 @@ def test_dashboard_live_kpis_match_the_database(client):
     assert abs(k["profit"]["value"] - round(k["revenue"]["value"] - k["expenses"]["value"], 2)) < 0.01
     assert d["updated_at"]
     db.close()
+
+
+def test_client_360_goals_and_profile_photo(client):
+    """Goals and a profile photo are stored on the client; nothing else changes; trainers can see the photo."""
+    import os
+    from backend.database import DATA_DIR
+    r = client.post("/api/clients/", json={"name": "Goal Getter", "phone": "0507770005", "goals": "Lose 5 kg", "target_weight_kg": 70})
+    assert r.status_code == 200, r.text
+    c = r.json()
+    assert c["goals"] == "Lose 5 kg" and c["target_weight_kg"] == 70 and c["avatar"] is None
+    assert client.put(f"/api/clients/{c['id']}", json={"target_weight_kg": 0}).status_code == 422
+    before = client.get("/api/clients/").json()
+    jpg = b"\xff\xd8\xff\xe0" + b"0" * 2000
+    assert client.post(f"/api/clients/{c['id']}/avatar", files={"file": ("a.txt", b"hello", "text/plain")}).status_code == 422
+    up = client.post(f"/api/clients/{c['id']}/avatar", files={"file": ("a.jpg", jpg, "image/jpeg")})
+    assert up.status_code == 200 and up.json()["avatar"].startswith("avatar-")
+    first = up.json()["avatar"]
+    got = client.get(f"/api/clients/{c['id']}/avatar")
+    assert got.status_code == 200 and got.content == jpg
+    # a new photo replaces the old file
+    second = client.post(f"/api/clients/{c['id']}/avatar", files={"file": ("b.jpg", jpg + b"1", "image/jpeg")}).json()["avatar"]
+    folder = os.path.join(DATA_DIR, "photos", str(c["id"]))
+    assert second != first and not os.path.exists(os.path.join(folder, first)) and os.path.exists(os.path.join(folder, second))
+    # the list still has every client, unchanged apart from the photo
+    after = client.get("/api/clients/").json()
+    assert len(after) == len(before) and {x["id"] for x in after} == {x["id"] for x in before}
+    assert next(x for x in after if x["id"] == c["id"])["avatar"] == second
+    # a trainer can see it
+    sid = client.post("/api/staff/", json={"name": "Photo Coach"}).json()["id"]
+    client.put(f"/api/staff/{sid}/account", json={"username": "photocoach", "password": "pass-photo-123", "access": "trainer"})
+    assert _login_as("photocoach", "pass-photo-123").get(f"/api/clients/{c['id']}/avatar").status_code == 200
+    # removing it, and deleting the client, leave no file behind
+    assert client.delete(f"/api/clients/{c['id']}/avatar").status_code == 200
+    assert client.get(f"/api/clients/{c['id']}/avatar").status_code == 404 and not os.path.exists(os.path.join(folder, second))
+    client.post(f"/api/clients/{c['id']}/avatar", files={"file": ("c.jpg", jpg, "image/jpeg")})
+    assert client.delete(f"/api/clients/{c['id']}").status_code == 200
+    assert not any(n.startswith("avatar-") for n in (os.listdir(folder) if os.path.exists(folder) else []))

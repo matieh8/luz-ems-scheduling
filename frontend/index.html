@@ -18,7 +18,7 @@
     (function () { var t = 'auto'; try { t = localStorage.getItem('luz_theme') || 'auto'; } catch (e) {} document.documentElement.setAttribute('data-theme', t); })();</script>
   <link rel="stylesheet" href="/vendor/flatpickr/flatpickr.min.css?v=4.6.13">
   <link rel="stylesheet" href="/vendor/flatpickr/monthSelect.css?v=4.6.13">
-  <link rel="stylesheet" href="/css/app.css?v=25">
+  <link rel="stylesheet" href="/css/app.css?v=26">
 </head>
 <body>
   <a class="skip-link" href="#main-content" onclick="event.preventDefault(); document.getElementById('main-content').focus()">Skip to content</a>
@@ -139,7 +139,15 @@
             <option value="">Everyone</option><option value="attention">Needs follow-up</option><option value="regular">Regular</option>
             <option value="slipping">Slipping</option><option value="at_risk">At risk</option><option value="lapsed">Lapsed</option><option value="new">New</option>
           </select>
-          <label class="check"><input type="checkbox" id="client-inactive" onchange="loadClients()"> Show inactive</label>
+          <select id="client-status" class="input" style="width:auto" onchange="renderClients()" aria-label="Filter by status">
+            <option value="">Active &amp; inactive</option><option value="active">Active</option><option value="inactive">Inactive</option>
+          </select>
+          <select id="client-package" class="input" style="width:auto" onchange="renderClients()" aria-label="Filter by package">
+            <option value="">Any package</option><option value="has">Has a package</option><option value="none">No package</option><option value="ending">Ends within 14 days</option>
+          </select>
+          <select id="client-trainer" class="input" style="width:auto" onchange="renderClients()" aria-label="Filter by trainer"><option value="">Any trainer</option></select>
+          <label class="check"><input type="checkbox" id="client-owes" onchange="renderClients()"> Owes money</label>
+          <label class="check"><input type="checkbox" id="client-inactive" onchange="loadClients()"> Show archived</label>
         </div>
         <div id="clients-list" class="table-wrap"></div>
       </section>
@@ -392,6 +400,8 @@
       <div class="form-group"><label>Referred by (optional)</label><select id="client-referrer" class="input"></select><div class="help">The client who recommended them. They show up under Leads → Referrals.</div></div>
       <div class="form-row"><div class="form-group"><label>Date of birth</label><input type="date" id="client-dob" class="input"></div><div class="form-group"><label>Status</label><select id="client-active" class="input"><option value="true">Active</option><option value="false">Inactive</option></select></div></div>
       <div class="form-group"><label>Injuries, health &amp; training restrictions</label><textarea id="client-health" class="input" placeholder="e.g. Old knee injury: no deep squats. Pregnant: no EMS." style="min-height:60px"></textarea><div class="help">Shown in red on the client's profile so every trainer sees it before a session.</div></div>
+      <div class="form-row"><div class="form-group"><label>Training goals</label><textarea id="client-goals" class="input" placeholder="e.g. Lose 6 kg before summer, stronger back" style="min-height:60px"></textarea></div>
+        <div class="form-group"><label>Target weight (kg)</label><input type="number" step="0.1" min="0" inputmode="decimal" id="client-target" class="input" placeholder="optional"></div></div>
       <div class="form-group"><label>Notes</label><textarea id="client-notes" class="input"></textarea></div>
       <label class="form-group" style="display:block"><span class="small bold muted">Notification channels</span></label>
       <div class="form-row-3">
@@ -557,7 +567,7 @@
   <script src="/js/core.js?v=11"></script>
   <script src="/js/calendar.js?v=7"></script>
   <script src="/js/booking.js?v=6"></script>
-  <script src="/js/clients.js?v=14"></script>
+  <script src="/js/clients.js?v=15"></script>
   <script src="/js/money.js?v=15"></script>
   <script src="/js/finance.js?v=1"></script>
   <script src="/js/expenses.js?v=5"></script>

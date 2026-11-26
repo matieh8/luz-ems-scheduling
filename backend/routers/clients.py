@@ -245,6 +245,61 @@ async def upload_photo(client_id: int, file: UploadFile = File(...), pose: str =
     return p
 
 
+# ---- profile photo: a small head shot to recognise the client (resized in the browser before upload) ----
+AVATAR_TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
+AVATAR_MAX_BYTES = 3 * 1024 * 1024
+
+
+def _remove_avatar(c: models.Client):
+    if c.avatar:
+        try:
+            os.remove(os.path.join(_photo_dir(c.id), os.path.basename(c.avatar)))
+        except FileNotFoundError:
+            pass
+        c.avatar = None
+
+
+@router.post("/{client_id}/avatar", response_model=schemas.ClientResponse)
+async def upload_avatar(client_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
+    client = _client_or_404(db, client_id)
+    ext = AVATAR_TYPES.get((file.content_type or "").lower())
+    if not ext:
+        raise HTTPException(status_code=422, detail="Upload a JPG, PNG or WEBP photo")
+    data = await file.read(AVATAR_MAX_BYTES + 1)
+    if len(data) > AVATAR_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="Photo is larger than 3 MB")
+    if not data:
+        raise HTTPException(status_code=422, detail="The file is empty")
+    os.makedirs(_photo_dir(client_id), exist_ok=True)
+    name = f"avatar-{secrets.token_hex(8)}{ext}"
+    with open(os.path.join(_photo_dir(client_id), name), "wb") as fh:
+        fh.write(data)
+    _remove_avatar(client)  # the old one
+    client.avatar = name
+    db.commit()
+    db.refresh(client)
+    return client
+
+
+@router.get("/{client_id}/avatar")
+def avatar_file(client_id: int, db: Session = Depends(get_db)):
+    c = _client_or_404(db, client_id)
+    path = os.path.join(_photo_dir(c.id), os.path.basename(c.avatar or ""))
+    if not c.avatar or not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="No profile photo")
+    ext = os.path.splitext(path)[1]
+    media = next((k for k, v in AVATAR_TYPES.items() if v == ext), "image/jpeg")
+    return FileResponse(path, media_type=media, headers={"Cache-Control": "private, max-age=86400"})  # name changes on every upload
+
+
+@router.delete("/{client_id}/avatar")
+def delete_avatar(client_id: int, db: Session = Depends(get_db)):
+    c = _client_or_404(db, client_id)
+    _remove_avatar(c)
+    db.commit()
+    return {"detail": "deleted"}
+
+
 @router.get("/photos/{photo_id}/file")
 def photo_file(photo_id: int, db: Session = Depends(get_db)):
     p = db.query(models.ProgressPhoto).filter(models.ProgressPhoto.id == photo_id).first()
@@ -327,6 +382,7 @@ def delete_client(client_id: int, db: Session = Depends(get_db)):
     db.query(models.NotificationLog).filter(models.NotificationLog.client_id == client_id).delete()
     for p in db_client.photos:
         _remove_photo_file(p)
+    _remove_avatar(db_client)
     db.delete(db_client)
     db.commit()
     return {"detail": "Client deleted"}

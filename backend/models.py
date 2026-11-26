@@ -21,6 +21,9 @@ class Client(Base):
     date_of_birth = Column(String, nullable=True)
     source = Column(String, nullable=True)  # walk-in / instagram / referral / online
     health_notes = Column(Text, nullable=True)  # injuries, medical conditions, training restrictions
+    goals = Column(Text, nullable=True)  # what the client wants to achieve
+    target_weight_kg = Column(Float, nullable=True)
+    avatar = Column(String, nullable=True)  # profile photo file name in photos/<client id>/ (not a progress photo)
     photo_consent = Column(Boolean, default=False)  # client agreed to before/after photos being kept
     photo_consent_at = Column(DateTime, nullable=True)
     referred_by_client_id = Column(Integer, ForeignKey("clients.id"), nullable=True)  # who brought this client

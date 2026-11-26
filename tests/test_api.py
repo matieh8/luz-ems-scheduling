@@ -1418,3 +1418,8 @@ def test_client_360_goals_and_profile_photo(client):
     client.post(f"/api/clients/{c['id']}/avatar", files={"file": ("c.jpg", jpg, "image/jpeg")})
     assert client.delete(f"/api/clients/{c['id']}").status_code == 200
     assert not any(n.startswith("avatar-") for n in (os.listdir(folder) if os.path.exists(folder) else []))
+
+
+def test_backups_in_the_same_second_do_not_overwrite(client):
+    names = [client.post("/api/backups/").json()["name"] for _ in range(3)]
+    assert len(set(names)) == 3

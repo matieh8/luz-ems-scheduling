@@ -26,8 +26,8 @@ function sparkBars(values) {
     return `<rect x="${i * 8 + 1}" y="${28 - h}" width="5" height="${h}" rx="1.5" opacity="${i === values.length - 1 ? 1 : .45}"/>`; }).join('')}</svg>`;
 }
 
-function kpiCard({ icon, label, value, pct, compare, sub, spark, invert }) {
-  return `<div class="kpi"><div class="kpi-ico">${dashIcon(icon)}</div>
+function kpiCard({ icon, label, value, pct, compare, sub, spark, invert, open }) {
+  return `<div class="kpi${open ? ' clickable' : ''}"${open ? ` role="button" tabindex="0" onclick="${open}"` : ''}><div class="kpi-ico">${dashIcon(icon)}</div>
     <div class="kpi-body"><div class="kpi-label">${esc(label)}</div><div class="kpi-value">${value}</div>
     <div class="kpi-foot">${changePill(pct, compare, invert)}<span class="kpi-sub">${sub}</span></div></div>${sparkBars(spark)}</div>`;
 }
@@ -84,26 +84,27 @@ function donut(parts) {
     <text x="60" y="58" text-anchor="middle" class="donut-n">${total}</text><text x="60" y="74" text-anchor="middle" class="donut-l">packages</text></svg>`;
 }
 
-function rankList(rows, emptyText) {
+function rankList(rows, emptyText, kind) {
   if (!rows.length) return `<div class="empty small">${emptyText}</div>`;
   const max = Math.max(...rows.map(r => r.count), 1);
-  return rows.map((r, i) => `<div class="rank"><span class="rank-n">${i + 1}</span><div class="rank-main"><div class="rank-top"><strong title="${esc(r.name)}">${esc(r.name)}</strong><span class="mono">${r.count}×</span></div>
+  return rows.map((r, i) => `<div class="rank clickable" role="button" tabindex="0" onclick="dashDetail('${kind}', ${esc(JSON.stringify(r.name))})"><span class="rank-n">${i + 1}</span><div class="rank-main"><div class="rank-top"><strong title="${esc(r.name)}">${esc(r.name)}</strong><span class="mono">${r.count}×</span></div>
     <div class="progress"><div style="width:${100 * r.count / max}%"></div></div><div class="tiny muted">${money(r.value)}</div></div></div>`).join('');
 }
 
 async function loadDashboard() {
   const [d, o] = await Promise.all([api('GET', '/dashboard/'), api('GET', '/dashboard/overview')]);
   const k = o.kpis, m = o.months;
+  DASH_TODAY = o.today;
   $('dash-greeting').textContent = greeting();
   $('dash-date').textContent = `${fmtKeyLong(o.today)} · here is how ${monthLabel(o.today.slice(0, 7), true)} is going`;
   $('dash-alerts').innerHTML = d.alerts.map(a => `<div class="alert alert-${a.level}" onclick="${a.link ? `dismissAlert('${a.key}', '${a.link}')` : ''}">${esc(a.text)}<span style="margin-left:auto;display:flex;gap:14px;align-items:center;font-size:.8rem">${a.link ? '<span>View →</span>' : ''}<button class="alert-x" title="Dismiss" aria-label="Dismiss" onclick="event.stopPropagation();dismissAlert('${a.key}')">✕</button></span></div>`).join('');
 
   const cmp = o.compare_label;
   $('dash-stats').innerHTML = [
-    kpiCard({ icon: 'revenue', label: 'Revenue this month', value: money(k.revenue.value), pct: k.revenue.change_pct, compare: cmp, sub: cmp, spark: m.map(x => x.revenue) }),
-    kpiCard({ icon: 'profit', label: 'Net profit', value: money(k.profit.value), pct: k.profit.change_pct, compare: cmp, sub: `after ${money(k.expenses.value)} expenses`, spark: m.map(x => x.profit) }),
-    kpiCard({ icon: 'clients', label: 'Active clients', value: k.active_clients.value, pct: k.active_clients.change_pct, compare: 'vs the 30 days before', sub: 'booked in the last 30 days' }),
-    kpiCard({ icon: 'sessions', label: 'Sessions this month', value: k.sessions.value, pct: k.sessions.change_pct, compare: cmp, sub: `${k.sessions.today} today`, spark: m.map(x => x.sessions) }),
+    kpiCard({ open: "dashDetail('revenue')", icon: 'revenue', label: 'Revenue this month', value: money(k.revenue.value), pct: k.revenue.change_pct, compare: cmp, sub: cmp, spark: m.map(x => x.revenue) }),
+    kpiCard({ open: "dashDetail('profit')", icon: 'profit', label: 'Net profit', value: money(k.profit.value), pct: k.profit.change_pct, compare: cmp, sub: `after ${money(k.expenses.value)} expenses`, spark: m.map(x => x.profit) }),
+    kpiCard({ open: "dashDetail('clients')", icon: 'clients', label: 'Active clients', value: k.active_clients.value, pct: k.active_clients.change_pct, compare: 'vs the 30 days before', sub: 'booked in the last 30 days' }),
+    kpiCard({ open: "dashDetail('sessions')", icon: 'sessions', label: 'Sessions this month', value: k.sessions.value, pct: k.sessions.change_pct, compare: cmp, sub: `${k.sessions.today} today`, spark: m.map(x => x.sessions) }),
   ].join('');
 
   trendChart($('dash-chart'), m);
@@ -118,21 +119,21 @@ async function loadDashboard() {
     : `<div class="empty small">No sessions today.<br><a href="#" onclick="openBookingModal();return false">Book one</a></div>`;
 
   $('dash-payments').innerHTML = o.recent_payments.length ? `<div class="table-wrap"><table class="plain"><thead><tr><th>Client</th><th>For</th><th>Date</th><th class="num">Amount</th></tr></thead><tbody>${
-    o.recent_payments.map(p => `<tr><td><strong>${esc(p.client_name)}</strong></td><td class="muted">${esc(p.label)}</td><td class="muted">${fmtDate(p.paid_at)}</td><td class="num"><strong>${money(p.amount)}</strong> <span class="chip">${esc(p.method)}</span></td></tr>`).join('')}</tbody></table></div>`
+    o.recent_payments.map(p => `<tr class="clickable" onclick="${p.client_id ? `openClientDetail(${p.client_id}, 'pays')` : "go('payments')"}"><td><strong>${esc(p.client_name || 'Other income')}</strong></td><td class="muted">${esc(p.label)}</td><td class="muted">${fmtDate(p.paid_at)}</td><td class="num"><strong>${money(p.amount)}</strong> <span class="chip">${esc(p.method)}</span></td></tr>`).join('')}</tbody></table></div>`
     : '<div class="empty small">No payments recorded yet.</div>';
 
   const pk = o.packages;
   $('dash-packages').innerHTML = `<div class="pk">
       ${donut([{ v: pk.active, c: 'var(--accent)' }, { v: pk.expiring, c: 'var(--series-4)' }, { v: pk.ended, c: 'var(--series-2)' }])}
       <ul class="pk-legend">
-        <li><span class="dot" style="background:var(--accent)"></span>Active<b>${pk.active}</b></li>
-        <li><span class="dot" style="background:var(--series-4)"></span>Running low / expiring<b>${pk.expiring}</b></li>
-        <li><span class="dot" style="background:var(--series-2)"></span>Ended, last 30 days<b>${pk.ended}</b></li>
+        <li class="clickable" onclick="go('subscriptions')"><span class="dot" style="background:var(--accent)"></span>Active<b>${pk.active}</b></li>
+        <li class="clickable" onclick="go('subscriptions')"><span class="dot" style="background:var(--series-4)"></span>Running low / expiring<b>${pk.expiring}</b></li>
+        <li class="clickable" onclick="go('subscriptions')"><span class="dot" style="background:var(--series-2)"></span>Ended, last 30 days<b>${pk.ended}</b></li>
       </ul></div>
-    ${o.expiring_list.length ? `<div class="pk-list"><div class="tiny muted bold" style="margin:6px 0">Follow up soon</div>${o.expiring_list.map(s => `<div class="pk-row" onclick="go('subscriptions')" role="button" tabindex="0"><div><strong>${esc(s.client_name)}</strong><div class="tiny muted">${esc(s.plan)}</div></div><div class="tiny" style="text-align:right">${s.remaining} left${s.end_date ? `<div class="muted">until ${fmtDate(s.end_date)}</div>` : ''}</div></div>`).join('')}</div>` : ''}`;
+    ${o.expiring_list.length ? `<div class="pk-list"><div class="tiny muted bold" style="margin:6px 0">Follow up soon</div>${o.expiring_list.map(s => `<div class="pk-row" onclick="openClientDetail(${s.client_id}, 'subs')" role="button" tabindex="0"><div><strong>${esc(s.client_name)}</strong><div class="tiny muted">${esc(s.plan)}</div></div><div class="tiny" style="text-align:right">${s.remaining} left${s.end_date ? `<div class="muted">until ${fmtDate(s.end_date)}</div>` : ''}</div></div>`).join('')}</div>` : ''}`;
 
-  $('dash-top-services').innerHTML = rankList(o.top_services, 'No sessions booked this month yet.');
-  $('dash-top-plans').innerHTML = rankList(o.top_plans, 'No packages sold this month yet.');
+  $('dash-top-services').innerHTML = rankList(o.top_services, 'No sessions booked this month yet.', 'service');
+  $('dash-top-plans').innerHTML = rankList(o.top_plans, 'No packages sold this month yet.', 'plan');
   $('dash-owed').innerHTML = `
     <div class="owed" onclick="go('payments')" role="button" tabindex="0"><div class="tiny muted">Unpaid completed sessions</div><div class="owed-v ${o.due.amount ? 'bad' : ''}">${money(o.due.amount)}</div><div class="tiny muted">${o.due.count} session(s) · tap to collect</div></div>
     <div class="owed" onclick="go('subscriptions')" role="button" tabindex="0"><div class="tiny muted">Sessions left on active packages</div><div class="owed-v">${o.sessions_remaining}</div><div class="tiny muted">still to be booked and delivered</div></div>`;
@@ -150,4 +151,43 @@ async function dismissAlert(key, link) {
   if (el) el.remove();
   try { await api('POST', `/dashboard/alerts/${key}/dismiss`); } catch (e) {}
   if (link) go(link);
+}
+
+/* ---------- tap a box: the list behind its number ---------- */
+let DASH_TODAY = null;
+function showDetail(title, html) { $('detail-title').textContent = title; $('detail-body').innerHTML = html; openModal('detail-modal'); }
+async function dashDetail(kind, arg) {
+  guard(async () => {
+    const ym = (DASH_TODAY || todayKey()).slice(0, 7), [y, mo] = ym.split('-').map(Number);
+    const from = zonedToDate(`${ym}-01`, '00:00'), to = zonedToDate(addDays(DASH_TODAY || todayKey(), 1), '00:00');  // month so far, like the boxes
+    const range = `from_date=${from.toISOString()}&to_date=${to.toISOString()}`, label = monthLabel(ym, true);
+    if (kind === 'revenue' || kind === 'profit') {
+      const pays = await api('GET', `/payments/?${range}&limit=100000`), inSum = pays.reduce((a, p) => a + p.amount, 0);
+      let html = `<div class="section-label">Money in · ${money(inSum)}</div>` + paymentsTable(pays);
+      if (kind === 'profit') {
+        const ex = ((await api('GET', `/expenses/summary?year=${y}&month=${mo}`)).expenses || []).filter(e => parseISO(e.date) < to), outSum = ex.reduce((a, e) => a + e.amount, 0);
+        html = `<p class="mb">${money(inSum)} in − ${money(outSum)} expenses = <strong>${money(inSum - outSum)}</strong></p>` + html +
+          `<div class="section-label">Expenses · ${money(outSum)}</div>` + (ex.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Category</th><th class="num">Amount</th></tr></thead><tbody>${
+            ex.sort((a, b) => a.date < b.date ? 1 : -1).map(e => `<tr class="clickable" onclick="closeModal('detail-modal');go('expenses')"><td>${fmtDate(e.date)}</td><td>${expIcon(e.category)} ${esc(e.category)}${e.notes ? `<div class="tiny muted">${esc(e.notes)}</div>` : ''}</td><td class="num bold">${money(e.amount)}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty small">No expenses.</div>');
+      }
+      return showDetail(`${kind === 'revenue' ? 'Revenue' : 'Net profit'} · ${label}`, html);
+    }
+    if (kind === 'sessions' || kind === 'service') {
+      let list = await api('GET', `/appointments/?${range}&limit=5000`);
+      list = kind === 'sessions' ? list.filter(a => a.status === 'completed') : list.filter(a => a.service.name === arg && ['scheduled', 'confirmed', 'completed'].includes(a.status));
+      return showDetail(`${kind === 'sessions' ? 'Sessions done' : arg} · ${label} (${list.length})`, apptTable(list, { withDate: true }));
+    }
+    if (kind === 'clients') {
+      const now = new Date(), list = (await api('GET', `/appointments/?from_date=${new Date(now - 30 * 864e5).toISOString()}&to_date=${now.toISOString()}&limit=5000`))
+        .filter(a => ['scheduled', 'confirmed', 'completed'].includes(a.status));
+      const by = {}; list.forEach(a => { const r = by[a.client_id] = by[a.client_id] || { c: a.client, n: 0, last: a.start_time }; r.n++; if (a.start_time > r.last) r.last = a.start_time; });
+      const rows = Object.entries(by).sort((a, b) => b[1].n - a[1].n);
+      return showDetail(`Active clients · last 30 days (${rows.length})`, rows.length ? `<div class="table-wrap"><table><thead><tr><th>Client</th><th class="num">Sessions</th><th>Last</th></tr></thead><tbody>${
+        rows.map(([id, r]) => `<tr class="clickable" onclick="openClientDetail(${id})"><td><div class="who">${avatar(r.c.name)}<div><strong>${esc(r.c.name)}</strong><div class="tiny muted">${esc(r.c.phone)}</div></div></div></td><td class="num">${r.n}</td><td>${fmtDate(r.last)}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty small">No sessions in the last 30 days.</div>');
+    }
+    if (kind === 'plan') {
+      const subs = (await api('GET', '/subscriptions/')).filter(s => s.plan.name === arg && s.status !== 'cancelled' && parseISO(s.created_at) >= from);
+      return showDetail(`${arg} · sold in ${label} (${subs.length})`, subsTable(subs));
+    }
+  });
 }

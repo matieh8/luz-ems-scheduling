@@ -768,7 +768,7 @@ const SITE = {
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const get = (path) => path.split('.').reduce((o, k) => (o == null ? undefined : o[k]), SITE);
-  const money = (v) => `${SITE.currency} ${Math.round(v).toLocaleString()}`;
+  const money = (v) => `${SITE.currency} ${Math.round(v).toLocaleString('en')}`;
   const fmtTime = (t) => { if (!t) return ''; const [h, m] = t.split(':').map(Number); const ap = h >= 12 ? 'pm' : 'am'; const hh = ((h + 11) % 12) + 1; return m ? `${hh}:${String(m).padStart(2, '0')}${ap}` : `${hh}${ap}`; };
   const accent = (html) => String(html).replace(/<em>/g, '<span class="accent">').replace(/<\/em>/g, '</span>');
   const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;

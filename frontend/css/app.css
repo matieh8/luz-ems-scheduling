@@ -277,7 +277,7 @@ textarea.input { min-height: 80px; resize: vertical; }
 
 /* Expense rows: live inputs, no click-to-edit */
 .exp-rows { display: flex; flex-direction: column; gap: 6px; }
-.exp-row { display: grid; grid-template-columns: minmax(160px, 1fr) 120px 130px 92px 30px; gap: 6px; align-items: center; padding: 4px; border-radius: 10px; }
+.exp-row { display: grid; grid-template-columns: 26px minmax(160px, 1fr) 120px 130px 92px 30px; gap: 6px; align-items: center; padding: 4px; border-radius: 10px; }
 .exp-row .input { width: 100%; min-width: 0; height: 36px; padding: 6px 10px; font-size: .86rem; }
 .exp-row .exp-amount { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
 .exp-row.unpaid { background: var(--bad-bg); }
@@ -288,8 +288,8 @@ textarea.input { min-height: 80px; resize: vertical; }
 .exp-due-pill { display: inline-block; margin-left: 8px; padding: 3px 10px; border-radius: 999px; background: var(--bad-bg); color: var(--bad); font-size: .8rem; font-weight: 700; cursor: pointer; vertical-align: middle; }
 .day-card { scroll-margin-top: 12px; }
 @media (max-width: 760px) {
-  .exp-row { grid-template-columns: 1fr 110px; grid-template-areas: "cat amount" "method paid"; border: 1px solid var(--border); padding: 8px; position: relative; }
-  .exp-row .exp-cat { grid-area: cat; } .exp-row .exp-amount { grid-area: amount; }
+  .exp-row { grid-template-columns: 26px 1fr 110px; grid-template-areas: "logo cat amount" "logo method paid"; border: 1px solid var(--border); padding: 8px; position: relative; }
+  .exp-row .exp-row-logo { grid-area: logo; } .exp-row .exp-cat { grid-area: cat; } .exp-row .exp-amount { grid-area: amount; }
   .exp-row .exp-method { grid-area: method; } .exp-row .exp-paid { grid-area: paid; justify-content: flex-end; padding-right: 34px; }
   .exp-row .exp-del { position: absolute; right: 4px; bottom: 8px; }
   .exp-row .input { height: 42px; font-size: 16px; }  /* 16px stops iPhone zooming into the field */
@@ -589,3 +589,24 @@ body.modal-open { overflow: hidden; }
     scroll-behavior: auto !important;
   }
 }
+
+/* client profile: add buttons inside tabs, clickable boxes */
+.cd-add { display: flex; justify-content: flex-end; margin-bottom: 10px; }
+.clickable { cursor: pointer; }
+.stat.clickable:hover, .kpi.clickable:hover { border-color: var(--accent); }
+.exp-row-logo { width: 26px; height: 26px; display: grid; place-items: center; flex-shrink: 0; }
+.exp-logo { width: 22px; height: 22px; border-radius: 6px; object-fit: contain; background: #fff; vertical-align: middle; }
+.exp-logo-emoji { font-size: 1.1rem; line-height: 1; }
+.pk-legend li.clickable:hover, .rank.clickable:hover strong { color: var(--accent); }
+/* English date picker in the app's colours (light and dark) */
+.flatpickr-calendar { background: var(--surface); box-shadow: var(--shadow-md); border: 1px solid var(--border); font-family: inherit; }
+.flatpickr-calendar.arrowTop:after, .flatpickr-calendar.arrowTop:before { border-bottom-color: var(--surface); }
+.flatpickr-calendar.arrowBottom:after, .flatpickr-calendar.arrowBottom:before { border-top-color: var(--surface); }
+.flatpickr-months .flatpickr-month, .flatpickr-current-month .flatpickr-monthDropdown-months, span.flatpickr-weekday, .flatpickr-time input, .flatpickr-time .flatpickr-time-separator,
+.flatpickr-day, .flatpickr-months .flatpickr-prev-month, .flatpickr-months .flatpickr-next-month, .flatpickr-monthSelect-month { color: var(--text); fill: var(--text); background: transparent; }
+.flatpickr-day.prevMonthDay, .flatpickr-day.nextMonthDay, .flatpickr-day.flatpickr-disabled { color: var(--text-3, #999); }
+.flatpickr-day:hover, .flatpickr-monthSelect-month:hover, .flatpickr-time input:hover { background: var(--bg); border-color: var(--bg); }
+.flatpickr-day.today { border-color: var(--accent); }
+.flatpickr-day.selected, .flatpickr-day.selected:hover, .flatpickr-monthSelect-month.selected { background: var(--accent); border-color: var(--accent); color: #fff; }
+.flatpickr-calendar { z-index: 600 !important; }
+input.flatpickr-input[readonly] { cursor: pointer; }

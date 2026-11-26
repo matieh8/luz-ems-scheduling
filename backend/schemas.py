@@ -340,13 +340,16 @@ class SubscriptionResponse(BaseModel):
     client: ClientResponse
     plan: SubscriptionPlanResponse
     sessions_remaining: int = 0
+    sessions_booked: int = 0
+    sessions_used_before: int = 0
     paid_amount: float = 0.0
     model_config = ConfigDict(from_attributes=True)
 
 
 # ---------- Payments ----------
 class PaymentCreate(BaseModel):
-    client_id: int
+    client_id: Optional[int] = None  # None = income not from a client; then source is required
+    source: Optional[str] = None
     appointment_id: Optional[int] = None
     subscription_id: Optional[int] = None
     amount: float
@@ -364,7 +367,8 @@ class PaymentUpdate(BaseModel):
 
 class PaymentResponse(BaseModel):
     id: int
-    client_id: int
+    client_id: Optional[int] = None
+    source: Optional[str] = None
     appointment_id: Optional[int] = None
     subscription_id: Optional[int] = None
     amount: float
@@ -372,7 +376,7 @@ class PaymentResponse(BaseModel):
     paid_at: datetime
     notes: Optional[str] = None
     created_at: datetime
-    client: ClientResponse
+    client: Optional[ClientResponse] = None
     model_config = ConfigDict(from_attributes=True)
 
 

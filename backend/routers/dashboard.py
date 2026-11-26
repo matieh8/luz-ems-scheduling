@@ -175,7 +175,7 @@ def overview(db: Session = Depends(get_db)):
             return p.subscription.plan.name
         if p.appointment_id and p.appointment and p.appointment.service:
             return p.appointment.service.name
-        return p.notes or "Payment"
+        return p.notes or (p.source or "Payment").replace("_", " ").capitalize()
 
     return {
         "today": today.isoformat(),
@@ -196,7 +196,7 @@ def overview(db: Session = Depends(get_db)):
         "due": {"count": len(unpaid), "amount": round(float(sum(a.balance_due for a in unpaid)), 2)},
         "top_services": top_services,
         "top_plans": top_plans,
-        "recent_payments": [{"id": p.id, "client_name": p.client.name if p.client else "", "label": pay_label(p),
+        "recent_payments": [{"id": p.id, "client_id": p.client_id, "client_name": p.client.name if p.client else "", "label": pay_label(p),
                              "amount": float(p.amount), "method": p.method, "paid_at": p.paid_at.isoformat()} for p in recent],
     }
 

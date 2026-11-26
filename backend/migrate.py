@@ -4,6 +4,7 @@ SQLAlchemy's create_all only creates missing *tables*, so upgrading a live
 database that already has the old tables needs this step. It never drops or
 renames anything, so it is safe to run on every start.
 """
+import re
 from sqlalchemy import inspect, text
 from backend.database import engine, Base
 from backend import models  # noqa: F401  (registers every table on Base.metadata)
@@ -56,6 +57,25 @@ def run_migrations():
                     "UPDATE appointments SET price = COALESCE((SELECT price FROM services WHERE services.id = appointments.service_id), 0) "
                     "WHERE subscription_id IS NULL"
                 ))
+        if "subscriptions.sessions_used_before" in added:
+            # One time: keep each package's old "used" number; the part the bookings don't explain becomes "used before".
+            conn.execute(text(
+                "UPDATE subscriptions SET sessions_used_before = MAX(COALESCE(sessions_used, 0) - (SELECT COUNT(*) FROM appointments a "
+                "WHERE a.subscription_id = subscriptions.id AND a.status != 'cancelled'), 0)"
+            ))
+        # Income that isn't from a client (social media, ads) has no client: rebuild payments once with client_id nullable.
+        if "payments" in inspector.get_table_names():
+            if {c["name"]: c["nullable"] for c in inspect(conn).get_columns("payments")}.get("client_id") is False:
+                sql = conn.execute(text("SELECT sql FROM sqlite_master WHERE type='table' AND name='payments'")).scalar()
+                new_sql = re.sub(r'("?client_id"?\s+INTEGER)\s+NOT NULL', r'\1', sql, count=1)
+                new_sql = re.sub(r'CREATE TABLE\s+"?payments"?', 'CREATE TABLE payments_new', new_sql, count=1)
+                assert new_sql != sql and "payments_new" in new_sql
+                conn.execute(text(new_sql))
+                conn.execute(text("INSERT INTO payments_new SELECT * FROM payments"))
+                conn.execute(text("DROP TABLE payments"))
+                conn.execute(text("ALTER TABLE payments_new RENAME TO payments"))
+                for ix in models.Payment.__table__.indexes:
+                    ix.create(bind=conn, checkfirst=True)
         if "notification_logs.client_id" in added:
             conn.execute(text(
                 "UPDATE notification_logs SET client_id = (SELECT client_id FROM appointments WHERE appointments.id = notification_logs.appointment_id) "

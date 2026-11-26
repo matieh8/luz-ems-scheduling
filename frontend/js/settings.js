@@ -131,7 +131,7 @@ async function loadWhatsAppStatus() {
   } catch (e) { box.innerHTML = '<em class="small">Status unavailable.</em>'; }
 }
 async function resetWhatsApp() {
-  if (!confirm('Reset the WhatsApp session? You will need to scan the QR code again.')) return;
+  if (!await ask('Reset the WhatsApp session? You will need to scan the QR code again.')) return;
   try { await api('POST', '/notifications/whatsapp-reset'); toast('WhatsApp session reset; a new QR code will appear shortly'); loadWhatsAppStatus(); }
   catch (e) { toast('Reset failed: ' + (e.message || e), true); }
 }
@@ -176,7 +176,7 @@ function deleteStaff(id) { confirmBox('Delete trainer', '<p>Delete this trainer?
 
 async function resetData() {
   if (val('reset-confirm').trim().toUpperCase() !== 'DELETE') { toast('Type DELETE to confirm', true); return; }
-  if (!confirm('Clear all bookings, payments, packages and message history? This cannot be undone.')) return;
+  if (!await ask('Clear all bookings, payments, packages and message history? This cannot be undone.')) return;
   guard(async () => {
     const r = await api('POST', '/settings/reset-data', { confirm: 'DELETE', keep_clients: $('reset-keep-clients').checked });
     setVal('reset-confirm', '');

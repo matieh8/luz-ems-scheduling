@@ -50,7 +50,7 @@ async function deviceHistory(id) {
   const rows = await api('GET', `/devices/${id}/maintenance`);
   confirmBox(`History: ${esc(d.name)}`, rows.length ? `<div class="table-wrap"><table class="plain"><thead><tr><th>Date</th><th>Type</th><th>Notes</th><th class="num">Cost</th></tr></thead><tbody>${rows.map(m => `<tr><td>${fmtKey(m.done_on)}</td><td>${esc(m.kind)}</td><td class="small">${esc(m.notes || '')}</td><td class="num">${m.cost ? money(m.cost) : '—'}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">Nothing logged yet.</p>', 'Close', async () => {});
 }
-function deleteDevice(id) {
-  if (!confirm('Delete this device and its maintenance history? Expenses already recorded stay. This cannot be undone.')) return;
+async function deleteDevice(id) {
+  if (!await ask('Delete this device and its maintenance history? Expenses already recorded stay. This cannot be undone.')) return;
   guard(async () => { await api('DELETE', `/devices/${id}`); document.querySelectorAll('.modal-overlay.active').forEach(m => closeModal(m.id)); toast('Device deleted'); loadDevices(); });
 }

@@ -121,7 +121,7 @@ function jsArg(v) { return esc(JSON.stringify(v === null || v === undefined ? ''
 function esc(s) { if (s === null || s === undefined) return ''; return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;'); }
 function $(id) { return document.getElementById(id); }
 function val(id) { return $(id).value; }
-function setVal(id, v) { $(id).value = v === null || v === undefined ? '' : v; }
+function setVal(id, v) { const el = $(id); el.value = v === null || v === undefined ? '' : v; if (el._flatpickr) el._flatpickr.setDate(el.value || null, false); }
 function badge(status) { return `<span class="badge badge-${status}">${esc(status.replace('_', ' '))}</span>`; }
 function toast(msg, isError) { const t = $('toast'); t.textContent = msg; t.classList.toggle('error', !!isError); t.classList.add('show'); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), isError ? 5000 : 3000); }
 /* ---------- dialogs: keyboard, screen readers, focus ---------- */
@@ -141,9 +141,11 @@ function _restoreFocus() {
 }
 function _lockScroll(locked) { document.body.classList.toggle('modal-open', locked); }
 
+// Each dialog opens above whatever is already open, so a form opened from a client profile shows on top of it.
+function _topZ() { return 230 + 2 * document.querySelectorAll('.modal-overlay.active, .drawer.active').length; }
 function openModal(id) {
   const el = $(id); if (!el) return;
-  if (!el.classList.contains('active')) _focusStack.push(document.activeElement); // re-opening an open dialog keeps its opener
+  if (!el.classList.contains('active')) { _focusStack.push(document.activeElement); el.style.zIndex = _topZ(); } // re-opening keeps its opener and place
   el.classList.add('active'); el.setAttribute('aria-hidden', 'false');
   _lockScroll(true);
   _focusInto(el.querySelector('.modal') || el);
@@ -155,7 +157,7 @@ function closeModal(id) {
   _restoreFocus();
 }
 function openDrawer() {
-  const d = $('drawer'); if (!d.classList.contains('active')) _focusStack.push(document.activeElement);
+  const d = $('drawer'); if (!d.classList.contains('active')) { _focusStack.push(document.activeElement); d.style.zIndex = _topZ(); $('drawer-backdrop').style.zIndex = d.style.zIndex - 1; }
   d.classList.add('active'); d.setAttribute('aria-hidden', 'false');
   $('drawer-backdrop').classList.add('active'); _lockScroll(true);
   _focusInto(d);
@@ -242,3 +244,35 @@ function hbars(el, rows, opts = {}) { // rows: [{name, value, color, count}]
   el.innerHTML = rows.map(r => `<div class="hbar"><div title="${esc(r.name)}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span class="dot" style="background:${r.color}"></span>${esc(r.name)}</div><div class="track"><div class="fill" style="width:${100 * r.value / max}%;background:${r.color}"></div></div><div class="v">${fmt(r.value)}${r.count !== undefined ? `<div class="tiny muted">${r.count} ${countLabel}</div>` : ''}</div></div>`).join('');
 }
 const PALETTE = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6', '#e34948'];
+
+/* English everywhere: the browser's own date/time fields and confirm() boxes follow the phone or computer language
+   (Arabic digits, ص/م), so dates use an English picker and questions use the app's own dialog. */
+const FP_FORMATS = { date: ['Y-m-d', 'D j M Y'], 'datetime-local': ['Y-m-d\\TH:i', 'D j M Y, H:i'], time: ['H:i', 'H:i'], month: ['Y-m', 'F Y'] };
+function enPicker(el) {
+  const type = el.getAttribute('type'), f = FP_FORMATS[type];
+  if (!f || el._flatpickr || !window.flatpickr) return;
+  flatpickr(el, { dateFormat: f[0], altInput: true, altFormat: f[1], disableMobile: true, time_24hr: true, minuteIncrement: 5,
+    enableTime: type === 'time' || type === 'datetime-local', noCalendar: type === 'time',
+    plugins: type === 'month' && window.monthSelectPlugin ? [new monthSelectPlugin({ shorthand: true, dateFormat: 'Y-m', altFormat: 'F Y' })] : [] });
+}
+function enPickers(root) { if (root.querySelectorAll) root.querySelectorAll('input[type=date], input[type=time], input[type=month], input[type=datetime-local]').forEach(enPicker); }
+enPickers(document);
+new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => { if (n.nodeType === 1) { if (n.matches('input')) enPicker(n); else enPickers(n); } })))
+  .observe(document.body, { childList: true, subtree: true });
+
+function _askClosed(resolve, value) {
+  const m = $('status-modal'), obs = new MutationObserver(() => { if (!m.classList.contains('active')) { obs.disconnect(); resolve(value); } });
+  obs.observe(m, { attributes: true, attributeFilter: ['class'] });
+}
+function ask(text, okLabel = 'Yes', okClass = 'btn-danger') {
+  return new Promise(resolve => {
+    confirmBox('Please confirm', `<p style="white-space:pre-line;margin-top:0">${esc(text)}</p>`, okLabel, () => resolve(true), okClass);
+    _askClosed(resolve, false);
+  });
+}
+function askText(title, placeholder = '') {
+  return new Promise(resolve => {
+    confirmBox(title, `<input id="ask-text" class="input" autofocus autocomplete="off" placeholder="${esc(placeholder)}" onkeydown="if(event.key==='Enter')$('status-modal-ok').click()">`, 'OK', () => resolve(val('ask-text')), 'btn-primary');
+    _askClosed(resolve, '');
+  });
+}

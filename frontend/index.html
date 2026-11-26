@@ -16,7 +16,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script>/* theme before first paint: light | dark | auto (follows the phone/computer) */
     (function () { var t = 'auto'; try { t = localStorage.getItem('luz_theme') || 'auto'; } catch (e) {} document.documentElement.setAttribute('data-theme', t); })();</script>
-  <link rel="stylesheet" href="/css/app.css?v=22">
+  <link rel="stylesheet" href="/vendor/flatpickr/flatpickr.min.css?v=4.6.13">
+  <link rel="stylesheet" href="/vendor/flatpickr/monthSelect.css?v=4.6.13">
+  <link rel="stylesheet" href="/css/app.css?v=24">
 </head>
 <body>
   <a class="skip-link" href="#main-content" onclick="event.preventDefault(); document.getElementById('main-content').focus()">Skip to content</a>
@@ -456,9 +458,10 @@
       <div class="form-row"><div class="form-group"><label>Start date</label><input type="date" id="subscription-start" class="input" onchange="fillPlanDefaults(true)"></div><div class="form-group"><label>End date</label><input type="date" id="subscription-end" class="input"></div></div>
       <div class="form-row-3">
         <div class="form-group"><label>Total sessions</label><input type="number" id="subscription-total" class="input"></div>
-        <div class="form-group"><label>Used</label><input type="number" id="subscription-used" class="input" value="0"></div>
+        <div class="form-group"><label>Used</label><input type="number" min="0" id="subscription-used" class="input" value="0"></div>
         <div class="form-group"><label>Price</label><input type="number" step="0.01" id="subscription-price" class="input"></div>
       </div>
+      <div class="help" id="subscription-used-help" style="margin:-6px 0 10px"></div>
       <div class="form-group" id="subscription-discount-row"><label>Discount code</label>
         <div style="display:flex;gap:8px"><input type="text" id="subscription-code" class="input" placeholder="Optional, e.g. SUMMER20" autocapitalize="characters" oninput="$('subscription-code-result').textContent=''"><button type="button" class="btn btn-secondary btn-sm" onclick="checkSubscriptionCode()">Apply</button></div>
         <div class="help" id="subscription-code-result" aria-live="polite"></div></div>
@@ -477,7 +480,8 @@
     <div class="modal-body">
       <input type="hidden" id="payment-appointment">
       <input type="hidden" id="payment-subscription">
-      <div class="form-group"><label>Client</label><select id="payment-client" class="input"></select></div>
+      <div class="form-group"><label>From</label><select id="payment-source" class="input" onchange="paySourceChanged()"><option value="">A client</option><option value="social_media">Social media</option><option value="ads">Advertising / sponsorship</option><option value="other">Other income</option></select></div>
+      <div class="form-group" id="payment-client-row"><label>Client</label><select id="payment-client" class="input"></select></div>
       <div id="payment-for" class="help mb"></div>
       <div class="form-row-3">
         <div class="form-group"><label>Amount</label><input type="number" step="0.01" id="payment-amount" class="input"></div>
@@ -497,6 +501,12 @@
       <div class="form-group"><label>Reason</label><input id="block-reason" class="input" placeholder="Holiday, maintenance, lunch break..."></div>
     </div>
     <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('block-modal')">Cancel</button><button class="btn btn-primary" onclick="saveBlock()">Block</button></div>
+  </div></div>
+
+  <div class="modal-overlay" id="detail-modal" role="dialog" aria-modal="true" aria-labelledby="detail-title" aria-hidden="true"><div class="modal xwide">
+    <div class="modal-header"><h3 id="detail-title">Details</h3><button class="close-btn" aria-label="Close" onclick="closeModal('detail-modal')">&times;</button></div>
+    <div class="modal-body" id="detail-body"></div>
+    <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('detail-modal')">Close</button></div>
   </div></div>
 
   <div class="modal-overlay" id="status-modal" role="dialog" aria-modal="true" aria-labelledby="status-modal-title" aria-hidden="true"><div class="modal">
@@ -538,20 +548,22 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="/js/core.js?v=8"></script>
+  <script src="/vendor/flatpickr/flatpickr.min.js?v=4.6.13"></script>
+  <script src="/vendor/flatpickr/monthSelect.js?v=4.6.13"></script>
+  <script src="/js/core.js?v=10"></script>
   <script src="/js/calendar.js?v=7"></script>
-  <script src="/js/booking.js?v=5"></script>
-  <script src="/js/clients.js?v=12"></script>
-  <script src="/js/money.js?v=14"></script>
+  <script src="/js/booking.js?v=6"></script>
+  <script src="/js/clients.js?v=14"></script>
+  <script src="/js/money.js?v=15"></script>
   <script src="/js/finance.js?v=1"></script>
-  <script src="/js/expenses.js?v=3"></script>
+  <script src="/js/expenses.js?v=5"></script>
   <script src="/js/messages.js?v=3"></script>
   <script src="/js/push.js?v=1"></script>
-  <script src="/js/settings.js?v=13"></script>
-  <script src="/js/devices.js?v=2"></script>
-  <script src="/js/leads.js?v=3"></script>
+  <script src="/js/settings.js?v=14"></script>
+  <script src="/js/devices.js?v=3"></script>
+  <script src="/js/leads.js?v=4"></script>
   <script src="/js/team.js?v=2"></script>
-  <script src="/js/dashboard.js?v=5"></script>
+  <script src="/js/dashboard.js?v=6"></script>
   <script>boot();</script>
 </body>
 </html>

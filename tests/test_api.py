@@ -1267,3 +1267,55 @@ def test_client_list_shows_package_end_and_main_trainer(client):
     row = next(c for c in client.get("/api/clients/?q=Table%20Person").json() if c["id"] == cid)
     assert row["package_name"] == plan["name"] and row["package_end"].startswith(end.strftime("%Y-%m-%d"))
     assert row["main_trainer"] == "Table Coach" and row["sessions_remaining"] == plan["sessions_included"] - 1
+
+
+def test_package_use_always_matches_its_bookings(client):
+    """Used = sessions linked to the package (not cancelled) + used before the system; expired packages don't add to 'left'."""
+    cid = client.post("/api/clients/", json={"name": "Count Check", "phone": "0507770001"}).json()["id"]
+    plan = client.get("/api/subscriptions/plans").json()[0]
+    sub = client.post("/api/subscriptions/", json={"client_id": cid, "plan_id": plan["id"], "sessions_total": 10,
+                                                   "sessions_used": 3, "payment_method": "cash"}).json()
+    assert sub["sessions_used_before"] == 3 and sub["sessions_remaining"] == 7
+    svc = [s for s in client.get("/api/services/").json() if s["price"]][0]
+    ids = [client.post("/api/appointments/", json={"client_id": cid, "service_id": svc["id"], "force": True,
+                                                   "start_time": next_weekday_at(9 + i, 5).isoformat()}).json()["id"] for i in range(3)]
+    get = lambda: next(s for s in client.get(f"/api/subscriptions/?client_id={cid}").json() if s["id"] == sub["id"])
+    assert get()["sessions_used"] == 6 and get()["sessions_booked"] == 3
+    client.post(f"/api/appointments/{ids[0]}/status", json={"status": "cancelled", "send_notification": False})
+    client.post(f"/api/appointments/{ids[0]}/status", json={"status": "cancelled", "send_notification": False})  # twice: no double refund
+    assert get()["sessions_used"] == 5
+    client.post(f"/api/appointments/{ids[0]}/status", json={"status": "scheduled"})
+    client.delete(f"/api/appointments/{ids[1]}")
+    assert get()["sessions_used"] == 5 and get()["sessions_remaining"] == 5
+    # Staff correct "used" by hand: the bookings stay, the rest becomes "used before"
+    client.put(f"/api/subscriptions/{sub['id']}", json={"sessions_used": 4})
+    assert get()["sessions_used"] == 4 and get()["sessions_used_before"] == 2
+    # An expired package no longer adds to the client's "sessions left"
+    past = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    client.post("/api/subscriptions/", json={"client_id": cid, "plan_id": plan["id"], "sessions_total": 8, "end_date": past, "payment_method": "cash"})
+    row = next(c for c in client.get("/api/clients/").json() if c["id"] == cid)
+    assert row["sessions_remaining"] == 6
+
+
+def test_income_without_a_client(client):
+    """Money from social media / ads is recorded with a source instead of a client and still counts as revenue."""
+    assert client.post("/api/payments/", json={"amount": 100, "method": "transfer"}).status_code == 400
+    assert client.post("/api/payments/", json={"amount": 100, "source": "lottery"}).status_code == 400
+    r = client.post("/api/payments/", json={"amount": 750, "method": "transfer", "source": "social_media", "notes": "Instagram post for Brand X"})
+    assert r.status_code == 200, r.text
+    p = r.json()
+    assert p["client_id"] is None and p["client"] is None and p["source"] == "social_media"
+    assert any(x["id"] == p["id"] for x in client.get("/api/payments/?limit=100000").json())
+    assert client.get(f"/api/payments/{p['id']}/invoice").json()["lines"][0]["description"] == "Instagram post for Brand X"
+    today = datetime.now().date().isoformat()
+    assert client.get(f"/api/reports/summary?from={today}&to={today}").json()["collected"] >= 750
+    assert client.get(f"/api/reports/top-clients?from={today}&to={today}").status_code == 200
+    assert client.get(f"/api/reports/export/payments.csv?from={today}&to={today}").status_code == 200
+    d = client.get("/api/dashboard/overview").json()
+    assert any(x["id"] == p["id"] and x["client_id"] is None for x in d["recent_payments"])
+    # Staff confirming / cancelling still works (it now also sends a phone notification)
+    svc = [s for s in client.get("/api/services/").json() if s["price"]][0]
+    cid = client.post("/api/clients/", json={"name": "Push Check", "phone": "0507770002"}).json()["id"]
+    a = client.post("/api/appointments/", json={"client_id": cid, "service_id": svc["id"], "force": True,
+                                                "start_time": next_weekday_at(12, 6).isoformat()}).json()
+    assert client.post(f"/api/appointments/{a['id']}/status", json={"status": "confirmed"}).json()["status"] == "confirmed"

@@ -200,8 +200,6 @@ def cancel_appointment(token: str, body: CancelBody, db: Session = Depends(get_d
     a.cancelled_at = utcnow()
     a.cancelled_by = "client"
     a.cancel_reason = body.reason
-    if a.subscription and a.subscription.sessions_used > 0:
-        a.subscription.sessions_used -= 1
     db.commit()
     try:
         notifications.send_cancellation(db, a)

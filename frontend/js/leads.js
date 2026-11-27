@@ -91,7 +91,7 @@ async function loadLeadReport() {
       <div class="card"><div class="card-title">Which source converts <span class="muted small">last 90 days</span></div>${r.by_source.length ? `<div class="table-wrap"><table class="plain"><thead><tr><th>Source</th><th class="num">Leads</th><th class="num">Won</th><th class="num">Lost</th><th class="num">Conversion</th><th class="num">Days to win</th></tr></thead><tbody>${r.by_source.map(s => `<tr><td><strong>${esc(s.source)}</strong></td><td class="num">${s.leads}</td><td class="num">${s.won}</td><td class="num">${s.lost}</td><td class="num"><strong>${s.conversion_pct}%</strong></td><td class="num muted">${s.avg_days_to_win ?? '—'}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty small">No leads in the last 90 days.</div>'}</div>
       <div class="card"><div class="card-title">Where your clients came from <span class="muted small">all time</span></div><div id="lead-src-bars"></div></div></div>
     ${r.lost_reasons.length ? `<div class="card mt"><div class="card-title">Why leads were lost</div>${r.lost_reasons.map(x => `<div class="rank-top" style="padding:4px 0"><span>${esc(x.reason)}</span><span class="mono">${x.count}</span></div>`).join('')}</div>` : ''}`;
-  hbars($('lead-src-bars'), r.clients_by_source.map((s, i) => ({ name: s.source, value: s.revenue, count: s.clients, color: PALETTE[i % PALETTE.length] })), { countLabel: 'clients' });
+  hbars($('lead-src-bars'), r.clients_by_source.map((s, i) => ({ name: s.source, value: s.revenue, count: s.clients, color: INK[i % INK.length] })), { countLabel: 'clients' });
 }
 
 async function loadReferrals() {

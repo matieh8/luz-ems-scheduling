@@ -60,7 +60,7 @@ async function loadFinance() {
     : 'No sessions were delivered in this period, so costs can\'t be spread over sessions yet.';
   $('fin-services').innerHTML = profitTable(f.services, 'services');
   $('fin-plans').innerHTML = profitTable(f.plans, 'plans');
-  const groupColor = { 'Fuel & transport': '#d39b2a', 'Maintenance & equipment': '#5b6b63', 'Marketing': '#1d5fb8', 'Staff': '#047857', 'Premises & utilities': '#9a6b3f', 'Software & subscriptions': '#6250d6', 'Other': '#9aa8a1' };
+  const groupColor = { 'Premises & utilities': 'var(--series-1)', 'Staff': 'var(--series-3)', 'Marketing': 'var(--series-2)', 'Maintenance & equipment': 'var(--text-3)', 'Software & subscriptions': 'var(--border-strong)', 'Fuel & transport': 'var(--series-4)', 'Other': 'var(--neutral-bg)' };
   hbars($('fin-groups'), f.expense_groups.map(g => ({ name: g.group, value: g.total, color: groupColor[g.group] || '#9aa8a1' })));
 }
 

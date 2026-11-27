@@ -3,10 +3,14 @@ const API = '/api';
 const S = { token: localStorage.getItem('luz_token') || '', tz: 'Asia/Dubai', currency: 'AED', business: 'LUZ EMS',
             services: [], staff: [], clients: [], plans: [], settings: null, page: 'dashboard' };
 
+// Loading bar: shown only when a request takes longer than 150 ms, so quick clicks don't flicker.
+let _busy = 0, _busyT;
+function busy(d) { _busy = Math.max(0, _busy + d); clearTimeout(_busyT); if (_busy) _busyT = setTimeout(() => document.body.classList.add('busy'), 150); else document.body.classList.remove('busy'); }
 async function api(method, path, body) {
   const opts = { method, headers: { 'Authorization': 'Bearer ' + S.token } };
   if (body !== undefined) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
-  const res = await fetch(API + path, opts);
+  busy(1);
+  let res; try { res = await fetch(API + path, opts); } finally { busy(-1); }
   if (res.status === 401) { showLogin(); throw new Error('Please sign in'); }
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
@@ -74,7 +78,7 @@ function setTheme(t) {
   try { localStorage.setItem('luz_theme', t); } catch (e) {}
   document.querySelectorAll('.theme-switch button').forEach(b => b.classList.toggle('active', b.dataset.t === t));
   const dark = t === 'dark' || (t === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
-  const meta = document.querySelector('meta[name="theme-color"]'); if (meta) meta.content = dark ? '#0c1110' : '#f4f6f5';
+  const meta = document.querySelector('meta[name="theme-color"]'); if (meta) meta.content = dark ? '#0a0a0a' : '#f6f6f6';
   if (typeof window._dashMonths !== 'undefined' && $('page-dashboard').classList.contains('active')) loadDashboard(); // redraw charts
 }
 document.addEventListener('DOMContentLoaded', () => setTheme(document.documentElement.getAttribute('data-theme') || 'auto'));
@@ -125,7 +129,7 @@ function $(id) { return document.getElementById(id); }
 function val(id) { return $(id).value; }
 function setVal(id, v) { const el = $(id); el.value = v === null || v === undefined ? '' : v; if (el._flatpickr) el._flatpickr.setDate(el.value || null, false); }
 function badge(status) { return `<span class="badge badge-${status}">${esc(status.replace('_', ' '))}</span>`; }
-function toast(msg, isError) { const t = $('toast'); t.textContent = msg; t.classList.toggle('error', !!isError); t.classList.add('show'); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), isError ? 5000 : 3000); }
+function toast(msg, isError) { const t = $('toast'); t.textContent = msg; t.classList.toggle('error', !!isError); t.setAttribute('role', isError ? 'alert' : 'status'); t.classList.add('show'); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), isError ? 5000 : 3000); }
 /* ---------- dialogs: keyboard, screen readers, focus ---------- */
 /* Every modal and the session drawer is a real dialog: focus moves in, Tab stays
    inside, Escape closes, and focus returns to the button that opened it. */
@@ -245,7 +249,9 @@ function hbars(el, rows, opts = {}) { // rows: [{name, value, color, count}]
   const max = Math.max(...rows.map(r => r.value), 1);
   el.innerHTML = rows.map(r => `<div class="hbar"><div title="${esc(r.name)}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span class="dot" style="background:${r.color}"></span>${esc(r.name)}</div><div class="track"><div class="fill" style="width:${100 * r.value / max}%;background:${r.color}"></div></div><div class="v">${fmt(r.value)}${r.count !== undefined ? `<div class="tiny muted">${r.count} ${countLabel}</div>` : ''}</div></div>`).join('');
 }
-const PALETTE = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6', '#e34948'];
+const PALETTE = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6', '#e34948'];  // service / trainer colours (colour pickers)
+// Charts use the LUZ ink scale; each bar has its name next to it, so colour is only a second cue. Works in both themes.
+const INK = ['var(--series-1)', 'var(--series-3)', 'var(--series-2)', 'var(--text-3)', 'var(--border-strong)', 'var(--series-4)'];
 
 /* English everywhere: the browser's own date/time fields and confirm() boxes follow the phone or computer language
    (Arabic digits, ص/م), so dates use an English picker and questions use the app's own dialog. */

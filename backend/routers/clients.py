@@ -60,6 +60,8 @@ def summarize(c: models.Client) -> dict:
         outstanding=float(outstanding),
         sessions_remaining=int(remaining),
         last_visit=max((a.start_time for a in completed), default=None),
+        # same rule as the dashboard's "active clients": a session that isn't cancelled or a no-show, up to now
+        last_session=max((a.start_time for a in appts if a.status in ("scheduled", "confirmed", "completed") and a.start_time <= now), default=None),
         next_visit=min((a.start_time for a in future), default=None),
         package_name=live[0].plan.name if live and live[0].plan else None,
         package_end=live[0].end_date if live else None,

@@ -80,6 +80,7 @@ _ANY, _READ = {"GET", "POST", "PUT", "PATCH", "DELETE"}, {"GET"}
 _COMMON = [  # every signed-in account
     (_READ, r"/api/auth/me$"), (_READ, r"/api/services/"), (_READ, r"/api/staff/$"), (_READ, r"/api/settings/(hours)?$"),
     (_READ, r"/api/subscriptions/plans$"), (_ANY, r"/api/push/"), (_READ, r"/api/blocked-times/"),
+    (_READ, r"/api/search/"),  # results are filtered per kind by the same rules (routers/search.py)
 ]
 _TRAINER = _COMMON + [
     (_ANY - {"DELETE"}, r"/api/appointments/"),

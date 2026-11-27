@@ -13,8 +13,9 @@ async function loadLeads() {
   if (LEADS.tab === 'report') return loadLeadReport();
   if (LEADS.tab === 'referrals') return loadReferrals();
   const f = val('lead-status');
-  let list = await api('GET', `/leads/${f && f !== 'open' ? '?status=' + f : ''}`);
+  let list = await api('GET', `/leads/${f && f !== 'open' && f !== 'month' ? '?status=' + f : ''}`);
   if (f === 'open') list = list.filter(l => ['new', 'contacted', 'trial_booked'].includes(l.status));
+  if (f === 'month') { const start = zonedToDate(todayKey().slice(0, 7) + '-01', '00:00'); list = list.filter(l => parseISO(l.created_at) >= start); }  // same as the dashboard's "new leads"
   const today = todayKey(), open = l => !['won', 'lost'].includes(l.status), due = l => open(l) && l.next_follow_up && l.next_follow_up <= today;
   // Due follow-ups first (oldest first), then the next ones by date, then the rest newest first
   list.sort((a, b) => (due(b) - due(a)) || ((a.next_follow_up && open(a) ? 0 : 1) - (b.next_follow_up && open(b) ? 0 : 1))

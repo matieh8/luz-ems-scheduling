@@ -1353,7 +1353,8 @@ def test_dashboard_live_kpis_match_the_database(client):
     """Every dashboard number comes from the database: compare each with a direct count."""
     from backend.database import SessionLocal
     from backend import models
-    from backend.tz import utcnow
+    from backend.tz import utcnow, local_day_bounds, local_today
+    tz = client.get("/api/settings/").json()["timezone"]
     before = client.get("/api/dashboard/overview").json()
     assert client.post("/api/leads/", json={"name": "Dash Lead", "phone": "0507770003", "source": "instagram",
                                             "next_follow_up": "2000-01-01"}).status_code == 200
@@ -1370,7 +1371,7 @@ def test_dashboard_live_kpis_match_the_database(client):
     db = SessionLocal()
     now = utcnow()
     upcoming = db.query(models.Appointment).filter(models.Appointment.start_time >= now - timedelta(minutes=1),
-                                                   models.Appointment.start_time < now + timedelta(days=7),
+                                                   models.Appointment.start_time < local_day_bounds(local_today(tz) + timedelta(days=6), tz)[1],
                                                    models.Appointment.status.in_(("scheduled", "confirmed"))).count()
     assert abs(d["upcoming"]["count"] - upcoming) <= 1  # a booking may cross "now" between the two reads
     t = d["today_sessions"]
@@ -1733,3 +1734,46 @@ def test_a_fully_booked_package_keeps_its_sessions_when_rescheduled(client):
     moved = client.put(f"/api/appointments/{ids[1]}", json={"start_time": (day + timedelta(hours=3)).isoformat(), "force": True,
                                                             "send_notification": False}).json()
     assert moved["subscription_id"] == sub["id"] and moved["price"] == 0
+
+
+def test_dashboard_comparisons_never_invent_history(client):
+    d = client.get("/api/dashboard/overview").json()
+    k = d["kpis"]
+    for key in ("revenue", "expenses", "profit", "active_clients", "sessions", "leads"):
+        assert k[key]["compare"] in ("ok", "from_zero", "no_history")
+        if k[key]["compare"] == "no_history":
+            assert k[key]["change_pct"] is None and k[key]["prev"] is None
+    assert "definition" in k["active_clients"]
+    assert all("has_data" in m for m in d["months"]) and d["months"][-1]["has_data"]   # this month always has data here
+    from backend.routers.dashboard import _kpi
+    assert _kpi(100, 0, history=False) == {"value": 100, "prev": None, "change_pct": None, "compare": "no_history"}
+    assert _kpi(100, 0)["compare"] == "from_zero" and _kpi(100, 0)["change_pct"] is None
+    assert _kpi(150, 100)["change_pct"] == 50.0
+
+
+def test_filtered_views_match_the_dashboard_numbers(client):
+    from datetime import datetime as _dt
+    d = client.get("/api/dashboard/overview").json()
+    exp = client.get("/api/subscriptions/?expiring=true").json()
+    assert len(exp) == d["packages"]["expiring"]
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    rows = client.get("/api/clients/").json()
+    active30 = [c for c in rows if c["last_session"] and (now - _dt.fromisoformat(c["last_session"])).total_seconds() <= 30 * 86400]
+    assert len(active30) == d["kpis"]["active_clients"]["value"]
+
+
+def test_global_search_respects_permissions(client):
+    cid = client.post("/api/clients/", json={"name": "Searchable Sara", "phone": "050 111 2299"}).json()["id"]
+    client.post("/api/leads/", json={"name": "Searchable Lead", "phone": "0501112300", "source": "instagram"})
+    client.post("/api/payments/", json={"client_id": cid, "amount": 77, "method": "cash", "notes": "searchable"})
+    r = client.get("/api/search/?q=Searchable").json()
+    assert any(x["id"] == cid for x in r["clients"]) and r["leads"] and r["payments"]
+    assert any(x["id"] == cid for x in client.get("/api/search/?q=1112299").json()["clients"])     # phone digits, spaces ignored
+    assert client.get("/api/search/?q=a").status_code == 422
+    sid = client.post("/api/staff/", json={"name": "Search Coach"}).json()["id"]
+    client.put(f"/api/staff/{sid}/account", json={"username": "searchcoach", "password": "pass-search-123", "access": "trainer"})
+    t = _login_as("searchcoach", "pass-search-123").get("/api/search/?q=Searchable").json()
+    assert "clients" in t and "bookings" in t
+    assert "payments" not in t and "leads" not in t                                                # trainers can't see money or leads
+    with TestClient(app) as anon:
+        assert anon.get("/api/search/?q=Searchable").status_code == 401

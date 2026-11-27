@@ -43,8 +43,20 @@ def _pct(value: float, prev: float):
     return round((value - prev) / abs(prev) * 100, 1)
 
 
-def _kpi(value, prev):
-    return {"value": value, "prev": prev, "change_pct": _pct(value, prev)}
+def _kpi(value, prev, history: bool = True):
+    """history=False: the studio had no records yet in the comparison period, so there is nothing to compare with
+    (never show 0% or +100% against a period that simply didn't exist in the system)."""
+    if not history:
+        return {"value": value, "prev": None, "change_pct": None, "compare": "no_history"}
+    return {"value": value, "prev": prev, "change_pct": _pct(value, prev), "compare": "from_zero" if not prev else "ok"}
+
+
+def _history_start(db):
+    """When the studio's records begin: the earliest payment, session or expense (None for an empty system)."""
+    firsts = [db.query(func.min(models.Payment.paid_at)).scalar(), db.query(func.min(models.Appointment.start_time)).scalar(),
+              db.query(func.min(models.Expense.date)).scalar()]
+    firsts = [f for f in firsts if f]
+    return min(firsts) if firsts else None
 
 
 def _month_start(d: date, back: int = 0) -> date:
@@ -73,6 +85,8 @@ def overview(db: Session = Depends(get_db)):
 
     window_first = _month_start(today, 5)
     window_start, _ = local_day_bounds(window_first, tz)
+    history = _history_start(db)
+    had = lambda end: bool(history and history < end)  # were there any records before this moment?
     periods = [_month_start(today, i).strftime("%Y-%m") for i in range(5, -1, -1)]
     months = {p: {"period": p, "revenue": 0.0, "expenses": 0.0, "profit": 0.0, "sessions": 0} for p in periods}
 
@@ -100,7 +114,10 @@ def overview(db: Session = Depends(get_db)):
         k = key(a.start_time)
         if k in months:
             months[k]["sessions"] += 1
-    for m in months.values():
+    for p, m in months.items():
+        y, mo = (int(x) for x in p.split("-"))
+        m_end, _ = local_day_bounds(date(y + (mo == 12), mo % 12 + 1, 1), tz)
+        m["has_data"] = had(m_end)  # months before the first record are "no data", not zero
         m["revenue"] = round(m["revenue"], 2)
         m["expenses"] = round(m["expenses"], 2)
         m["profit"] = round(m["revenue"] - m["expenses"], 2)
@@ -129,7 +146,7 @@ def overview(db: Session = Depends(get_db)):
         models.Appointment.start_time >= today_start, models.Appointment.start_time < today_end).group_by(models.Appointment.status).all())
 
     # Upcoming: booked from now to 7 days ahead, and how many still need the client's confirmation
-    week_end = now + timedelta(days=7)
+    _, week_end = local_day_bounds(today + timedelta(days=6), tz)  # today + the next 6 days, the same days the calendar agenda opens on
     upcoming = dict(db.query(models.Appointment.status, func.count(models.Appointment.id)).filter(
         models.Appointment.start_time >= now, models.Appointment.start_time < week_end,
         models.Appointment.status.in_(("scheduled", "confirmed"))).group_by(models.Appointment.status).all())
@@ -148,7 +165,7 @@ def overview(db: Session = Depends(get_db)):
     for s in subs:
         usable = s.status == "active" and s.sessions_remaining > 0 and (s.end_date is None or s.end_date >= now)
         if usable:
-            if (s.end_date and s.end_date <= soon) or s.sessions_remaining <= settings.subscription_low_threshold:
+            if models.package_running_out(s, settings, now):
                 expiring.append(s)
             else:
                 active.append(s)
@@ -195,13 +212,16 @@ def overview(db: Session = Depends(get_db)):
     return {
         "today": today.isoformat(),
         "compare_label": f"vs 1–{prev_span_end_day} {prev_m.strftime('%b')}",
+        "compare_month": prev_m.strftime("%B"),
+        "history_start": history.isoformat() if history else None,
         "kpis": {
-            "revenue": _kpi(rev, rev_prev),
-            "expenses": _kpi(exp, exp_prev),
-            "profit": _kpi(round(rev - exp, 2), round(rev_prev - exp_prev, 2)),
-            "active_clients": _kpi(ac, ac_prev),
-            "sessions": {**_kpi(ses, ses_prev), "today": int(sessions_today)},
-            "leads": {**_kpi(new_leads(cur_start, cur_end), new_leads(prev_start, prev_end)), "open": leads_open, "follow_ups_due": follow_ups},
+            "revenue": _kpi(rev, rev_prev, had(prev_end)),
+            "expenses": _kpi(exp, exp_prev, had(prev_end)),
+            "profit": _kpi(round(rev - exp, 2), round(rev_prev - exp_prev, 2), had(prev_end)),
+            "active_clients": {**_kpi(ac, ac_prev, had(now - timedelta(days=30))),
+                               "definition": "Clients with at least one session (booked or done, not cancelled or no-show) in the last 30 days"},
+            "sessions": {**_kpi(ses, ses_prev, had(prev_end)), "today": int(sessions_today)},
+            "leads": {**_kpi(new_leads(cur_start, cur_end), new_leads(prev_start, prev_end), had(prev_end)), "open": leads_open, "follow_ups_due": follow_ups},
         },
         "today_sessions": {"total": int(sessions_today), "done": int(today_by_status.get("completed", 0)),
                            "no_show": int(today_by_status.get("no_show", 0)),

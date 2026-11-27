@@ -300,3 +300,47 @@ async function downloadFile(path, name) {
     a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000);
   });
 }
+
+// Small dropdown menus (e.g. More actions): Escape or a click outside closes them; arrow keys move between items.
+function closeMenus() { document.querySelectorAll('.menu:not([hidden])').forEach(m => { m.hidden = true; const b = document.querySelector(`[aria-controls="${m.id}"]`); if (b) b.setAttribute('aria-expanded', 'false'); }); }
+function toggleMenu(id, btn) {
+  const m = $(id), open = m.hidden; closeMenus();
+  if (open) { m.hidden = false; btn.setAttribute('aria-expanded', 'true'); const first = m.querySelector('[role=menuitem]'); if (first) first.focus(); }
+}
+document.addEventListener('click', e => { if (!e.target.closest('.menu-wrap')) closeMenus(); });
+document.addEventListener('keydown', e => {
+  const m = document.querySelector('.menu:not([hidden])'); if (!m) return;
+  const items = [...m.querySelectorAll('[role=menuitem]')], i = items.indexOf(document.activeElement);
+  if (e.key === 'Escape') { closeMenus(); const b = document.querySelector(`[aria-controls="${m.id}"]`); if (b) b.focus(); }
+  else if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length].focus(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
+});
+
+/* ---------- global search (Ctrl/⌘ K): results only include what this account may open ---------- */
+const SEARCH_KINDS = [['clients', 'Clients'], ['bookings', 'Bookings'], ['packages', 'Packages'], ['payments', 'Payments'], ['leads', 'Leads']];
+function openSearch() { setVal('search-input', ''); $('search-results').innerHTML = '<div class="search-hint">Type at least 2 letters or digits. Names, phone numbers, services, packages, amounts.</div>'; openModal('search-modal'); setTimeout(() => $('search-input').focus(), 40); }
+async function runSearch() {
+  const q = val('search-input').trim(), box = $('search-results');
+  if (q.length < 2) { box.innerHTML = '<div class="search-hint">Type at least 2 letters or digits.</div>'; return; }
+  let r; try { r = await api('GET', `/search/?q=${encodeURIComponent(q)}`); } catch (e) { box.innerHTML = `<div class="search-hint">${esc(e.message)}</div>`; return; }
+  if (val('search-input').trim() !== q) return;  // a newer search is on its way
+  const groups = SEARCH_KINDS.filter(([k]) => (r[k] || []).length).map(([k, label]) => `<div class="search-group">${label}</div>` +
+    r[k].map(x => `<button class="search-item" role="option" onclick='searchOpen(${JSON.stringify(k)}, ${JSON.stringify(x)})'><strong>${esc(x.title)}</strong><span>${esc(x.sub || '')}</span></button>`).join(''));
+  box.innerHTML = groups.length ? groups.join('') : `<div class="search-hint">Nothing found for “${esc(q)}”.</div>`;
+}
+function searchOpen(kind, x) {
+  closeModal('search-modal');
+  if (kind === 'clients') openClientDetail(x.id);
+  else if (kind === 'bookings') openAppointment(x.id);
+  else if (kind === 'packages') openClientDetail(x.client_id, 'subs');
+  else if (kind === 'payments') { if (x.client_id) openClientDetail(x.client_id, 'pays'); else go('payments'); }
+  else if (kind === 'leads') { setVal('lead-status', ''); go('leads'); setTimeout(async () => { await loadLeads(); openLeadForm(x.id); }, 0); }
+}
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k' && S.token && $('app').style.display !== 'none') { e.preventDefault(); openSearch(); }
+  if ($('search-modal').classList.contains('active') && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+    const items = [...document.querySelectorAll('#search-results .search-item')]; if (!items.length) return;
+    e.preventDefault(); const i = items.indexOf(document.activeElement);
+    (e.key === 'ArrowDown' ? items[(i + 1) % items.length] : items[i <= 0 ? items.length - 1 : i - 1]).focus();
+  }
+});

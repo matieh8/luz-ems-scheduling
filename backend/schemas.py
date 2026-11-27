@@ -107,6 +107,7 @@ class ClientSummary(ClientResponse):
     outstanding: float = 0.0
     sessions_remaining: int = 0
     last_visit: Optional[datetime] = None
+    last_session: Optional[datetime] = None
     next_visit: Optional[datetime] = None
     late_count: int = 0
     risk: str = "new"  # new | regular | slipping | at_risk | lapsed

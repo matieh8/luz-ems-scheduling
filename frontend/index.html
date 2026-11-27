@@ -18,7 +18,7 @@
     (function () { var t = 'auto'; try { t = localStorage.getItem('luz_theme') || 'auto'; } catch (e) {} document.documentElement.setAttribute('data-theme', t); })();</script>
   <link rel="stylesheet" href="/vendor/flatpickr/flatpickr.min.css?v=4.6.13">
   <link rel="stylesheet" href="/vendor/flatpickr/monthSelect.css?v=4.6.13">
-  <link rel="stylesheet" href="/css/app.css?v=32">
+  <link rel="stylesheet" href="/css/app.css?v=36">
 </head>
 <body>
   <a class="skip-link" href="#main-content" onclick="event.preventDefault(); document.getElementById('main-content').focus()">Skip to content</a>
@@ -40,6 +40,7 @@
         <p id="brand-sub">Scheduling &amp; Client Care</p>
         <span class="env-pill" id="env-pill">staging</span>
       </div>
+      <button class="search-trigger" onclick="openSearch()" aria-label="Search (Ctrl K)"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><span>Search</span><kbd>Ctrl K</kbd></button>
       <nav class="nav">
         <button data-page="dashboard" onclick="go('dashboard')"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg> Dashboard</button>
         <button data-page="calendar" onclick="go('calendar')"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg> Calendar</button>
@@ -77,9 +78,12 @@
             <button class="btn btn-primary" onclick="openBookingModal()">+ Book session</button>
             <button class="btn btn-secondary" onclick="openClientModal()">Add client</button>
             <button class="btn btn-secondary" onclick="openPaymentModal()">Record payment</button>
-            <button class="btn btn-secondary" onclick="openSubscriptionModal()">Sell package</button>
-            <button class="btn btn-secondary" onclick="go('expenses'); setTimeout(addExpenseRow, 400)">Add expense</button>
-            <button class="btn btn-secondary" onclick="openLeadForm()">Add lead</button>
+            <div class="menu-wrap"><button class="btn btn-secondary" id="more-actions-btn" aria-haspopup="true" aria-expanded="false" aria-controls="more-actions" onclick="toggleMenu('more-actions', this)">More ▾</button>
+              <div class="menu" id="more-actions" role="menu" hidden>
+                <button role="menuitem" onclick="closeMenus(); openSubscriptionModal()">Sell package</button>
+                <button role="menuitem" onclick="closeMenus(); go('expenses'); setTimeout(addExpenseRow, 400)">Add expense</button>
+                <button role="menuitem" onclick="closeMenus(); openLeadForm()">Add lead</button>
+              </div></div>
           </div>
         </div>
         <div id="dash-alerts"></div>
@@ -140,7 +144,7 @@
             <option value="slipping">Slipping</option><option value="at_risk">At risk</option><option value="lapsed">Lapsed</option><option value="new">New</option>
           </select>
           <select id="client-status" class="input" style="width:auto" onchange="renderClients()" aria-label="Filter by status">
-            <option value="">Active &amp; inactive</option><option value="active">Active</option><option value="inactive">Inactive</option>
+            <option value="">Active &amp; inactive</option><option value="active">Active</option><option value="active30">Had a session in the last 30 days</option><option value="inactive">Inactive</option>
           </select>
           <select id="client-package" class="input" style="width:auto" onchange="renderClients()" aria-label="Filter by package">
             <option value="">Any package</option><option value="has">Has a package</option><option value="none">No package</option><option value="ending">Ends within 14 days</option>
@@ -164,6 +168,7 @@
           <button class="tab" onclick="subTab('plans', this)">Plans</button>
           <button class="tab" onclick="subTab('codes', this)">Discount codes</button>
           <button class="tab" onclick="subTab('gifts', this)">Gift cards</button>
+          <button class="tab" data-t="expiring" onclick="subTab('expiring', this)">Expiring</button>
           <button class="tab" onclick="subTab('lapsed', this)">Not renewed</button>
         </div>
         <div id="sub-active" class="subpanel active"></div>
@@ -171,6 +176,7 @@
         <div id="sub-plans" class="subpanel"></div>
         <div id="sub-codes" class="subpanel"></div>
         <div id="sub-gifts" class="subpanel"></div>
+        <div id="sub-expiring" class="subpanel"></div>
         <div id="sub-lapsed" class="subpanel"></div>
       </section>
 
@@ -187,7 +193,7 @@
         </div>
         <div id="lead-pipeline" class="subpanel active">
           <div class="toolbar"><select id="lead-status" class="input input-sm" style="width:auto" onchange="loadLeads()" aria-label="Filter">
-            <option value="open">Open (new, contacted, trial)</option><option value="">All</option><option value="new">New</option><option value="contacted">Contacted</option><option value="trial_booked">Trial booked</option><option value="won">Won</option><option value="lost">Lost</option></select></div>
+            <option value="open">Open (new, contacted, trial)</option><option value="">All</option><option value="month">New this month</option><option value="new">New</option><option value="contacted">Contacted</option><option value="trial_booked">Trial booked</option><option value="won">Won</option><option value="lost">Lost</option></select></div>
           <div id="leads-list"></div>
         </div>
         <div id="lead-report" class="subpanel"></div>
@@ -537,6 +543,14 @@
     <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('detail-modal')">Close</button></div>
   </div></div>
 
+  <div class="modal-overlay" id="search-modal" role="dialog" aria-modal="true" aria-labelledby="search-title" aria-hidden="true"><div class="modal search-modal">
+    <h3 id="search-title" class="sr-only">Search</h3>
+    <div class="search-box"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+      <input id="search-input" class="search-input" type="search" autocomplete="off" placeholder="Search clients, bookings, packages, payments, leads" aria-label="Search" aria-controls="search-results" oninput="debounce(runSearch, 200)()">
+      <button class="close-btn" aria-label="Close" onclick="closeModal('search-modal')">&times;</button></div>
+    <div id="search-results" class="search-results" role="listbox" aria-label="Results"></div>
+  </div></div>
+
   <div class="modal-overlay" id="status-modal" role="dialog" aria-modal="true" aria-labelledby="status-modal-title" aria-hidden="true"><div class="modal">
     <div class="modal-header"><h3 id="status-modal-title">Update session</h3><button class="close-btn" aria-label="Close" onclick="closeModal('status-modal')">&times;</button></div>
     <div class="modal-body" id="status-modal-body"></div>
@@ -575,23 +589,24 @@
   </div></div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <button class="search-fab" onclick="openSearch()" aria-label="Search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg></button>
 
   <script src="/vendor/flatpickr/flatpickr.min.js?v=4.6.13"></script>
   <script src="/vendor/flatpickr/monthSelect.js?v=4.6.13"></script>
-  <script src="/js/core.js?v=14"></script>
-  <script src="/js/calendar.js?v=8"></script>
+  <script src="/js/core.js?v=16"></script>
+  <script src="/js/calendar.js?v=10"></script>
   <script src="/js/booking.js?v=8"></script>
-  <script src="/js/clients.js?v=15"></script>
-  <script src="/js/money.js?v=18"></script>
+  <script src="/js/clients.js?v=16"></script>
+  <script src="/js/money.js?v=19"></script>
   <script src="/js/finance.js?v=2"></script>
   <script src="/js/expenses.js?v=6"></script>
   <script src="/js/messages.js?v=4"></script>
   <script src="/js/push.js?v=1"></script>
   <script src="/js/settings.js?v=16"></script>
   <script src="/js/devices.js?v=4"></script>
-  <script src="/js/leads.js?v=6"></script>
+  <script src="/js/leads.js?v=7"></script>
   <script src="/js/team.js?v=3"></script>
-  <script src="/js/dashboard.js?v=7"></script>
+  <script src="/js/dashboard.js?v=11"></script>
   <script>boot();</script>
 </body>
 </html>

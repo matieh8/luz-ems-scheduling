@@ -50,6 +50,8 @@ async function loadSubscriptions() {
   if (SUBS.tab === 'codes') return loadCodes();
   if (SUBS.tab === 'gifts') return loadGifts();
   if (SUBS.tab === 'lapsed') return loadLapsed();
+  if (SUBS.tab === 'expiring') { const subs = await api('GET', '/subscriptions/?expiring=true');
+    $('sub-expiring').innerHTML = `<p class="small muted" style="margin:0 0 10px">Packages that can still be used but end within ${S.settings.subscription_expiry_notice_days} days or have ${S.settings.subscription_low_threshold} or fewer sessions left.</p>` + subsTable(subs); return; }
   const subs = await api('GET', `/subscriptions/${SUBS.tab === 'active' ? '?active=true' : ''}`);
   $('sub-' + SUBS.tab).innerHTML = subsTable(subs);
 }

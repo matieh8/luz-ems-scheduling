@@ -1,10 +1,11 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend import models, schemas, notifications
 from backend.routers import discounts
+from backend.scheduling import get_settings
 from backend.tz import to_utc_naive, utcnow
 
 router = APIRouter(prefix="/api/subscriptions", tags=["Subscriptions"])
@@ -55,7 +56,7 @@ def delete_plan(plan_id: int, db: Session = Depends(get_db)):
 
 @router.get("/", response_model=List[schemas.SubscriptionResponse])
 def list_subscriptions(client_id: Optional[int] = None, status: Optional[str] = None,
-                       active: Optional[bool] = None, db: Session = Depends(get_db)):
+                       active: Optional[bool] = None, expiring: bool = False, db: Session = Depends(get_db)):
     query = db.query(models.Subscription)
     if client_id:
         query = query.filter(models.Subscription.client_id == client_id)
@@ -67,6 +68,9 @@ def list_subscriptions(client_id: Optional[int] = None, status: Optional[str] = 
         def is_active(s):
             return s.status == "active" and (s.end_date is None or s.end_date >= now) and s.sessions_remaining > 0
         rows = [s for s in rows if is_active(s) == active]
+    if expiring:  # the same packages the dashboard counts as "expiring"
+        settings, now = get_settings(db), utcnow()
+        rows = sorted([s for s in rows if models.package_running_out(s, settings, now)], key=lambda s: (s.end_date or datetime.max, s.sessions_remaining))
     return rows
 
 

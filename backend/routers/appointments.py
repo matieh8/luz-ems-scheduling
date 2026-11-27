@@ -254,6 +254,8 @@ def update_appointment(appointment_id: int, body: schemas.AppointmentUpdate, req
         data["start_time"] = to_utc_naive(data["start_time"])
     if data.get("client_id") and not db.query(models.Client).filter(models.Client.id == data["client_id"]).first():
         raise HTTPException(status_code=400, detail="Client not found")
+    if data.get("staff_id") and not db.query(models.Staff).filter(models.Staff.id == data["staff_id"]).first():
+        raise HTTPException(status_code=400, detail="Trainer not found")
     for k, v in data.items():
         setattr(appt, k, v)
     service = db.query(models.Service).filter(models.Service.id == appt.service_id).first()

@@ -1788,3 +1788,23 @@ def test_global_search_respects_permissions(client):
     assert "payments" not in t and "leads" not in t                                                # trainers can't see money or leads
     with TestClient(app) as anon:
         assert anon.get("/api/search/?q=Searchable").status_code == 401
+
+
+def test_dashboard_actions_change_the_real_booking(client):
+    """What Confirm, Reschedule and Assign trainer send from the dashboard really updates the booking."""
+    svc = client.post("/api/services/", json={"name": "Action Check", "duration_minutes": 30, "buffer_minutes": 0, "price": 100}).json()
+    t1 = client.post("/api/staff/", json={"name": "Action Trainer"}).json()["id"]
+    cid = client.post("/api/clients/", json={"name": "Action Client", "phone": "0509990801"}).json()["id"]
+    start = next_weekday_at(10, days_ahead=9)
+    a = client.post("/api/appointments/", json={"client_id": cid, "service_id": svc["id"], "start_time": start.isoformat(), "send_notification": False}).json()
+    assert a["status"] == "scheduled" and a["staff_id"] is None
+    assert client.post(f"/api/appointments/{a['id']}/status", json={"status": "confirmed"}).json()["status"] == "confirmed"
+    moved = client.put(f"/api/appointments/{a['id']}", json={"start_time": (start + timedelta(hours=2)).isoformat(), "send_notification": False}).json()
+    assert moved["start_time"][11:16] == (start + timedelta(hours=2)).strftime("%H:%M") and moved["end_time"][11:16] == (start + timedelta(hours=2, minutes=30)).strftime("%H:%M")
+    assigned = client.put(f"/api/appointments/{a['id']}", json={"staff_id": t1, "send_notification": False}).json()
+    assert assigned["staff_id"] == t1 and assigned["staff"]["name"] == "Action Trainer"
+    got = client.get(f"/api/appointments/{a['id']}").json()
+    assert got["status"] == "confirmed" and got["staff_id"] == t1                          # Details shows the saved record
+    r = client.put(f"/api/appointments/{a['id']}", json={"staff_id": 999999, "send_notification": False})
+    assert r.status_code in (400, 404, 409, 422)                                              # an unknown trainer is refused
+    assert client.get(f"/api/appointments/{a['id']}").json()["staff_id"] == t1                # and nothing was changed

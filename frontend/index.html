@@ -18,7 +18,7 @@
     (function () { var t = 'auto'; try { t = localStorage.getItem('luz_theme') || 'auto'; } catch (e) {} document.documentElement.setAttribute('data-theme', t); })();</script>
   <link rel="stylesheet" href="/vendor/flatpickr/flatpickr.min.css?v=4.6.13">
   <link rel="stylesheet" href="/vendor/flatpickr/monthSelect.css?v=4.6.13">
-  <link rel="stylesheet" href="/css/app.css?v=36">
+  <link rel="stylesheet" href="/css/app.css?v=37">
 </head>
 <body>
   <a class="skip-link" href="#main-content" onclick="event.preventDefault(); document.getElementById('main-content').focus()">Skip to content</a>
@@ -90,8 +90,8 @@
         <div class="kpis" id="dash-stats"></div>
         <div class="pulse-grid mt" id="dash-pulse"></div>
         <div class="dash-row mt">
-          <div class="card"><div class="card-title">Revenue &amp; profit <span class="legend" style="margin:0"><span style="--c:var(--series-1)">Revenue</span><span style="--c:var(--series-2)">Expenses</span><span style="--c:var(--text)">Profit</span></span></div><div id="dash-chart" class="chart"></div><div class="tiny muted" id="dash-chart-note"></div></div>
-          <div class="card"><div class="card-title">Today's schedule <a href="#" class="small" onclick="go('calendar');return false">Calendar →</a></div><div id="dash-today"></div></div>
+          <div class="card"><div class="card-title">Revenue &amp; profit <span class="legend" style="margin:0"><span class="lg lg-rev"><i aria-hidden="true"></i>Revenue</span><span class="lg lg-exp"><i aria-hidden="true"></i>Expenses</span><span class="lg lg-prof"><i aria-hidden="true"></i>Net profit</span></span></div><div id="dash-chart" class="chart"></div><div class="tiny muted" id="dash-chart-note"></div></div>
+          <div class="card"><div class="card-title"><span>Today's schedule<span id="dash-unassigned" class="unassigned-note"></span></span> <a href="#" class="small" onclick="go('calendar');return false">Calendar →</a></div><div id="dash-today"></div></div>
         </div>
         <div class="dash-row mt">
           <div class="card"><div class="card-title">Recent payments <a href="#" class="small" onclick="go('payments');return false">All payments →</a></div><div id="dash-payments"></div></div>
@@ -606,7 +606,7 @@
   <script src="/js/devices.js?v=4"></script>
   <script src="/js/leads.js?v=7"></script>
   <script src="/js/team.js?v=3"></script>
-  <script src="/js/dashboard.js?v=11"></script>
+  <script src="/js/dashboard.js?v=12"></script>
   <script>boot();</script>
 </body>
 </html>

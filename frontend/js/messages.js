@@ -6,7 +6,7 @@ function messagesTable(logs, compact) {
   return `<div class="table-wrap"><table><thead><tr><th>Time</th>${compact ? '' : '<th>To</th>'}<th>Type</th><th>Channel</th><th>Status</th><th>Message</th><th></th></tr></thead><tbody>` + logs.map(l => `<tr>
     <td class="mono small">${fmtDT(l.created_at)}</td>${compact ? '' : `<td><strong>${esc(l.client ? l.client.name : 'Studio')}</strong><div class="tiny muted">${esc(l.recipient || '')}</div></td>`}
     <td>${esc(l.type.replace(/_/g, ' '))}</td><td><span class="chip">${l.channel}</span></td>
-    <td>${badge(l.status)}${l.external_response && l.status === 'failed' ? `<div class="tiny" style="color:var(--bad);max-width:200px">${esc(l.external_response)}</div>` : ''}</td>
+    <td>${(l.external_response || '').startsWith('DEMO MODE') ? '<span class="badge badge-neutral" title="Demo mode: written to the log, nobody received it">demo · not sent</span>' : badge(l.status)}${l.external_response && l.status === 'failed' ? `<div class="tiny" style="color:var(--bad);max-width:200px">${esc(l.external_response)}</div>` : ''}</td>
     <td><details><summary class="small" style="cursor:pointer;color:var(--accent)">${esc((l.subject || l.content).split('\n')[0].slice(0, 60))}…</summary><pre class="small" style="white-space:pre-wrap;margin:6px 0 0;background:var(--bg);padding:10px;border-radius:8px">${esc(l.content)}</pre></details></td>
     <td class="num">${l.status === 'failed' || l.status === 'skipped' ? `<button class="btn btn-ghost btn-xs" onclick="retryMessage(${l.id})">Retry</button>` : ''}${l.status === 'pending_approval' ? `<button class="btn btn-success btn-xs" onclick="approveMessage(${l.id})">Approve &amp; send</button><button class="btn btn-ghost btn-xs" onclick="discardMessage(${l.id})">Discard</button>` : ''}</td></tr>`).join('') + '</tbody></table></div>';
 }
@@ -24,6 +24,7 @@ async function discardMessage(id) { guard(async () => { await api('POST', `/noti
 function approveAllMessages(n) { confirmBox('Send all', `<p>Send all ${n} waiting message(s) now?</p>`, 'Send all', async () => { const r = await api('POST', '/notifications/approve-all'); toast(`${r.approved} message(s) sent`); loadMessages(); }); }
 async function loadMessages() {
   if (MSG.tab === 'templates') return loadTemplates();
+  if (MSG.tab === 'automations') return loadAutomations();
   loadPending();
   if (!MSG.templates.length) { MSG.templates = await api('GET', '/notifications/templates'); fillSelect('msg-type', '<option value="">All types</option>' + MSG.templates.map(t => `<option value="${t.key}">${esc(t.name)}</option>`).join('') + '<option value="custom">Custom message</option>'); }
   const q = ['status', 'channel', 'type'].map(k => val('msg-' + k) ? `&${k}=${val('msg-' + k)}` : '').join('');
@@ -58,3 +59,37 @@ async function sendCustomMessage() { guard(async () => { const channels = [['cm-
   if (!val('cm-body').trim()) throw new Error('Write a message'); if (!channels.length) throw new Error('Pick at least one channel');
   const r = await api('POST', '/notifications/custom', { client_id: +val('cm-client'), body: val('cm-body'), subject: val('cm-subject') || null, channels });
   closeModal('custom-message-modal'); toast(r.length ? `Sent via ${r.map(l => l.channel).join(', ')}` : 'Client has no contact details for those channels', !r.length); if (S.page === 'messages') loadMessages(); }); }
+
+async function retryAllFailed() {
+  if (!await ask('Send again every message that failed in the last 7 days?', 'Retry all', 'btn-primary')) return;
+  guard(async () => { const r = await api('POST', '/notifications/retry-failed'); toast(r.retried ? `${r.sent} of ${r.retried} sent` : 'Nothing failed in the last 7 days', r.retried > r.sent); loadMessages(); });
+}
+
+/* ---------- Automation Center: each automation's real state ("active" only when it can reach someone) ---------- */
+const AUTO_STATE = { active: ['badge-active', 'Active'], needs_approval: ['badge-queued', 'Active · you approve'], not_working: ['badge-cancelled', 'Not working'], off: ['badge-neutral', 'Off'] };
+const AUTO_UNIT = { reminder: 'hours before', follow_up: 'hours after', subscription_expiring: 'days before end', subscription_low: 'sessions left',
+  renewal_offer: 'days after end', payment_reminder: 'days after', win_back: 'days away', owner_session_reminder: 'hours before' };
+async function loadAutomations() {
+  const box = $('automations-box');
+  let r; try { r = await api('GET', '/notifications/automations'); } catch (e) { box.innerHTML = `<div class="card empty">${esc(e.message)}</div>`; return; }
+  const owner = !S.me || S.me.role === 'owner';
+  const ch = (name, c) => `<div class="ch ${c.ok ? 'ok' : 'bad'}"><strong>${name}</strong><span>${c.ok ? 'Working' : esc(c.why)}</span></div>`;
+  box.innerHTML = `${r.demo_mode ? `<div class="alert alert-serious" style="cursor:default">Demo mode is on: automations run, but messages are only written to the log. Nobody receives them. Turn Demo mode off in Settings → Messaging once WhatsApp or email is connected.</div>` : ''}
+    <div class="ch-row">${ch('WhatsApp', r.channels.whatsapp)}${ch('Email', r.channels.email)}${ch('SMS', r.channels.sms)}${ch('Phone notifications (you)', { ok: r.push, why: 'No device has notifications on' })}</div>
+    <div class="table-wrap"><table class="auto-table"><thead><tr><th>Automation</th><th>Status</th><th>Sends via</th><th class="num">Last 30 days</th><th></th></tr></thead><tbody>${r.automations.map(a => {
+      const [cls, label] = AUTO_STATE[a.state] || AUTO_STATE.off, s = a.stats;
+      const counts = a.audience === 'owner' ? '<span class="muted small">to your phone</span>' : [s.sent && `<span style="color:var(--good)">${s.sent} delivered</span>`, s.failed && `<span style="color:var(--bad)">${s.failed} failed</span>`,
+        s.demo && `<span class="muted">${s.demo} logged (demo)</span>`, s.pending_approval && `<span style="color:var(--warn)">${s.pending_approval} waiting</span>`, s.skipped && `<span class="muted">${s.skipped} skipped</span>`].filter(Boolean).join('<br>') || '<span class="muted">none</span>';
+      return `<tr><td><strong>${esc(a.name)}</strong><div class="tiny muted">${esc(a.trigger)}${a.audience === 'owner' ? ' · to you' : ''}</div></td>
+        <td><span class="badge ${cls}">${label}</span>${a.state === 'not_working' ? `<div class="tiny" style="color:var(--bad);max-width:260px">${esc(a.why)}</div>` : ''}</td>
+        <td class="small">${a.channels.length ? a.channels.join(', ') : '<span class="muted">—</span>'}</td>
+        <td class="num small">${counts}${s.last ? `<div class="tiny muted">last ${fmtDT(s.last)}</div>` : ''}${a.template ? `<div><a href="#" class="tiny" onclick="autoLog('${a.template}');return false">View log</a></div>` : ''}</td>
+        <td class="num nowrap">${owner ? `${AUTO_UNIT[a.key] ? `<input type="number" min="1" max="365" class="input input-sm auto-val" id="av-${a.key}" value="${a.value > 0 ? a.value : ''}" placeholder="${a.key === 'payment_reminder' ? 3 : a.key === 'win_back' ? 30 : ''}" title="${AUTO_UNIT[a.key]}" aria-label="${esc(a.name)}: ${AUTO_UNIT[a.key]}"><span class="tiny muted"> ${AUTO_UNIT[a.key]}</span> ` : ''}
+          <label class="switch" title="${a.on ? 'Switch off' : 'Switch on'}"><input type="checkbox" ${a.on ? 'checked' : ''} onchange="switchAutomation('${a.key}', this.checked)" aria-label="${esc(a.name)} on or off"><span></span></label>` : ''}</td></tr>`; }).join('')}</tbody></table></div>
+    <p class="tiny muted">"Active" means it is switched on and at least one channel can really deliver. Messages that fail for a temporary reason are retried automatically for 3 hours; you get a phone notification when one finally fails.</p>`;
+  box.querySelectorAll('.auto-val').forEach(inp => inp.addEventListener('change', () => { const key = inp.id.slice(3); switchAutomation(key, true, +inp.value || null); }));
+}
+async function switchAutomation(key, on, value = null) {
+  guard(async () => { await api('PUT', `/notifications/automations/${key}`, { on, value }); toast(on ? 'Switched on' : 'Switched off'); loadAutomations(); });
+}
+function autoLog(type) { setVal('msg-type', type); msgTab('log', document.querySelector('#page-messages .tab')); }

@@ -105,6 +105,24 @@ DEFAULT_TEMPLATES = {
             "{business_name}"
         ),
     },
+    "payment_reminder": {
+        "name": "Payment reminder (unpaid session)",
+        "subject": "A quick reminder from {business_name}",
+        "body": (
+            "Hi {client_name},\n\n"
+            "A friendly reminder: your *{service_name}* session on {date} is still open for payment ({amount}).\n\n"
+            "You can pay at your next visit or reply here for bank transfer details. Thank you!\n{business_name}"
+        ),
+    },
+    "win_back": {
+        "name": "We miss you (inactive client)",
+        "subject": "We miss you at {business_name}",
+        "body": (
+            "Hi {client_name},\n\n"
+            "It's been a while since your last session at *{business_name}*. Your body remembers the work, so it's a great time to pick it back up.\n\n"
+            "Book a session that suits you here: {booking_link}\n\n{business_name}"
+        ),
+    },
     "admin_session_reminder": {
         "name": "Owner reminder: upcoming session",
         "subject": "Upcoming session {time_relative}: {client_full_name}",
@@ -790,9 +808,188 @@ def run_all_jobs(db: Session):
     settings = get_settings(db)
     if not settings.last_daily_job_at or settings.last_daily_job_at < utcnow() - timedelta(hours=6):
         run_subscription_job(db)
-        try:
-            run_renewal_offer_job(db)
-        except Exception as e:
-            print(f"[jobs] renewal offers failed: {e}")
+        for job in (run_renewal_offer_job, run_payment_reminder_job, run_win_back_job):
+            try:
+                job(db)
+            except Exception as e:
+                print(f"[jobs] {job.__name__} failed: {e}")
         settings.last_daily_job_at = utcnow()
         db.commit()
+
+
+# ---------------------------------------------------------------- payment reminders and win-back
+def run_payment_reminder_job(db: Session):
+    """Once per unpaid session, N days after it: a polite reminder to the client."""
+    settings = get_settings(db)
+    days = settings.payment_reminder_days or 0
+    if days <= 0:
+        return 0
+    cutoff, sent = utcnow() - timedelta(days=days), 0
+    reminded = {a for (a,) in db.query(models.NotificationLog.appointment_id)
+                .filter(models.NotificationLog.type == "payment_reminder", models.NotificationLog.appointment_id.isnot(None)).all()}
+    for a in models.unpaid_sessions(db):
+        if a.id in reminded or a.end_time > cutoff or a.end_time < utcnow() - timedelta(days=60):
+            continue  # once per session; never chase very old history
+        try:
+            send(db, "payment_reminder", a.client, appointment=a, extra={"amount": f"{settings.currency} {a.balance_due:,.0f}"})
+            sent += 1
+        except Exception as e:
+            print(f"[jobs] payment reminder failed for appointment {a.id}: {e}")
+    return sent
+
+
+def run_win_back_job(db: Session):
+    """Clients who stopped coming (no visit for N days, nothing booked, no usable package): prepare a "we miss you"
+    message, held for the owner's approval like renewal offers. Once per absence."""
+    settings = get_settings(db)
+    days = settings.win_back_days or 0
+    if days <= 0:
+        return 0
+    now, made = utcnow(), 0
+    for c in db.query(models.Client).filter(models.Client.active == True).all():  # noqa: E712
+        done = [a.start_time for a in c.appointments if a.status == "completed"]
+        if not done:
+            continue
+        last = max(done)
+        if last > now - timedelta(days=days) or last < now - timedelta(days=180):
+            continue  # still coming, or gone too long ago to message out of the blue
+        if any(a.status in ("scheduled", "confirmed") and a.start_time > now for a in c.appointments):
+            continue
+        if any(s.status == "active" and s.sessions_remaining > 0 and (s.end_date is None or s.end_date >= now) for s in c.subscriptions):
+            continue  # they have sessions left: a different conversation
+        if db.query(models.NotificationLog).filter(models.NotificationLog.client_id == c.id, models.NotificationLog.type == "win_back",
+                                                   models.NotificationLog.created_at > last).first():
+            continue
+        if send(db, "win_back", c, hold=True):
+            made += 1
+    return made
+
+
+# ---------------------------------------------------------------- automation center
+AUTOMATIONS = [
+    # key, name, who gets it, template, held for approval
+    ("booking_confirmation", "Booking confirmation", "client", "booking_confirmation", False),
+    ("reminder", "Session reminder", "client", "reminder", False),
+    ("follow_up", "Post-session follow-up", "client", "follow_up", False),
+    ("subscription_expiring", "Package expiring", "client", "subscription_expiring", False),
+    ("subscription_low", "Low session balance", "client", "subscription_low", False),
+    ("renewal_offer", "Renewal offer (package ended)", "client", "renewal_offer", True),
+    ("payment_reminder", "Payment reminder", "client", "payment_reminder", False),
+    ("win_back", "Inactive clients", "client", "win_back", True),
+    ("lead_follow_up", "Lead follow-up reminders", "owner", None, False),
+    ("owner_session_reminder", "Session heads-up for you", "owner", None, False),
+]
+
+
+def channel_states(db: Session) -> Dict[str, dict]:
+    """Whether each channel can really deliver right now, and why not."""
+    s = get_settings(db)
+    if s.demo_mode:
+        why = "Demo mode is on: messages are only written to the log, nobody receives them"
+        return {c: {"ok": False, "why": why} for c in ("whatsapp", "sms", "email")}
+    out = {}
+    if not s.whatsapp_enabled:
+        out["whatsapp"] = {"ok": False, "why": "WhatsApp is off in Settings → Messaging"}
+    elif (s.whatsapp_provider or "") == "whatsapp_web":
+        from backend import whatsapp_web_client
+        st = whatsapp_web_client.get_status()
+        out["whatsapp"] = {"ok": bool(st.get("ready")), "why": "" if st.get("ready") else "WhatsApp Web isn't connected: scan the QR code in Settings → Messaging"}
+    else:
+        ok = all([s.twilio_account_sid, s.twilio_auth_token, s.twilio_phone_number])
+        out["whatsapp"] = {"ok": ok, "why": "" if ok else "Twilio details are missing in Settings → Messaging"}
+    sms_ok = bool(s.sms_enabled and s.twilio_account_sid and s.twilio_auth_token and s.twilio_sms_number)
+    out["sms"] = {"ok": sms_ok, "why": "" if sms_ok else ("SMS is off" if not s.sms_enabled else "Twilio SMS details are missing")}
+    email_ok = bool(s.email_enabled and s.smtp_host)
+    out["email"] = {"ok": email_ok, "why": "" if email_ok else ("Email is off" if not s.email_enabled else "The email (SMTP) server isn't set")}
+    return out
+
+
+def automation_overview(db: Session) -> dict:
+    from sqlalchemy import func
+    from backend import push
+    s = get_settings(db)
+    chans = channel_states(db)
+    working = [c for c, v in chans.items() if v["ok"]]
+    push_ok = bool(push.AVAILABLE and db.query(models.PushSubscription).count())
+    templates = {t.key: t for t in db.query(models.MessageTemplate).all()}
+    since = utcnow() - timedelta(days=30)
+    empty = lambda: {"sent": 0, "failed": 0, "skipped": 0, "pending_approval": 0, "queued": 0, "demo": 0, "last": None}
+    stats = {}
+    for typ, status, n, last in (db.query(models.NotificationLog.type, models.NotificationLog.status, func.count(models.NotificationLog.id),
+                                          func.max(models.NotificationLog.created_at))
+                                 .filter(models.NotificationLog.created_at >= since)
+                                 .group_by(models.NotificationLog.type, models.NotificationLog.status).all()):
+        st = stats.setdefault(typ, empty())
+        demo = status == "sent" and s.demo_mode  # in demo mode "sent" only means "written to the log"
+        st["demo" if demo else status] = st.get("demo" if demo else status, 0) + n
+        st["last"] = max(st["last"], last) if st["last"] else last
+    tpl_on = lambda k: bool(templates.get(k) and templates[k].enabled)
+    pr, wb = s.payment_reminder_days or 0, s.win_back_days or 0
+    setting = {
+        "booking_confirmation": (tpl_on("booking_confirmation"), "Right after a booking is made", None),
+        "reminder": (s.reminder_hours_before > 0 and tpl_on("reminder"), f"{s.reminder_hours_before or 12} hours before the session", s.reminder_hours_before),
+        "follow_up": (bool(s.follow_up_enabled) and tpl_on("follow_up"), f"{s.follow_up_hours_after} hours after a completed session", s.follow_up_hours_after),
+        "subscription_expiring": (s.subscription_expiry_notice_days > 0 and tpl_on("subscription_expiring"),
+                                  f"{s.subscription_expiry_notice_days or 7} days before a package ends", s.subscription_expiry_notice_days),
+        "subscription_low": (s.subscription_low_threshold > 0 and tpl_on("subscription_low"),
+                             f"When {s.subscription_low_threshold or 2} or fewer sessions are left", s.subscription_low_threshold),
+        "renewal_offer": (bool(s.renewal_offer_auto) and tpl_on("renewal_offer"), f"{s.renewal_offer_days} days after a package ends, held for your OK", s.renewal_offer_days),
+        "payment_reminder": (pr > 0 and tpl_on("payment_reminder"), f"{pr or 3} days after an unpaid session, once", pr),
+        "win_back": (wb > 0 and tpl_on("win_back"), f"After {wb or 30} days without a visit, held for your OK", wb),
+        "lead_follow_up": (bool(s.push_daily_summary), f"In your morning phone summary at {s.push_summary_hour or 0}:00", None),
+        "owner_session_reminder": ((s.admin_reminder_hours or 0) > 0 and s.push_session_reminders is not False,
+                                   f"{s.admin_reminder_hours or 12} hours before each session, on your phone", s.admin_reminder_hours),
+    }
+    out = []
+    for key, name, who, tpl, held in AUTOMATIONS:
+        on, trigger, value = setting[key]
+        if not on:
+            state, why = "off", "Switched off"
+        elif who == "owner":
+            state, why = ("active", "") if push_ok else ("not_working", "No phone or computer has notifications turned on (Settings → Phone notifications)")
+        elif not working:
+            state, why = "not_working", " · ".join(sorted({v["why"] for v in chans.values() if v["why"]}))
+        else:
+            state, why = ("needs_approval" if held else "active"), ("Prepared automatically; you approve each one in Messages" if held else "")
+        out.append({"key": key, "name": name, "audience": who, "template": tpl, "held": held, "on": on, "state": state, "why": why,
+                    "trigger": trigger, "value": value, "channels": working if who == "client" else (["push"] if push_ok else []),
+                    "stats": stats.get(tpl or "", empty())})
+    return {"demo_mode": bool(s.demo_mode), "channels": chans, "push": push_ok, "automations": out}
+
+
+def set_automation(db: Session, key: str, on: bool, value: Optional[int] = None):
+    """Switch one automation on/off (and its timing) in the settings or template it really depends on."""
+    if key not in {k for k, *_ in AUTOMATIONS}:
+        raise KeyError(key)
+    s = get_settings(db)
+    tpl = {k: t for k, _, _, t, _ in AUTOMATIONS}[key]
+    if tpl and on:
+        ensure_templates(db)
+        db.query(models.MessageTemplate).filter(models.MessageTemplate.key == tpl).update({"enabled": True})
+    v = value if (value is not None and value > 0) else None
+    if key == "booking_confirmation":
+        db.query(models.MessageTemplate).filter(models.MessageTemplate.key == "booking_confirmation").update({"enabled": on})
+    elif key == "reminder":
+        s.reminder_hours_before = (v or (s.reminder_hours_before if s.reminder_hours_before > 0 else 12)) if on else 0
+    elif key == "follow_up":
+        s.follow_up_enabled = on
+        if v:
+            s.follow_up_hours_after = v
+    elif key == "subscription_expiring":
+        s.subscription_expiry_notice_days = (v or (s.subscription_expiry_notice_days if s.subscription_expiry_notice_days > 0 else 7)) if on else 0
+    elif key == "subscription_low":
+        s.subscription_low_threshold = (v or (s.subscription_low_threshold if s.subscription_low_threshold > 0 else 2)) if on else 0
+    elif key == "renewal_offer":
+        s.renewal_offer_auto = on
+        if v:
+            s.renewal_offer_days = v
+    elif key == "payment_reminder":
+        s.payment_reminder_days = (v or 3) if on else 0
+    elif key == "win_back":
+        s.win_back_days = (v or 30) if on else 0
+    elif key == "lead_follow_up":
+        s.push_daily_summary = on
+    elif key == "owner_session_reminder":
+        s.admin_reminder_hours = (v or (s.admin_reminder_hours if (s.admin_reminder_hours or 0) > 0 else 12)) if on else 0
+        s.push_session_reminders = on
+    db.commit()

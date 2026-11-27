@@ -18,7 +18,7 @@
     (function () { var t = 'auto'; try { t = localStorage.getItem('luz_theme') || 'auto'; } catch (e) {} document.documentElement.setAttribute('data-theme', t); })();</script>
   <link rel="stylesheet" href="/vendor/flatpickr/flatpickr.min.css?v=4.6.13">
   <link rel="stylesheet" href="/vendor/flatpickr/monthSelect.css?v=4.6.13">
-  <link rel="stylesheet" href="/css/app.css?v=29">
+  <link rel="stylesheet" href="/css/app.css?v=30">
 </head>
 <body>
   <a class="skip-link" href="#main-content" onclick="event.preventDefault(); document.getElementById('main-content').focus()">Skip to content</a>
@@ -304,8 +304,10 @@
         </div>
         <div class="tabs">
           <button class="tab active" onclick="msgTab('log', this)">Log</button>
+          <button class="tab" data-t="automations" onclick="msgTab('automations', this)">Automations</button>
           <button class="tab" onclick="msgTab('templates', this)">Templates</button>
         </div>
+        <div id="msg-automations" class="subpanel"><div id="automations-box"></div></div>
         <div id="msg-log" class="subpanel active">
           <div id="msg-pending"></div>
           <div class="toolbar">
@@ -313,6 +315,7 @@
             <select id="msg-channel" class="input input-sm" onchange="loadMessages()"><option value="">All channels</option><option value="whatsapp">WhatsApp</option><option value="sms">SMS</option><option value="email">Email</option></select>
             <select id="msg-type" class="input input-sm" onchange="loadMessages()"><option value="">All types</option></select>
             <button class="btn btn-secondary btn-sm" onclick="runJobs()">Run reminder jobs now</button>
+            <button class="btn btn-secondary btn-sm" onclick="retryAllFailed()">Retry all failed</button>
           </div>
           <div id="messages-table" class="table-wrap"></div>
         </div>
@@ -577,12 +580,12 @@
   <script src="/vendor/flatpickr/monthSelect.js?v=4.6.13"></script>
   <script src="/js/core.js?v=13"></script>
   <script src="/js/calendar.js?v=8"></script>
-  <script src="/js/booking.js?v=7"></script>
+  <script src="/js/booking.js?v=8"></script>
   <script src="/js/clients.js?v=15"></script>
   <script src="/js/money.js?v=17"></script>
   <script src="/js/finance.js?v=1"></script>
   <script src="/js/expenses.js?v=6"></script>
-  <script src="/js/messages.js?v=3"></script>
+  <script src="/js/messages.js?v=4"></script>
   <script src="/js/push.js?v=1"></script>
   <script src="/js/settings.js?v=16"></script>
   <script src="/js/devices.js?v=4"></script>

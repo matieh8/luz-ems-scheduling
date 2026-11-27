@@ -464,6 +464,8 @@ class Setting(Base):
     subscription_expiry_notice_days = Column(Integer, nullable=False, default=7)
     renewal_offer_auto = Column(Boolean, default=True)  # prepare renewal offers (held for approval)
     renewal_offer_days = Column(Integer, nullable=False, default=7)  # days after a package ends
+    payment_reminder_days = Column(Integer, nullable=False, default=0)  # remind about an unpaid session after N days; 0 = off
+    win_back_days = Column(Integer, nullable=False, default=0)  # invite clients back after N days without a visit; 0 = off
     notify_admin_online_booking = Column(Boolean, default=True)
 
     # Phone notifications (web push) for the admin app

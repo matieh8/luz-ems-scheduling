@@ -1663,3 +1663,73 @@ def test_monthly_report_matches_the_records(client):
     token = client.headers["Authorization"][7:]
     with TestClient(app) as anon:
         assert anon.get(f"/api/reports/export/monthly.csv?month={month}&token={token}").status_code == 401
+
+
+def test_automation_center_is_honest_and_switchable(client):
+    """In demo mode (or with no channel connected) nothing that messages clients shows as active."""
+    r = client.get("/api/notifications/automations").json()
+    keys = {a["key"]: a for a in r["automations"]}
+    assert {"booking_confirmation", "reminder", "follow_up", "subscription_expiring", "subscription_low", "payment_reminder",
+            "win_back", "lead_follow_up", "renewal_offer"} <= set(keys)
+    if r["demo_mode"]:
+        assert all(a["state"] in ("off", "not_working") for a in r["automations"] if a["audience"] == "client")
+        assert all(not c["ok"] for c in r["channels"].values())
+        assert "Demo mode" in keys["reminder"]["why"]
+    assert keys["payment_reminder"]["state"] == "off" and keys["win_back"]["state"] == "off"   # new automations start off
+    r = client.put("/api/notifications/automations/payment_reminder", json={"on": True, "value": 2}).json()
+    pr = next(a for a in r["automations"] if a["key"] == "payment_reminder")
+    assert pr["on"] and pr["value"] == 2 and client.get("/api/settings/").json().get("payment_reminder_days", 2) == 2
+    assert client.put("/api/notifications/automations/nope", json={"on": True}).status_code == 404
+    assert client.put("/api/notifications/automations/reminder", json={"on": True, "value": 999}).status_code == 422
+    client.put("/api/notifications/automations/payment_reminder", json={"on": False})
+    # Only the owner can switch automations
+    sid = client.post("/api/staff/", json={"name": "Auto Manager"}).json()["id"]
+    client.put(f"/api/staff/{sid}/account", json={"username": "automgr", "password": "pass-auto-123", "access": "manager"})
+    assert _login_as("automgr", "pass-auto-123").put("/api/notifications/automations/reminder", json={"on": False}).status_code == 403
+
+
+def test_payment_reminders_and_win_back_run_once(client):
+    from backend.database import SessionLocal
+    from backend import models, notifications
+    from backend.tz import utcnow
+    svc = client.post("/api/services/", json={"name": "Auto Check", "duration_minutes": 20, "buffer_minutes": 0, "price": 150}).json()
+    cid = client.post("/api/clients/", json={"name": "Auto Client", "phone": "0509990601"}).json()["id"]
+    db = SessionLocal()
+    try:
+        ago = utcnow() - timedelta(days=40)
+        a = models.Appointment(client_id=cid, service_id=svc["id"], start_time=ago, end_time=ago + timedelta(minutes=20),
+                               status="completed", price=150, source="admin")
+        db.add(a)
+        s = db.query(models.Setting).first()
+        s.payment_reminder_days, s.win_back_days = 3, 30
+        db.commit()
+        assert notifications.run_payment_reminder_job(db) >= 1
+        sent = db.query(models.NotificationLog).filter_by(type="payment_reminder", appointment_id=a.id).all()
+        assert sent and "150" in sent[0].content
+        notifications.run_payment_reminder_job(db)
+        assert db.query(models.NotificationLog).filter_by(type="payment_reminder", appointment_id=a.id).count() == len(sent)   # once
+        assert notifications.run_win_back_job(db) >= 1
+        wb = db.query(models.NotificationLog).filter_by(type="win_back", client_id=cid).all()
+        assert wb and all(l.status == "pending_approval" for l in wb)                       # held for the owner
+        notifications.run_win_back_job(db)
+        assert db.query(models.NotificationLog).filter_by(type="win_back", client_id=cid).count() == len(wb)
+    finally:
+        s = db.query(models.Setting).first()
+        s.payment_reminder_days, s.win_back_days = 0, 0
+        db.commit()
+        db.close()
+    assert client.post("/api/notifications/retry-failed").status_code == 200
+
+
+def test_a_fully_booked_package_keeps_its_sessions_when_rescheduled(client):
+    plan = client.post("/api/subscriptions/plans", json={"name": "Full Two", "sessions_included": 2, "duration_days": 60, "price": 100}).json()
+    svc = client.post("/api/services/", json={"name": "Full Check", "duration_minutes": 20, "buffer_minutes": 0, "price": 90}).json()
+    cid = client.post("/api/clients/", json={"name": "Full Pack", "phone": "0509990701"}).json()["id"]
+    sub = client.post("/api/subscriptions/", json={"client_id": cid, "plan_id": plan["id"], "payment_method": "cash", "send_notification": False}).json()
+    day = next_weekday_at(9, days_ahead=3)
+    ids = [client.post("/api/appointments/", json={"client_id": cid, "service_id": svc["id"], "force": True, "send_notification": False,
+                                                   "start_time": (day + timedelta(hours=h)).isoformat()}).json()["id"] for h in (0, 1)]
+    client.put(f"/api/subscriptions/{sub['id']}", json={"status": "completed"})   # what the daily job does to a fully used package
+    moved = client.put(f"/api/appointments/{ids[1]}", json={"start_time": (day + timedelta(hours=3)).isoformat(), "force": True,
+                                                            "send_notification": False}).json()
+    assert moved["subscription_id"] == sub["id"] and moved["price"] == 0

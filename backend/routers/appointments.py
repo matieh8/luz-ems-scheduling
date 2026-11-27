@@ -44,7 +44,7 @@ def recheck_package(db: Session, appt: models.Appointment):
         return
     others = sum(1 for a in sub.appointments if a.id != appt.id and a.status != "cancelled")
     fits = int(sub.sessions_used_before or 0) + others < sub.sessions_total and (sub.end_date is None or sub.end_date >= appt.start_time)
-    if fits and sub.status == "active":
+    if fits and sub.status in ("active", "completed"):  # "completed" = every session booked, not ended
         return
     other = find_active_subscription(db, appt.client_id, appt.start_time)
     other = other if other and other.id != sub.id else None

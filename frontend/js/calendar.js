@@ -2,7 +2,7 @@
 const CAL = { view: matchMedia('(max-width: 640px)').matches ? 'day' : 'week', anchor: todayKey(), hours: [], appts: [], blocks: [] };  // phones open on one day
 const ROW_MIN = 30, ROW_PX = 36;
 
-function calView(v) { CAL.view = v; document.querySelectorAll('#cal-view button').forEach(b => b.classList.toggle('active', b.dataset.v === v)); loadCalendar(); }
+function calView(v) { CAL.view = v; CAL.agendaDays = null; document.querySelectorAll('#cal-view button').forEach(b => b.classList.toggle('active', b.dataset.v === v)); loadCalendar(); }
 function addMonths(key, n) { const [y, m] = key.split('-').map(Number); const d = new Date(Date.UTC(y, m - 1 + n, 1)); return d.toISOString().slice(0, 10); }
 function calMove(n) { CAL.anchor = CAL.view === 'month' ? addMonths(CAL.anchor, n) : addDays(CAL.anchor, CAL.view === 'day' ? n : 7 * n); loadCalendar(); }
 function calToday() { CAL.anchor = todayKey(); loadCalendar(); }
@@ -11,7 +11,8 @@ function calOpenDay(k) { CAL.anchor = k; calView('day'); }
 function calRange() {
   if (CAL.view === 'day') return [CAL.anchor, addDays(CAL.anchor, 1)];
   if (CAL.view === 'month') { const first = CAL.anchor.slice(0, 8) + '01'; const ws = weekStartKey(first); return [ws, addDays(ws, 42)]; }
-  const ws = weekStartKey(CAL.anchor); return [ws, addDays(ws, CAL.view === 'agenda' ? 14 : 7)];
+  if (CAL.view === 'agenda') return [CAL.anchor, addDays(CAL.anchor, CAL.agendaDays || 14)];  // agenda: the next two weeks (7 days from the dashboard)
+  const ws = weekStartKey(CAL.anchor); return [ws, addDays(ws, 7)];
 }
 
 async function loadCalendar() {

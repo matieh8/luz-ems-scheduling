@@ -27,7 +27,7 @@ function renderClients() {
   const risk = val('client-risk'), status = val('client-status'), pkg = val('client-package'), trainer = val('client-trainer'), owes = $('client-owes').checked;
   const in14 = c => c.package_end && (parseISO(c.package_end) - new Date()) < 14 * 864e5;
   let clients = CL.all.filter(c => (!risk || (risk === 'attention' ? ['slipping', 'at_risk', 'lapsed'].includes(c.risk) : c.risk === risk))
-    && (!status || (status === 'active') === clientIsActive(c))
+    && (!status || (status === 'active30' ? !!c.last_session && (new Date() - parseISO(c.last_session)) <= 30 * 864e5 : (status === 'active') === clientIsActive(c)))
     && (!pkg || (pkg === 'has' ? !!c.package_name : pkg === 'none' ? !c.package_name : in14(c)))
     && (!trainer || c.main_trainer === trainer) && (!owes || c.outstanding > 0));
   const f = CL_SORT[CL.sort] || CL_SORT.name;

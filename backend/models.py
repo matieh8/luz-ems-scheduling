@@ -592,3 +592,13 @@ def unpaid_sessions(db, query=None):
         Appointment.status == "completed", Appointment.subscription_id.is_(None), Appointment.price > 0)
     rows = q.outerjoin(paid, paid.c.appointment_id == Appointment.id).add_columns(func.coalesce(paid.c.paid, 0)).all()
     return [a for a, p in rows if float(a.price or 0) - float(p) > 0]
+
+
+def package_running_out(s, settings, now) -> bool:
+    """A package that can still be used but is ending soon or has few sessions left (dashboard and Packages > Expiring)."""
+    from datetime import timedelta
+    usable = s.status == "active" and s.sessions_remaining > 0 and (s.end_date is None or s.end_date >= now)
+    if not usable:
+        return False
+    soon = now + timedelta(days=settings.subscription_expiry_notice_days)
+    return bool((s.end_date and s.end_date <= soon) or s.sessions_remaining <= settings.subscription_low_threshold)

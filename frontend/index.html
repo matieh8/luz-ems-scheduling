@@ -18,7 +18,7 @@
     (function () { var t = 'auto'; try { t = localStorage.getItem('luz_theme') || 'auto'; } catch (e) {} document.documentElement.setAttribute('data-theme', t); })();</script>
   <link rel="stylesheet" href="/vendor/flatpickr/flatpickr.min.css?v=4.6.13">
   <link rel="stylesheet" href="/vendor/flatpickr/monthSelect.css?v=4.6.13">
-  <link rel="stylesheet" href="/css/app.css?v=28">
+  <link rel="stylesheet" href="/css/app.css?v=29">
 </head>
 <body>
   <a class="skip-link" href="#main-content" onclick="event.preventDefault(); document.getElementById('main-content').focus()">Skip to content</a>
@@ -222,7 +222,7 @@
         <div class="header">
           <div><h2>Expenses</h2><div class="sub" id="exp-month-label"></div></div>
           <div class="actions">
-            <a class="btn btn-secondary" id="exp-export" href="#" target="_blank">Export CSV</a>
+            <button class="btn btn-secondary" onclick="exportExpenses()">Export CSV</button>
           </div>
         </div>
         <div class="toolbar">
@@ -244,8 +244,8 @@
         <div class="header">
           <div><h2>Revenue</h2><div class="sub" id="rep-range-label"></div></div>
           <div class="actions">
-            <a class="btn btn-secondary" id="rep-export-pay" href="#" target="_blank">Export payments CSV</a>
-            <a class="btn btn-secondary" id="rep-export-appt" href="#" target="_blank">Export sessions CSV</a>
+            <button class="btn btn-secondary" onclick="downloadFile(`/reports/export/payments.csv?from=${REP.from}&to=${REP.to}`, `payments_${REP.from}_${REP.to}.csv`)">Export payments CSV</button>
+            <button class="btn btn-secondary" onclick="downloadFile(`/reports/export/appointments.csv?from=${REP.from}&to=${REP.to}`, `sessions_${REP.from}_${REP.to}.csv`)">Export sessions CSV</button>
           </div>
         </div>
         <div class="toolbar">
@@ -262,6 +262,13 @@
           <input type="date" id="rep-to" class="input input-sm" onchange="repCustom()">
         </div>
         <div class="grid grid-4" id="rep-kpis"></div>
+        <div class="card mt" id="monthly-card">
+          <div class="card-title">Monthly financial report
+            <span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><input type="month" id="mr-month" class="input input-sm" onchange="loadMonthly()">
+              <button class="btn btn-secondary btn-sm" onclick="downloadFile(`/reports/export/monthly.csv?month=${val('mr-month')}`, `luz_monthly_${val('mr-month')}.csv`)">Export CSV</button>
+              <button class="btn btn-secondary btn-sm" onclick="printMonthly()">Print / PDF</button></span></div>
+          <div id="monthly-body"></div>
+        </div>
         <div class="card mt">
           <div class="card-title">Collected revenue <span class="seg" id="rep-gran"><button class="active" data-g="day" onclick="repGran('day')">Daily</button><button data-g="week" onclick="repGran('week')">Weekly</button><button data-g="month" onclick="repGran('month')">Monthly</button></span></div>
           <div id="rep-chart" class="chart"></div>
@@ -568,13 +575,13 @@
 
   <script src="/vendor/flatpickr/flatpickr.min.js?v=4.6.13"></script>
   <script src="/vendor/flatpickr/monthSelect.js?v=4.6.13"></script>
-  <script src="/js/core.js?v=12"></script>
+  <script src="/js/core.js?v=13"></script>
   <script src="/js/calendar.js?v=8"></script>
   <script src="/js/booking.js?v=7"></script>
   <script src="/js/clients.js?v=15"></script>
-  <script src="/js/money.js?v=16"></script>
+  <script src="/js/money.js?v=17"></script>
   <script src="/js/finance.js?v=1"></script>
-  <script src="/js/expenses.js?v=5"></script>
+  <script src="/js/expenses.js?v=6"></script>
   <script src="/js/messages.js?v=3"></script>
   <script src="/js/push.js?v=1"></script>
   <script src="/js/settings.js?v=16"></script>

@@ -147,7 +147,7 @@ def token_from(request: Request) -> Optional[str]:
     header = request.headers.get("authorization", "")
     if header.lower().startswith("bearer "):
         return header[7:].strip()
-    return request.query_params.get("token")
+    return None  # never from the URL: links end up in logs and browser history
 
 
 def require_auth(request: Request):

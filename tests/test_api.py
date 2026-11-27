@@ -1592,3 +1592,74 @@ def test_lead_follow_ups_in_the_morning_summary(client):
         assert "lead follow-up" in body
     finally:
         db.close()
+
+
+def test_payments_refunds_duplicates_and_links(client):
+    svc = client.post("/api/services/", json={"name": "Money Check", "duration_minutes": 20, "buffer_minutes": 0, "price": 300}).json()
+    cid = client.post("/api/clients/", json={"name": "Money Client", "phone": "0509990501"}).json()["id"]
+    other = client.post("/api/clients/", json={"name": "Other Client", "phone": "0509990502"}).json()["id"]
+    ap = client.post("/api/appointments/", json={"client_id": cid, "service_id": svc["id"], "force": True, "send_notification": False,
+                                                 "use_subscription": False, "start_time": next_weekday_at(9, 1).isoformat()}).json()
+    # Completing twice with a payment records it once
+    for _ in range(2):
+        client.post(f"/api/appointments/{ap['id']}/status", json={"status": "completed", "payment_amount": 300, "payment_method": "card"})
+    pays = [p for p in client.get(f"/api/payments/?client_id={cid}").json()]
+    assert len(pays) == 1 and pays[0]["amount"] == 300
+    p = pays[0]
+    # Paying it again is an overpayment / duplicate: refused unless confirmed
+    r = client.post("/api/payments/", json={"client_id": cid, "appointment_id": ap["id"], "amount": 300, "method": "card"})
+    assert r.status_code == 409
+    # Links must belong to the client
+    assert client.post("/api/payments/", json={"client_id": other, "appointment_id": ap["id"], "amount": 10, "method": "cash"}).status_code == 400
+    plan = client.get("/api/subscriptions/plans").json()[0]
+    sub = client.post("/api/subscriptions/", json={"client_id": cid, "plan_id": plan["id"], "payment_method": None, "record_payment": False,
+                                                   "send_notification": False}).json()
+    assert client.post("/api/payments/", json={"client_id": other, "subscription_id": sub["id"], "amount": 10, "method": "cash"}).status_code == 400
+    # A plain payment twice in a row is flagged as a duplicate, and goes through when confirmed
+    body = {"client_id": cid, "amount": 55, "method": "cash", "notes": "retail"}
+    assert client.post("/api/payments/", json=body).status_code == 200
+    assert client.post("/api/payments/", json=body).status_code == 409
+    assert client.post("/api/payments/", json={**body, "confirm": True}).status_code == 200
+    # Refunds: linked, limited to what was paid, never a new debt, and reports net them out
+    month = datetime.now().strftime("%Y-%m")
+    before = client.get(f"/api/reports/monthly?month={month}").json()
+    r1 = client.post(f"/api/payments/{p['id']}/refund", json={"amount": 100, "reason": "late start"})
+    assert r1.status_code == 200 and r1.json()["amount"] == -100 and r1.json()["refund_of_id"] == p["id"]
+    assert client.post(f"/api/payments/{p['id']}/refund", json={"amount": 250}).status_code == 400   # only 200 left
+    assert client.post(f"/api/payments/{r1.json()['id']}/refund", json={"amount": 1}).status_code == 400
+    assert client.delete(f"/api/payments/{p['id']}").status_code == 409                               # refund first
+    orig = next(x for x in client.get(f"/api/payments/?client_id={cid}").json() if x["id"] == p["id"])
+    assert orig["amount"] == 300 and orig["refunded_amount"] == 100                                  # original untouched
+    assert client.get(f"/api/appointments/{ap['id']}").json()["balance_due"] == 0                    # a refund isn't a debt
+    after = client.get(f"/api/reports/monthly?month={month}").json()
+    assert round(after["refunds"] - before["refunds"], 2) == 100 and round(after["net_revenue"] - before["net_revenue"], 2) == -100
+    assert client.get(f"/api/payments/{r1.json()['id']}/invoice").json()["number"].startswith("CN-")
+
+
+def test_monthly_report_matches_the_records(client):
+    from backend.database import SessionLocal
+    from backend import models
+    from backend.routers.reports import _month_bounds
+    month = datetime.now().strftime("%Y-%m")
+    r = client.get(f"/api/reports/monthly?month={month}").json()
+    db = SessionLocal()
+    try:
+        _, _, _, start, end = _month_bounds(db, month)
+        pays = db.query(models.Payment).filter(models.Payment.paid_at >= start, models.Payment.paid_at < end).all()
+        exps = db.query(models.Expense).filter(models.Expense.date >= start, models.Expense.date < end).all()
+        assert abs(r["net_revenue"] - round(sum(p.amount for p in pays), 2)) < 0.01
+        assert abs(r["collected"] - round(sum(p.amount for p in pays if p.amount > 0), 2)) < 0.01
+        assert abs(r["expenses"] - round(sum(e.amount for e in exps), 2)) < 0.01
+    finally:
+        db.close()
+    assert abs(r["net_profit"] - round(r["net_revenue"] - r["expenses"], 2)) < 0.01
+    assert abs(sum(m["net"] for m in r["by_method"]) - r["net_revenue"]) < 0.02
+    assert abs(sum(x["amount"] for x in r["collected_by"]) - r["net_revenue"]) < 0.02
+    assert abs(sum(x["amount"] for x in r["expenses_by_category"]) - r["expenses"]) < 0.02
+    assert client.get("/api/reports/monthly?month=2026-13").status_code == 422
+    csv = client.get(f"/api/reports/export/monthly.csv?month={month}")
+    assert csv.status_code == 200 and "Net profit" in csv.text and "Delivered by trainer" in csv.text
+    # Exports need the sign-in header: a token in the link is not accepted any more
+    token = client.headers["Authorization"][7:]
+    with TestClient(app) as anon:
+        assert anon.get(f"/api/reports/export/monthly.csv?month={month}&token={token}").status_code == 401

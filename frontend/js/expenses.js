@@ -59,7 +59,6 @@ async function loadExpenses() {
   EXPENSES = summary.expenses || [];
   EXPENSE_CATS = cats;
   $('exp-month-label').textContent = new Date(y, m - 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
-  $('exp-export').href = `/api/expenses/export.csv?year=${y}&month=${m}&token=${S.token}`;
   renderDays();
   refreshExpenseTotals();
   // Open on today: only when the month is (re)loaded, never while editing.
@@ -199,3 +198,5 @@ async function deleteExpense(id) {
     refreshExpenseTotals(); toast('Deleted');
   });
 }
+
+function exportExpenses() { const [y, m] = expMonth(); downloadFile(`/expenses/export.csv?year=${y}&month=${m}`, `expenses_${y}-${String(m).padStart(2, '0')}.csv`); }

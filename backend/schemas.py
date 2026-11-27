@@ -383,6 +383,7 @@ class SubscriptionResponse(BaseModel):
 class PaymentCreate(BaseModel):
     client_id: Optional[int] = None  # None = income not from a client; then source is required
     source: Optional[str] = None
+    confirm: bool = False  # record it even though it looks like a duplicate or pays more than is owed
     appointment_id: Optional[int] = None
     subscription_id: Optional[int] = None
     amount: float
@@ -398,10 +399,18 @@ class PaymentUpdate(BaseModel):
     notes: Optional[str] = None
 
 
+class PaymentRefund(BaseModel):
+    amount: float = Field(..., gt=0)
+    method: Optional[str] = None   # how the money went back; default: as it was paid
+    reason: Optional[str] = Field(None, max_length=300)
+
+
 class PaymentResponse(BaseModel):
     id: int
     client_id: Optional[int] = None
     source: Optional[str] = None
+    refund_of_id: Optional[int] = None
+    refunded_amount: float = 0.0
     appointment_id: Optional[int] = None
     subscription_id: Optional[int] = None
     amount: float

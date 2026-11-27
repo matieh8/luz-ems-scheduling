@@ -337,6 +337,112 @@ def _csv_response(rows, header, filename):
                              headers={"Content-Disposition": f"attachment; filename={filename}"})
 
 
+def _month_bounds(db, month: Optional[str]):
+    settings = get_settings(db)
+    tz = settings.timezone
+    if month:
+        y, m = (int(x) for x in month.split("-"))
+        first = date(y, m, 1)
+    else:
+        first = local_today(tz).replace(day=1)
+    nxt = date(first.year + (first.month == 12), first.month % 12 + 1, 1)
+    start, _ = local_day_bounds(first, tz)
+    end, _ = local_day_bounds(nxt, tz)
+    return settings, first, nxt - timedelta(days=1), start, end
+
+
+SOURCE_LABELS = {"social_media": "Social media", "ads": "Advertising / sponsorship", "other": "Other income"}
+
+
+def _monthly_figures(db, start, end):
+    payments = db.query(models.Payment).filter(models.Payment.paid_at >= start, models.Payment.paid_at < end).all()
+    gross = sum(p.amount for p in payments if p.amount > 0)
+    refunds = -sum(p.amount for p in payments if p.amount < 0)
+    expenses = db.query(models.Expense).filter(models.Expense.date >= start, models.Expense.date < end).all()
+    exp_total = sum(e.amount for e in expenses)
+    return payments, round(gross, 2), round(refunds, 2), expenses, round(exp_total, 2)
+
+
+@router.get("/monthly")
+def monthly_report(month: Optional[str] = Query(None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$"), db: Session = Depends(get_db)):
+    """One month's money in one statement: collected, refunds, expenses, profit, where it came from and what is still open."""
+    settings, first, last, start, end = _month_bounds(db, month)
+    payments, gross, refunds, expenses, exp_total = _monthly_figures(db, start, end)
+    net = round(gross - refunds, 2)
+    _, pf, _, ps, pe = _month_bounds(db, (first - timedelta(days=1)).strftime("%Y-%m"))
+    _, pgross, prefunds, _, pexp = _monthly_figures(db, ps, pe)
+
+    by_method = defaultdict(lambda: {"in": 0.0, "refunded": 0.0, "count": 0})
+    by_kind = defaultdict(float)
+    collected_by = defaultdict(float)
+    for p in payments:
+        m = by_method[p.method]
+        m["count"] += 1
+        m["in" if p.amount > 0 else "refunded"] += abs(p.amount)
+        if p.appointment_id:
+            kind, what = "Single sessions", (p.appointment.service.name if p.appointment and p.appointment.service else "Session")
+        elif p.subscription_id:
+            kind, what = "Packages", (f"Package: {p.subscription.plan.name}" if p.subscription and p.subscription.plan else "Package")
+        elif not p.client_id:
+            kind = what = SOURCE_LABELS.get(p.source, "Other income")
+        else:
+            kind = what = "Other client payments"
+        by_kind[kind] += p.amount
+        collected_by[what] += p.amount
+
+    done = db.query(models.Appointment).filter(models.Appointment.start_time >= start, models.Appointment.start_time < end,
+                                               models.Appointment.status == "completed").all()
+    svc, trainer = defaultdict(lambda: {"sessions": 0, "value": 0.0}), defaultdict(lambda: {"sessions": 0, "value": 0.0})
+    for a in done:
+        v = _session_value(a)
+        for bucket, key in ((svc, a.service.name if a.service else "Other"), (trainer, a.staff.name if a.staff else "Unassigned")):
+            bucket[key]["sessions"] += 1
+            bucket[key]["value"] += v
+    delivered = lambda d: sorted(({"name": n, "sessions": v["sessions"], "value": round(v["value"], 2)} for n, v in d.items()), key=lambda r: -r["value"])
+    amounts = lambda d: [{"name": k, "amount": round(v, 2)} for k, v in sorted(d.items(), key=lambda kv: -kv[1])]
+
+    cats = defaultdict(float)
+    for e in expenses:
+        cats[e.category or "Other"] += e.amount
+    unpaid = models.unpaid_sessions(db)
+    bills = db.query(models.Expense).filter(models.Expense.paid == False).all()  # noqa: E712
+    return {
+        "month": first.strftime("%Y-%m"), "from": first.isoformat(), "to": last.isoformat(), "currency": settings.currency,
+        "collected": gross, "refunds": refunds, "net_revenue": net,
+        "payments_count": len([p for p in payments if p.amount > 0]), "refunds_count": len([p for p in payments if p.amount < 0]),
+        "expenses": exp_total, "expenses_paid": round(sum(e.amount for e in expenses if e.paid is not False), 2),
+        "expenses_unpaid": round(sum(e.amount for e in expenses if e.paid is False), 2),
+        "net_profit": round(net - exp_total, 2),
+        "previous": {"month": pf.strftime("%Y-%m"), "net_revenue": round(pgross - prefunds, 2), "expenses": pexp,
+                     "net_profit": round(pgross - prefunds - pexp, 2)},
+        "by_method": sorted(({"method": k, "in": round(v["in"], 2), "refunded": round(v["refunded"], 2), "net": round(v["in"] - v["refunded"], 2),
+                              "count": v["count"]} for k, v in by_method.items()), key=lambda r: -r["net"]),
+        "by_kind": amounts(by_kind), "collected_by": amounts(collected_by),
+        "delivered_by_service": delivered(svc), "delivered_by_trainer": delivered(trainer),
+        "sessions_delivered": len(done), "delivered_value": round(sum(_session_value(a) for a in done), 2),
+        "expenses_by_category": amounts(cats),
+        "outstanding": {"clients_owe": round(sum(a.balance_due for a in unpaid), 2), "unpaid_sessions": len(unpaid),
+                        "bills_to_pay": round(sum(e.amount for e in bills), 2), "unpaid_bills": len(bills)},
+    }
+
+
+@router.get("/export/monthly.csv")
+def export_monthly(month: Optional[str] = Query(None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$"), db: Session = Depends(get_db)):
+    r = monthly_report(month, db)
+    cur = r["currency"]
+    rows = [["Summary", f"Amount ({cur})"], ["Collected", r["collected"]], ["Refunds", -r["refunds"]], ["Net revenue", r["net_revenue"]],
+            ["Expenses", -r["expenses"]], ["Net profit", r["net_profit"]],
+            [f"Previous month net profit ({r['previous']['month']})", r["previous"]["net_profit"]], [],
+            ["Payment method", "Received", "Refunded", "Net", "Payments"]] + \
+        [[m["method"], m["in"], m["refunded"], m["net"], m["count"]] for m in r["by_method"]] + [[], ["Collected for", f"Amount ({cur})"]] + \
+        [[x["name"], x["amount"]] for x in r["collected_by"]] + [[], ["Delivered by service", "Sessions", f"Value ({cur})"]] + \
+        [[x["name"], x["sessions"], x["value"]] for x in r["delivered_by_service"]] + [[], ["Delivered by trainer", "Sessions", f"Value ({cur})"]] + \
+        [[x["name"], x["sessions"], x["value"]] for x in r["delivered_by_trainer"]] + [[], ["Expense category", f"Amount ({cur})"]] + \
+        [[x["name"], x["amount"]] for x in r["expenses_by_category"]] + [[], ["Still open (today)", f"Amount ({cur})"],
+         ["Clients owe", r["outstanding"]["clients_owe"]], ["Bills to pay", r["outstanding"]["bills_to_pay"]]]
+    return _csv_response(rows, ["LUZ monthly financial report", r["month"]], f"luz_monthly_{r['month']}.csv")
+
+
 @router.get("/export/payments.csv")
 def export_payments(from_date: Optional[date] = Query(None, alias="from"), to_date: Optional[date] = Query(None, alias="to"),
                     db: Session = Depends(get_db)):

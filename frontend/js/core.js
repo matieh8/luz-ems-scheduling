@@ -284,3 +284,13 @@ document.addEventListener('keydown', e => {
   const t = e.target;
   if ((e.key === 'Enter' || e.key === ' ') && t && t.getAttribute && t.getAttribute('role') === 'button' && !/^(BUTTON|A|INPUT|SELECT|TEXTAREA)$/.test(t.tagName)) { e.preventDefault(); t.click(); }
 });
+
+// Files from the API (CSV exports) are fetched with the sign-in header, never with the token in a link.
+async function downloadFile(path, name) {
+  guard(async () => {
+    const r = await fetch(API + path, { headers: { Authorization: `Bearer ${S.token}` } });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || 'Download failed');
+    const url = URL.createObjectURL(await r.blob()), a = document.createElement('a');
+    a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000);
+  });
+}

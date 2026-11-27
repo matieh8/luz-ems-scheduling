@@ -659,3 +659,12 @@ input.flatpickr-input[readonly] { cursor: pointer; }
 @media (max-width: 520px) { .wh-row { grid-template-columns: 1fr 1fr; } .wh-row strong { grid-column: 1 / -1; } }
 /* Lead contact log */
 .lead-log { white-space: pre-line; background: var(--bg); border-radius: 10px; padding: 10px 12px; font-size: .82rem; max-height: 160px; overflow-y: auto; margin-bottom: 12px; }
+/* Refunds and the monthly report */
+.refund-row td { background: var(--bad-bg); }
+.mr-statement { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 16px; align-items: start; margin-bottom: 8px; }
+.mr-pl td { padding: 7px 4px; } .mr-pl .mr-sub td { border-top: 1px solid var(--border); font-weight: 700; }
+.mr-pl .mr-total td { border-top: 2px solid var(--text); font-weight: 800; font-size: 1.05rem; }
+.mr-open { display: grid; gap: 10px; } .mr-open > div { background: var(--bg); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; }
+.mr-open strong { font-size: 1.2rem; font-variant-numeric: tabular-nums; }
+.mr-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 6px 18px; }
+@media (max-width: 640px) { .mr-statement { grid-template-columns: 1fr; } }

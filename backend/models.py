@@ -214,6 +214,7 @@ class Payment(Base):
     amount = Column(Float, nullable=False)
     method = Column(String, nullable=False, default="cash")  # cash | card | transfer | online | other
     source = Column(String, nullable=True)  # income without a client: social_media | ads | other
+    refund_of_id = Column(Integer, ForeignKey("payments.id"), nullable=True)  # set on a refund (negative amount)
     paid_at = Column(DateTime, nullable=False, default=now_utc, index=True)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=now_utc)
@@ -221,6 +222,7 @@ class Payment(Base):
     client = relationship("Client", back_populates="payments")
     appointment = relationship("Appointment", back_populates="payments")
     subscription = relationship("Subscription", back_populates="payments")
+    refund_of = relationship("Payment", remote_side=[id], backref="refunds")
 
 
 class NotificationLog(Base):
@@ -517,7 +519,8 @@ class Expense(Base):
 
 # ---- derived values exposed to the API (read by pydantic via from_attributes) ----
 def _appt_paid_amount(self):
-    return float(sum(p.amount for p in self.payments))
+    # What the client paid for it (refunds are money given back, not a new debt)
+    return float(sum(p.amount for p in self.payments if p.amount > 0))
 
 
 def _appt_balance_due(self):
@@ -545,7 +548,7 @@ def _sub_remaining(self):
 
 
 def _sub_paid(self):
-    return float(sum(p.amount for p in self.payments))
+    return float(sum(p.amount for p in self.payments if p.amount > 0))
 
 
 def _staff_hours(self):
@@ -563,6 +566,7 @@ def _staff_set_hours(self, value):
 
 Staff.work_hours = property(_staff_hours, _staff_set_hours)
 Appointment.paid_amount = property(_appt_paid_amount)
+Payment.refunded_amount = property(lambda self: float(sum(-r.amount for r in self.refunds)))
 Appointment.balance_due = property(_appt_balance_due)
 Subscription.sessions_booked = property(_sub_booked)
 Subscription.sessions_done = property(lambda self: sum(1 for a in self.appointments if a.status in ("completed", "no_show")))
@@ -581,7 +585,7 @@ def unpaid_sessions(db, query=None):
     """Completed, pay-per-session appointments with money still owed, using one query for the payments."""
     from sqlalchemy import func
     paid = (db.query(Payment.appointment_id, func.sum(Payment.amount).label("paid"))
-            .group_by(Payment.appointment_id).subquery())
+            .filter(Payment.amount > 0).group_by(Payment.appointment_id).subquery())
     q = (query if query is not None else db.query(Appointment)).filter(
         Appointment.status == "completed", Appointment.subscription_id.is_(None), Appointment.price > 0)
     rows = q.outerjoin(paid, paid.c.appointment_id == Appointment.id).add_columns(func.coalesce(paid.c.paid, 0)).all()

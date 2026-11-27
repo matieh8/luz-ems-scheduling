@@ -245,11 +245,11 @@ let PAY = { tab: 'list' };
 function payTab(t, el) { PAY.tab = t; document.querySelectorAll('#page-payments .tab').forEach(x => x.classList.remove('active')); el.classList.add('active'); document.querySelectorAll('#page-payments .subpanel').forEach(p => p.classList.toggle('active', p.id === 'pay-' + t)); loadPayments(); }
 function paymentsTable(list, compact) {
   if (!list.length) return '<div class="card empty">No payments.</div>';
-  return `<div class="table-wrap"><table><thead><tr><th>Date</th>${compact ? '' : '<th>Client</th>'}<th>For</th><th>Method</th><th class="num">Amount</th><th></th></tr></thead><tbody>` + list.map(p => `<tr>
+  return `<div class="table-wrap"><table><thead><tr><th>Date</th>${compact ? '' : '<th>Client</th>'}<th>For</th><th>Method</th><th class="num">Amount</th><th></th></tr></thead><tbody>` + list.map(p => `<tr${p.amount < 0 ? ' class="refund-row"' : ''}>
     <td class="mono">${fmtDT(p.paid_at)}</td>${compact ? '' : `<td>${p.client ? `<a href="#" onclick="openClientDetail(${p.client_id}, 'pays');return false"><strong>${esc(p.client.name)}</strong></a>` : `<strong>${esc(PAY_SOURCES[p.source] || 'Other income')}</strong>`}</td>`}
     <td>${p.appointment_id ? '<span class="chip">session</span>' : p.subscription_id ? '<span class="chip">package</span>' : p.source ? `<span class="chip">${esc(PAY_SOURCES[p.source] || p.source)}</span>` : '<span class="chip">other</span>'} <span class="small muted">${esc(p.notes || '')}</span></td>
-    <td>${esc(p.method)}</td><td class="num bold">${money(p.amount)}</td>
-    <td class="num"><button class="btn btn-ghost btn-xs" onclick="printInvoice(${p.id})">Invoice</button><button class="btn btn-ghost btn-xs" style="color:var(--bad)" onclick="deletePayment(${p.id})">Delete</button></td></tr>`).join('') + '</tbody></table></div>';
+    <td>${esc(p.method)}</td><td class="num bold">${p.amount < 0 ? `<span style="color:var(--bad)">−${money(-p.amount)}</span><div class="tiny muted">refund</div>` : money(p.amount)}${p.refunded_amount ? `<div class="tiny" style="color:var(--bad)">${money(p.refunded_amount)} refunded</div>` : ''}</td>
+    <td class="num"><button class="btn btn-ghost btn-xs" onclick="printInvoice(${p.id})">${p.amount < 0 ? 'Credit note' : 'Invoice'}</button>${p.amount > 0 && p.refunded_amount < p.amount ? `<button class="btn btn-ghost btn-xs" onclick="refundFlow(${p.id}, ${p.amount - p.refunded_amount}, ${jsArg(p.method)})">Refund</button>` : ''}<button class="btn btn-ghost btn-xs" style="color:var(--bad)" onclick="deletePayment(${p.id})">Delete</button></td></tr>`).join('') + '</tbody></table></div>';
 }
 
 /* ---------- invoices: printed from the browser, so "Save as PDF" works everywhere and Arabic names render ---------- */
@@ -306,11 +306,11 @@ function invoiceHTML(inv) {
     ? `<tr><td>Total excluding VAT</td><td class="num">${m(netT)}</td></tr>
        <tr><td>VAT ${rateLabel}</td><td class="num">${m(taxT)}</td></tr>
        <tr class="inv-grand"><td><strong>Total including VAT</strong></td><td class="num"><strong>${m(sumTotal)}</strong></td></tr>`
-    : `<tr><td>Total paid</td><td class="num">${m(sumTotal)}</td></tr>`;
+    : `<tr><td>${inv.credit_note ? 'Total refunded' : 'Total paid'}</td><td class="num">${m(sumTotal)}</td></tr>`;
 
   return `<div class="invoice">
     <div class="inv-head"><div><div class="wordmark lg">LUZ<small>EMS</small></div><div class="inv-biz"><strong>${esc(b.name)}</strong>${b.address ? `<br>${esc(b.address)}` : ''}${b.phone ? `<br>${esc(b.phone)}` : ''}${b.email ? `<br>${esc(b.email)}` : ''}${b.trn ? `<br>TRN: ${esc(b.trn)}` : ''}</div></div>
-      <div class="inv-meta"><h1>${isTax ? 'Tax Invoice' : 'Invoice'}</h1><div><span>Number</span><strong>${esc(inv.number)}</strong></div><div><span>Date</span><strong>${esc(inv.date)}</strong></div><div><span>Status</span><strong class="inv-paid">Paid · ${esc(inv.method)}</strong></div></div></div>
+      <div class="inv-meta"><h1>${inv.credit_note ? 'Credit note' : isTax ? 'Tax Invoice' : 'Invoice'}</h1><div><span>Number</span><strong>${esc(inv.number)}</strong></div><div><span>Date</span><strong>${esc(inv.date)}</strong></div><div><span>Status</span><strong class="inv-paid">Paid · ${esc(inv.method)}</strong></div></div></div>
     <div class="inv-to"><span>Billed to</span><strong>${esc(c.name)}</strong>${c.phone && c.phone !== '-' ? `<br>${esc(c.phone)}` : ''}${c.email ? `<br>${esc(c.email)}` : ''}</div>
     <table class="inv-lines"><thead>${head}</thead><tbody>${body}</tbody>
       <tfoot>${foot}</tfoot></table>
@@ -355,11 +355,24 @@ function paySourceChanged() {
   if (other && !$('payment-source').disabled) $('payment-for').textContent = 'Income that is not from a client. Add who paid in Notes, e.g. "Instagram post for Brand X".';
 }
 const PAY_SOURCES = { social_media: 'Social media', ads: 'Advertising', other: 'Other income' };
-async function savePayment() { guard(async () => { const amt = parseFloat(val('payment-amount')); if (!amt || amt <= 0) throw new Error('Enter an amount');
+async function savePayment(confirm = false) { guard(async () => { const amt = parseFloat(val('payment-amount')); if (!amt || amt <= 0) throw new Error('Enter an amount');
   const source = val('payment-source') || null;
-  await api('POST', '/payments/', { client_id: source ? null : +val('payment-client'), source, appointment_id: val('payment-appointment') ? +val('payment-appointment') : null, subscription_id: val('payment-subscription') ? +val('payment-subscription') : null,
-    amount: amt, method: val('payment-method'), paid_at: zonedToDate(val('payment-date'), timeKey(new Date())).toISOString(), notes: val('payment-notes') || null });
+  const body = { confirm, client_id: source ? null : +val('payment-client'), source, appointment_id: val('payment-appointment') ? +val('payment-appointment') : null, subscription_id: val('payment-subscription') ? +val('payment-subscription') : null,
+    amount: amt, method: val('payment-method'), paid_at: zonedToDate(val('payment-date'), timeKey(new Date())).toISOString(), notes: val('payment-notes') || null };
+  try { await api('POST', '/payments/', body); }
+  catch (e) { if (e.status === 409 && !confirm) { if (await ask(e.message, 'Record anyway', 'btn-warn')) return savePayment(true); return; } throw e; }
   closeModal('payment-modal'); toast('Payment recorded'); closeDrawer(); refreshCurrent(); }); }
+// Money given back: a separate record linked to the payment, so the original stays as it was and reports show the refund.
+function refundFlow(id, left, method) {
+  confirmBox('Refund', `<p class="small muted" style="margin-top:0">Up to <strong>${money(left)}</strong> of this payment can be refunded. The original payment stays; the refund is recorded on today's date.</p>
+    <div class="form-row"><div class="form-group"><label>Amount</label><input type="number" step="0.01" min="0.01" max="${left}" id="rf-amount" class="input" value="${left}"></div>
+      <div class="form-group"><label>Paid back by</label><select id="rf-method" class="input">${['cash', 'card', 'transfer', 'online', 'other'].map(m => `<option ${m === method ? 'selected' : ''}>${m}</option>`).join('')}</select></div></div>
+    <div class="form-group"><label>Reason</label><input id="rf-reason" class="input" placeholder="e.g. package cancelled, double charge"></div>`, 'Refund', async () => {
+    const amount = parseFloat(val('rf-amount')); if (!amount || amount <= 0) throw new Error('Enter the amount');
+    await api('POST', `/payments/${id}/refund`, { amount, method: val('rf-method'), reason: val('rf-reason').trim() || null });
+    toast(`Refunded ${money(amount)}`); await refreshLookups(); refreshCurrent();
+  }, 'btn-danger');
+}
 function deletePayment(id) { confirmBox('Delete payment', '<p>Remove this payment record?</p>', 'Delete', async () => { await api('DELETE', `/payments/${id}`); toast('Payment deleted'); refreshCurrent(); }, 'btn-danger'); }
 
 /* ---------- revenue reports ---------- */
@@ -379,7 +392,7 @@ async function loadReports() {
   const q = `from=${REP.from}&to=${REP.to}`;
   const [s, ts, top] = await Promise.all([api('GET', `/reports/summary?${q}`), api('GET', `/reports/timeseries?${q}&granularity=${REP.gran}`), api('GET', `/reports/top-clients?${q}`)]);
   $('rep-range-label').textContent = `${fmtKey(REP.from)} – ${fmtKey(REP.to)} · ${s.days} day${s.days > 1 ? 's' : ''}`;
-  $('rep-export-pay').href = `/api/reports/export/payments.csv?${q}&token=${S.token}`; $('rep-export-appt').href = `/api/reports/export/appointments.csv?${q}&token=${S.token}`;
+  loadMonthly();
   $('rep-kpis').innerHTML = `
     <div class="stat accent"><div class="stat-label">Collected</div><div class="stat-value">${money(s.collected)}</div><div class="stat-sub">${s.payments_count} payments · ${money(s.collected / Math.max(s.days, 1))}/day</div></div>
     <div class="stat"><div class="stat-label">Sessions delivered</div><div class="stat-value">${s.sessions_completed}</div><div class="stat-sub">worth ${money(s.session_value)} · ${s.sessions_from_packages} from packages</div></div>
@@ -396,3 +409,42 @@ async function loadReports() {
 }
 function labelPeriod(p, g, long) { if (g === 'month') { const [y, m] = p.split('-'); return new Date(Date.UTC(+y, +m - 1, 1)).toLocaleDateString('en-GB', { timeZone: 'UTC', month: long ? 'long' : 'short', year: long ? 'numeric' : '2-digit' }); }
   const [y, m, d] = p.split('-').map(Number); const dt = new Date(Date.UTC(y, m - 1, d)); return (g === 'week' ? 'w/c ' : '') + dt.toLocaleDateString('en-GB', { timeZone: 'UTC', day: 'numeric', month: 'short', ...(long ? { weekday: 'short', year: 'numeric' } : {}) }); }
+
+/* ---------- monthly financial report: one statement per month, exportable and printable ---------- */
+async function loadMonthly() {
+  if (!$('mr-month')) return;
+  if (!val('mr-month')) setVal('mr-month', todayKey().slice(0, 7));
+  const r = await api('GET', `/reports/monthly?month=${val('mr-month')}`), MR = r;
+  window._monthly = r;
+  const line = (label, v, cls = '', sub = '') => `<tr class="${cls}"><td>${label}${sub ? `<div class="tiny muted">${sub}</div>` : ''}</td><td class="num">${v < 0 ? `<span style="color:var(--bad)">−${money(-v)}</span>` : money(v)}</td></tr>`;
+  const diff = (a, b) => { if (!b) return ''; const d = a - b; return ` · ${d >= 0 ? '+' : '−'}${money(Math.abs(d))} vs ${labelPeriod(MR.previous.month, 'month', true)}`; };
+  const list = (rows, cols) => rows.length ? `<table class="plain"><tbody>${rows.map(x => `<tr><td>${esc(x.name || x.method)}</td>${cols.map(c => `<td class="num">${c(x)}</td>`).join('')}</tr>`).join('')}</tbody></table>` : '<div class="empty small">Nothing this month.</div>';
+  $('monthly-body').innerHTML = `<div class="mr">
+    <div class="mr-statement"><table class="plain mr-pl"><tbody>
+      ${line('Collected', r.collected, '', `${r.payments_count} payment${r.payments_count === 1 ? '' : 's'}`)}
+      ${line('Refunds', -r.refunds, '', r.refunds_count ? `${r.refunds_count} refund${r.refunds_count === 1 ? '' : 's'}` : '')}
+      ${line('Net revenue', r.net_revenue, 'mr-sub')}
+      ${line('Expenses', -r.expenses, '', r.expenses_unpaid ? `${money(r.expenses_unpaid)} not paid yet` : 'all paid')}
+      ${line('Net profit', r.net_profit, 'mr-total', diff(r.net_profit, r.previous.net_profit).replace(/^ · /, ''))}
+    </tbody></table>
+    <div class="mr-open"><div><span class="tiny muted">Clients owe (today)</span><strong style="color:${r.outstanding.clients_owe ? 'var(--bad)' : 'inherit'}">${money(r.outstanding.clients_owe)}</strong><span class="tiny muted">${r.outstanding.unpaid_sessions} session(s)</span></div>
+      <div><span class="tiny muted">Bills to pay (today)</span><strong>${money(r.outstanding.bills_to_pay)}</strong><span class="tiny muted">${r.outstanding.unpaid_bills} bill(s)</span></div></div></div>
+    <div class="mr-grid">
+      <div><div class="section-label">By payment method</div>${list(r.by_method, [x => money(x.net) + (x.refunded ? `<div class="tiny" style="color:var(--bad)">−${money(x.refunded)} refunded</div>` : '')])}</div>
+      <div><div class="section-label">Collected for</div>${list(r.collected_by, [x => money(x.amount)])}</div>
+      <div><div class="section-label">Delivered by service <span class="muted">(${r.sessions_delivered} sessions, ${money(r.delivered_value)})</span></div>${list(r.delivered_by_service, [x => `${x.sessions}×`, x => money(x.value)])}</div>
+      <div><div class="section-label">Delivered by trainer</div>${list(r.delivered_by_trainer, [x => `${x.sessions}×`, x => money(x.value)])}</div>
+      <div><div class="section-label">Expenses by category</div>${list(r.expenses_by_category, [x => money(x.amount)])}</div>
+    </div>
+    <p class="tiny muted">Collected and refunds are cash that moved this month. "Delivered" is the value of sessions done (a package session counts as its share of the package price).</p></div>`;
+}
+function printMonthly() {
+  const r = window._monthly; if (!r) return;
+  let area = $('print-area'); if (!area) { area = document.createElement('div'); area.id = 'print-area'; document.body.appendChild(area); }
+  area.innerHTML = `<div class="invoice"><div class="inv-head"><div><div class="wordmark lg">LUZ<small>EMS</small></div><div class="inv-biz"><strong>${esc(S.business || '')}</strong></div></div>
+    <div class="inv-meta"><h1>Financial report</h1><div><span>Month</span><strong>${esc(labelPeriod(r.month, 'month', true))}</strong></div></div></div>${$('monthly-body').innerHTML}</div>`;
+  const title = document.title; document.title = `LUZ report ${r.month}`;
+  document.body.classList.add('printing');
+  const done = () => { document.body.classList.remove('printing'); document.title = title; window.removeEventListener('afterprint', done); };
+  window.addEventListener('afterprint', done); window.print(); setTimeout(() => { if (!matchMedia('print').matches) done(); }, 1500);
+}

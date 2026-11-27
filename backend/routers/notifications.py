@@ -1,5 +1,7 @@
+from datetime import timedelta
 from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend import models, schemas, notifications, whatsapp_web_client
@@ -171,3 +173,41 @@ def run_jobs_now(db: Session = Depends(get_db)):
     notifications.run_all_jobs(db)
     notifications.run_subscription_job(db)
     return {"detail": "Jobs executed"}
+
+
+# ---------------------------------------------------------------- automation center
+@router.get("/automations")
+def automations(db: Session = Depends(get_db)):
+    """Every automation with its real state: active only when it can actually reach someone."""
+    notifications.ensure_templates(db)
+    return notifications.automation_overview(db)
+
+
+class AutomationSwitch(BaseModel):
+    on: bool
+    value: Optional[int] = None  # hours / days / sessions, depending on the automation
+
+
+@router.put("/automations/{key}")
+def switch_automation(key: str, body: AutomationSwitch, request: Request, db: Session = Depends(get_db)):
+    ident = getattr(request.state, "identity", None) or {"role": "owner"}
+    if ident["role"] != "owner":
+        raise HTTPException(status_code=403, detail="Only the owner can switch automations on or off")
+    if body.value is not None and not (1 <= body.value <= 365):
+        raise HTTPException(status_code=422, detail="Use a number from 1 to 365")
+    try:
+        notifications.set_automation(db, key, body.on, body.value)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Unknown automation")
+    return notifications.automation_overview(db)
+
+
+@router.post("/retry-failed")
+def retry_failed(db: Session = Depends(get_db)):
+    """Send again every message that failed in the last 7 days (one press after fixing WhatsApp or email)."""
+    ids = [l.id for l in db.query(models.NotificationLog).filter(models.NotificationLog.status == "failed",
+                                                                 models.NotificationLog.created_at >= notifications.utcnow() - timedelta(days=7)).all()]
+    for log_id in ids:
+        retry(log_id, db)
+    db.expire_all()
+    return {"retried": len(ids), "sent": sum(1 for i in ids if db.get(models.NotificationLog, i).status == "sent")}

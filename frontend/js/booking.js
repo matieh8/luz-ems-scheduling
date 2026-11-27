@@ -93,6 +93,7 @@ $('booking-date').addEventListener('change', bookingRepeatChanged);
 function notifySummary(res) {
   const r = res.notify_result;
   if (!r || !r.length) return { text: '', bad: false };
+  if (r.length && r.every(x => (x.detail || '').startsWith('DEMO MODE'))) return { text: ' Confirmation logged only (demo mode: not sent to the client).', bad: false };
   const ok = r.filter(x => x.status === 'sent'), bad = r.filter(x => x.status !== 'sent');
   if (!bad.length) return { text: ` Confirmation sent via ${ok.map(x => x.channel).join(', ')}.`, bad: false };
   const why = bad.map(x => `${x.channel ? x.channel + ': ' : ''}${(x.detail || x.status).replace(/^(whatsapp|sms|email): /, '')}`).join(' · ');

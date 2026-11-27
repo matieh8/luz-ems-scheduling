@@ -11,6 +11,7 @@
   --surface-2: #fafafa; --neutral-bg: #efefef; --neutral-ink: #4a4a4a; --border-strong: #cfcfcf; --row-line: #f0f0f0;
   --closed-a: #f9f9f9; --closed-b: #f1f1f1; --block-a: #e7e7e7; --block-b: #dadada; --overlay: rgba(10,10,10,.45);
   --font-display: 'Crimson Text', Georgia, 'Times New Roman', serif;
+  --chart-rev: #0a0a0a; --chart-exp: #a5824f; --chart-profit: #1d6b45;
   color-scheme: light;
 }
 * { box-sizing: border-box; }
@@ -507,7 +508,7 @@ table.plain td { padding: 10px 14px; }
   --info: #c7ccd4; --info-bg: #23262b; --neutral-bg: #232323; --neutral-ink: #c4c4c4; --row-line: #1d1d1d;
   --closed-a: #121212; --closed-b: #171717; --block-a: #2a2a2a; --block-b: #222222; --overlay: rgba(0,0,0,.65);
   --shadow: 0 1px 2px rgba(0,0,0,.4), 0 1px 3px rgba(0,0,0,.3); --shadow-md: 0 12px 30px -10px rgba(0,0,0,.7);
-  --series-1: #f2f2f2; --series-2: #5c5c5c; --series-3: #a3a3a3; --series-4: #e0a83c;
+  --series-1: #f2f2f2; --series-2: #5c5c5c; --series-3: #a3a3a3; --series-4: #e0a83c; --chart-rev: #f2f2f2; --chart-exp: #c9a86e; --chart-profit: #4ade80;
   color-scheme: dark;
 }
 @media (prefers-color-scheme: dark) {
@@ -518,7 +519,7 @@ table.plain td { padding: 10px 14px; }
     --info: #c7ccd4; --info-bg: #23262b; --neutral-bg: #232323; --neutral-ink: #c4c4c4; --row-line: #1d1d1d;
     --closed-a: #121212; --closed-b: #171717; --block-a: #2a2a2a; --block-b: #222222; --overlay: rgba(0,0,0,.65);
     --shadow: 0 1px 2px rgba(0,0,0,.4), 0 1px 3px rgba(0,0,0,.3); --shadow-md: 0 12px 30px -10px rgba(0,0,0,.7);
-    --series-1: #f2f2f2; --series-2: #5c5c5c; --series-3: #a3a3a3; --series-4: #e0a83c;
+    --series-1: #f2f2f2; --series-2: #5c5c5c; --series-3: #a3a3a3; --series-4: #e0a83c; --chart-rev: #f2f2f2; --chart-exp: #c9a86e; --chart-profit: #4ade80;
     color-scheme: dark;
   }
 }
@@ -796,3 +797,14 @@ button:focus-visible, select:focus-visible, input[type=checkbox]:focus-visible, 
 @media (max-width: 760px) {
   .attn:not(.open) .attn-extra { display: none; }
   .attn:not(.open) .attn-all { display: block; width: 100%; border: 0; border-top: 1px solid var(--row-line); background: transparent; padding: 10px; font: inherit; font-size: .82rem; font-weight: 600; color: var(--text); cursor: pointer; } }
+/* Revenue & profit chart: line = revenue (ink), bars = expenses (sand), dashed = net profit (green, red when a loss) */
+.legend .lg { display: inline-flex; align-items: center; gap: 6px; } .legend .lg::before { display: none; }
+.legend .lg i { display: inline-block; }
+.legend .lg-rev i { width: 14px; height: 3px; border-radius: 2px; background: var(--chart-rev); }
+.legend .lg-exp i { width: 9px; height: 11px; border-radius: 2px 2px 0 0; background: var(--chart-exp); }
+.legend .lg-prof i { width: 14px; height: 0; border-top: 2px dashed var(--chart-profit); }
+.chart-tip .sw.rev { background: var(--chart-rev); } .chart-tip .sw.exp { background: var(--chart-exp); } .chart-tip .sw.prof { border-top-color: var(--chart-profit); }
+.kpi-prev { font-size: .74rem; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.chip-warn { background: var(--warn-bg); color: var(--warn); border-color: transparent; font-weight: 600; }
+.sched.no-trainer .sched-bar { outline: 2px dashed var(--warn); outline-offset: 1px; }
+.unassigned-note { font-size: .74rem; font-weight: 600; color: var(--warn); margin-left: 8px; }

@@ -21,7 +21,7 @@ function greeting() {
 // k: a KPI from the server. "no_history" = the system has no records for the comparison period yet.
 function changePill(pct, label, invert, k) {
   if (k && k.compare === 'no_history') return `<span class="kpi-change flat" title="No records yet for the period it would be compared with">no history to compare</span>`;
-  if (k && k.compare === 'from_zero') return k.value ? `<span class="kpi-change ${invert ? 'down' : 'up'}" title="${esc(label)}">↑ new · was 0</span>` : `<span class="kpi-change flat" title="${esc(label)}">no change · 0</span>`;
+  if (k && k.compare === 'from_zero') return k.value ? `<span class="kpi-change ${invert ? 'down' : 'up'}" title="No percentage: the previous period was 0">↑ up from 0</span>` : `<span class="kpi-change flat" title="${esc(label)}">no change</span>`;
   if (pct === null || pct === undefined) return `<span class="kpi-change flat" title="${esc(label)}">no comparison</span>`;
   if (pct === 0) return `<span class="kpi-change flat" title="${esc(label)}">= same</span>`;
   const up = pct >= 0, good = invert ? !up : up;
@@ -36,6 +36,12 @@ function sparkBars(values) {
     return `<rect x="${i * 8 + 1}" y="${28 - h}" width="5" height="${h}" rx="1.5" opacity="${i === values.length - 1 ? 1 : .45}"/>`; }).join('')}</svg>`;
 }
 
+// "1–27 Oct: AED 11,500" (or "no records for 1–27 Oct"): the previous period's own value, next to the change
+function prevLine(k, periodLabel, fmt) {
+  if (!k) return '';
+  if (k.compare === 'no_history') return `<span class="kpi-prev">no records for ${esc(periodLabel)}</span>`;
+  return `<span class="kpi-prev">${esc(periodLabel)}: ${fmt(k.prev || 0)}</span>`;
+}
 function kpiCard({ icon, label, value, pct, compare, sub, spark, invert, open, k, info }) {
   return `<div class="kpi${open ? ' clickable' : ''}"${open ? ` role="button" tabindex="0" onclick="${open}"` : ''}><div class="kpi-ico">${dashIcon(icon)}</div>
     <div class="kpi-body"><div class="kpi-label">${esc(label)}</div><div class="kpi-value">${value}</div>
@@ -60,11 +66,11 @@ function trendChart(el, months) {
   const y = v => padT + ih * (top - v) / span;
   const step = iw / months.length, x = i => padL + step * i + step / 2;
   let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Revenue, expenses and profit by month">
-    <defs><linearGradient id="revfill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="var(--series-1)" stop-opacity=".22"/><stop offset="1" stop-color="var(--series-1)" stop-opacity="0"/></linearGradient></defs>`;
+    <defs><linearGradient id="revfill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="var(--chart-rev)" stop-opacity=".14"/><stop offset="1" stop-color="var(--chart-rev)" stop-opacity="0"/></linearGradient></defs>`;
   for (let i = 0; i <= 4; i++) { const v = bottom + span * i / 4, yy = y(v);
     svg += `<line class="axis" x1="${padL}" x2="${W - padR}" y1="${yy}" y2="${yy}" ${v ? 'stroke-dasharray="2 3"' : ''}/><text class="lbl" x="${padL - 6}" y="${yy + 3}" text-anchor="end">${v < 0 ? '-' : ''}${shortNum(Math.abs(v))}</text>`; }
   const bw = Math.min(26, step * .34);
-  months.forEach((m, i) => { if (m.has_data && m.expenses > 0) svg += `<path fill="var(--series-2)" d="${roundedTop(x(i) - bw / 2, y(m.expenses), bw, y(0) - y(m.expenses), 4)}"/>`; });
+  months.forEach((m, i) => { if (m.has_data && m.expenses > 0) svg += `<path fill="var(--chart-exp)" d="${roundedTop(x(i) - bw / 2, y(m.expenses), bw, y(0) - y(m.expenses), 4)}"/>`; });
   // Months before the studio's first record are shown as "no data" (a shaded band), never as a zero point
   months.forEach((m, i) => { if (!m.has_data) svg += `<rect x="${padL + step * i + 2}" y="${padT}" width="${step - 4}" height="${ih}" fill="var(--closed-b)" rx="6"/><text class="lbl" x="${x(i)}" y="${padT + 14}" text-anchor="middle">no data</text>`; });
   const idx = months.map((m, i) => i).filter(i => months[i].has_data);
@@ -72,10 +78,10 @@ function trendChart(el, months) {
   const line = pts => pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
   if (rev.length) {
     svg += `<path d="${line(rev)} L${rev[rev.length - 1][0]},${y(0)} L${rev[0][0]},${y(0)} Z" fill="url(#revfill)"/>`;
-    svg += `<path d="${line(rev)}" fill="none" stroke="var(--series-1)" stroke-width="2.5" stroke-linejoin="round"/>`;
-    svg += `<path d="${line(prof)}" fill="none" stroke="var(--text-2)" stroke-width="1.8" stroke-dasharray="5 4"/>`;
-    rev.forEach(p => { svg += `<circle cx="${p[0]}" cy="${p[1]}" r="4" fill="var(--surface)" stroke="var(--series-1)" stroke-width="2.2"/>`; });
-    idx.forEach((i, j) => { const neg = months[i].profit < 0; svg += `<rect x="${prof[j][0] - 3.5}" y="${prof[j][1] - 3.5}" width="7" height="7" transform="rotate(45 ${prof[j][0]} ${prof[j][1]})" fill="${neg ? 'var(--bad)' : 'var(--text-2)'}"/>`; });
+    svg += `<path d="${line(rev)}" fill="none" stroke="var(--chart-rev)" stroke-width="2.5" stroke-linejoin="round"/>`;
+    svg += `<path d="${line(prof)}" fill="none" stroke="var(--chart-profit)" stroke-width="2" stroke-dasharray="6 4"/>`;
+    rev.forEach(p => { svg += `<circle cx="${p[0]}" cy="${p[1]}" r="4" fill="var(--surface)" stroke="var(--chart-rev)" stroke-width="2.2"/>`; });
+    idx.forEach((i, j) => { const neg = months[i].profit < 0; svg += `<rect x="${prof[j][0] - 3.5}" y="${prof[j][1] - 3.5}" width="7" height="7" transform="rotate(45 ${prof[j][0]} ${prof[j][1]})" fill="${neg ? 'var(--bad)' : 'var(--chart-profit)'}"/>`; });
   }
   months.forEach((m, i) => {
     svg += `<text class="lbl${i === months.length - 1 ? ' lbl-now' : ''}" x="${x(i)}" y="${H - 9}" text-anchor="middle">${esc(monthLabel(m.period))}</text>`;
@@ -121,12 +127,12 @@ async function loadDashboard() {
   $('dash-alerts').innerHTML = d.alerts.length ? `<div class="attn"><div class="attn-head">Needs attention <span class="attn-n">${d.alerts.length}</span></div>${d.alerts.map((a, i) => `<div class="alert attn-row lvl-${a.level}${i >= 2 ? ' attn-extra' : ''}" ${a.link ? `role="button" tabindex="0" onclick="dismissAlert('${a.key}', '${a.link}')"` : ''}>
       <i class="attn-dot" aria-hidden="true"></i><span class="attn-text">${esc(a.text)}</span>${a.link ? '<span class="attn-go">View →</span>' : ''}<button class="alert-x" title="Dismiss" aria-label="Dismiss" onclick="event.stopPropagation();dismissAlert('${a.key}')">✕</button></div>`).join('')}${d.alerts.length > 2 ? `<button class="attn-all" onclick="this.closest('.attn').classList.add('open')">Show all ${d.alerts.length}</button>` : ''}</div>` : '';
 
-  const cmp = o.compare_label;
+  const cmp = o.compare_label, prevPeriod = cmp.replace(/^vs /, ''), num = v => Number(v).toLocaleString('en');
   $('dash-stats').innerHTML = [
-    kpiCard({ k: k.revenue, open: "dashDetail('revenue')", icon: 'revenue', label: 'Revenue this month', value: money(k.revenue.value), pct: k.revenue.change_pct, compare: cmp, sub: k.revenue.compare === 'no_history' ? '' : cmp, spark: m.map(x => x.revenue) }),
-    kpiCard({ k: k.expenses, open: "dashDetail('expenses')", icon: 'expenses', label: 'Expenses this month', value: money(k.expenses.value), pct: k.expenses.change_pct, compare: cmp, sub: k.expenses.compare === 'no_history' ? '' : cmp, spark: m.map(x => x.expenses), invert: true }),
-    kpiCard({ k: k.profit, open: "dashDetail('profit')", icon: 'profit', label: 'Net profit', value: money(k.profit.value), pct: k.profit.change_pct, compare: cmp, sub: 'revenue − expenses', spark: m.map(x => x.profit) }),
-    kpiCard({ k: k.active_clients, open: "dashGo('active')", icon: 'clients', label: 'Active clients', value: k.active_clients.value, pct: k.active_clients.change_pct, compare: 'vs the 30 days before', sub: '', info: 'Had a session (booked or done) in the last 30 days' }),
+    kpiCard({ k: k.revenue, open: "dashDetail('revenue')", icon: 'revenue', label: 'Revenue this month', value: money(k.revenue.value), pct: k.revenue.change_pct, compare: cmp, sub: prevLine(k.revenue, prevPeriod, money), spark: m.map(x => x.revenue) }),
+    kpiCard({ k: k.expenses, open: "dashDetail('expenses')", icon: 'expenses', label: 'Expenses this month', value: money(k.expenses.value), pct: k.expenses.change_pct, compare: cmp, sub: prevLine(k.expenses, prevPeriod, money), spark: m.map(x => x.expenses), invert: true }),
+    kpiCard({ k: k.profit, open: "dashDetail('profit')", icon: 'profit', label: 'Net profit', value: money(k.profit.value), pct: k.profit.change_pct, compare: cmp, sub: prevLine(k.profit, prevPeriod, v => v < 0 ? '−' + money(-v) : money(v)), info: 'Revenue − expenses', spark: m.map(x => x.profit) }),
+    kpiCard({ k: k.active_clients, open: "dashGo('active')", icon: 'clients', label: 'Active clients', value: k.active_clients.value, pct: k.active_clients.change_pct, compare: 'vs the 30 days before', sub: prevLine(k.active_clients, 'the 30 days before', num), info: 'Had a session (booked or done) in the last 30 days' }),
   ].join('');
 
   // Today at a glance: each tile opens the list behind its number
@@ -134,7 +140,7 @@ async function loadDashboard() {
   $('dash-pulse').innerHTML = [
     pulseTile({ open: "dashDetail('today')", icon: 'today', label: "Today's sessions", value: t.total, sub: t.total ? `${t.done} done · ${t.to_come} to come${t.no_show ? ` · ${t.no_show} no-show` : ''}` : 'nothing booked' }),
     pulseTile({ open: "dashGo('upcoming')", icon: 'upcoming', label: 'Upcoming bookings', value: up.count, sub: `next ${up.days} days${up.unconfirmed ? ` · <span class="warn">${up.unconfirmed} not confirmed</span>` : ''}` }),
-    pulseTile({ open: "dashDetail('sessions')", icon: 'sessions', label: 'Sessions this month', value: k.sessions.value, sub: `${changePill(k.sessions.change_pct, cmp, false, k.sessions)}${k.sessions.compare === 'no_history' ? '' : ' ' + esc(cmp)}` }),
+    pulseTile({ open: "dashDetail('sessions')", icon: 'sessions', label: 'Sessions this month', value: k.sessions.value, sub: `${changePill(k.sessions.change_pct, cmp, false, k.sessions)} ${prevLine(k.sessions, prevPeriod, num)}` }),
     pulseTile({ open: "dashGo('owed')", icon: 'owed', label: 'Outstanding payments', value: money(o.due.amount), sub: o.due.count ? plural(o.due.count, 'unpaid session') : 'all paid up', tone: o.due.amount ? 'bad' : '' }),
     pulseTile({ open: "dashGo('expiring')", icon: 'expiring', label: 'Expiring packages', value: o.packages.expiring, sub: o.packages.expiring ? 'running low or ending soon' : 'none right now', tone: o.packages.expiring ? 'warn' : '' }),
     pulseTile({ open: "dashGo('leads')", icon: 'leads', label: 'New leads', value: lead.value, sub: `this month · ${lead.open} open${lead.follow_ups_due ? ` · <span class="warn">${plural(lead.follow_ups_due, 'follow-up')} due</span>` : ''}` }),
@@ -150,11 +156,13 @@ async function loadDashboard() {
 
   const today = d.today_appointments;
   const where = (S.settings && S.settings.business_address) || '';
+  const noTrainer = today.filter(a => !a.staff && a.status !== 'cancelled').length;
+  $('dash-unassigned').textContent = noTrainer ? `· ${noTrainer} without a trainer` : '';
   $('dash-today').innerHTML = today.length ? today.map(a => { const open = ['scheduled', 'confirmed'].includes(a.status) && parseISO(a.end_time) > new Date();
-    return `<div class="sched" onclick="openAppointment(${a.id})" role="button" tabindex="0" aria-label="${esc(a.client.name)}, ${fmtTime(a.start_time)}, ${esc(a.service.name)}">
+    return `<div class="sched${a.staff ? '' : ' no-trainer'}" onclick="openAppointment(${a.id})" role="button" tabindex="0" aria-label="${esc(a.client.name)}, ${fmtTime(a.start_time)}, ${esc(a.service.name)}">
       <div class="sched-time mono">${fmtTime(a.start_time)}<span class="tiny muted">${fmtTime(a.end_time)}</span></div><span class="sched-bar" style="background:${a.service.color}"></span>
-      <div class="sched-main"><strong>${esc(a.client.name)}</strong><div class="tiny muted">${esc(a.service.name)} · ${a.staff ? esc(a.staff.name) : 'no trainer'}${a.subscription_id ? ' · package' : ''}${where ? ' · ' + esc(where) : ''}</div>
-        <div class="sched-actions">${a.status === 'scheduled' && open ? `<button class="btn btn-secondary btn-xs" onclick="event.stopPropagation();dashConfirm(${a.id}, ${jsArg(a.client.name)}, ${jsArg(fmtTime(a.start_time))})">✓ Confirm</button>` : ''}${open ? `<button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();openBookingModal(${a.id})">Reschedule</button>` : ''}<button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();openAppointment(${a.id})">Details</button></div></div>${badge(a.status)}</div>`; }).join('')
+      <div class="sched-main"><strong>${esc(a.client.name)}</strong>${a.staff ? '' : ' <span class="chip chip-warn">⚠ No trainer</span>'}<div class="tiny muted">${esc(a.service.name)}${a.staff ? ' · ' + esc(a.staff.name) : ''}${a.subscription_id ? ' · package' : ''}${where ? ' · ' + esc(where) : ''}</div>
+        <div class="sched-actions">${!a.staff && open ? `<button class="btn btn-warn btn-xs" onclick="event.stopPropagation();assignTrainer(${a.id}, ${jsArg(a.client.name)}, ${jsArg(fmtTime(a.start_time))})">Assign trainer</button>` : ''}${a.status === 'scheduled' && open ? `<button class="btn btn-secondary btn-xs" onclick="event.stopPropagation();dashConfirm(${a.id}, ${jsArg(a.client.name)}, ${jsArg(fmtTime(a.start_time))})">✓ Confirm</button>` : ''}${open ? `<button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();openBookingModal(${a.id})">Reschedule</button>` : ''}<button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();openAppointment(${a.id})">Details</button></div></div>${badge(a.status)}</div>`; }).join('')
     : `<div class="empty small">No sessions today.<br><a href="#" onclick="openBookingModal();return false">Book one</a></div>`;
 
   $('dash-payments').innerHTML = o.recent_payments.length ? `<div class="table-wrap"><table class="plain"><thead><tr><th>Client</th><th>For</th><th>Date</th><th class="num">Amount</th></tr></thead><tbody>${
@@ -274,4 +282,16 @@ function dashGo(kind) {
   else if (kind === 'owed') { const t = [...document.querySelectorAll('#page-payments .tab')].find(b => b.textContent.includes('Unpaid')); go('payments'); if (t) payTab('unpaid', t); }
   else if (kind === 'expiring') { SUBS.tab = 'expiring'; go('subscriptions'); const t = document.querySelector('#page-subscriptions .tab[data-t=expiring]'); if (t) { document.querySelectorAll('#page-subscriptions .tab').forEach(x => x.classList.toggle('active', x === t)); document.querySelectorAll('#page-subscriptions .subpanel').forEach(p => p.classList.toggle('active', p.id === 'sub-expiring')); } }
   else if (kind === 'leads') { setVal('lead-status', 'month'); go('leads'); }
+}
+
+// Give a session its trainer. The server checks the trainer is free and working at that time (and refuses if not).
+function assignTrainer(id, name, time) {
+  const staff = S.staff.filter(s => s.active);
+  if (!staff.length) return toast('Add a trainer first in Services & Team', true);
+  confirmBox('Assign trainer', `<p class="small muted" style="margin-top:0">${esc(name)} · today ${esc(time)}</p>
+    <div class="form-group"><label for="at-staff">Trainer</label><select id="at-staff" class="input">${staff.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('')}</select></div>
+    <label class="check"><input type="checkbox" id="at-notify"> Tell the client about the change</label>`, 'Assign', async () => {
+    await api('PUT', `/appointments/${id}`, { staff_id: +val('at-staff'), send_notification: $('at-notify').checked });
+    toast('Trainer assigned'); loadDashboard();
+  });
 }

@@ -302,6 +302,63 @@ def delete_avatar(client_id: int, db: Session = Depends(get_db)):
     return {"detail": "deleted"}
 
 
+# ---- contract: one file per client (PDF or a photo of the signed paper), shown at the bottom of their page ----
+CONTRACT_TYPES = {"application/pdf": ".pdf", "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
+CONTRACT_MAX_BYTES = 15 * 1024 * 1024
+
+
+def contract_path(c: models.Client) -> Optional[str]:
+    path = os.path.join(_photo_dir(c.id), os.path.basename(c.contract_file or ""))
+    return path if c.contract_file and os.path.exists(path) else None
+
+
+def _remove_contract(c: models.Client):
+    path = contract_path(c)
+    if path:
+        os.remove(path)
+    c.contract_file = c.contract_type = c.contract_uploaded_at = None
+
+
+@router.post("/{client_id}/contract", response_model=schemas.ClientResponse)
+async def upload_contract(client_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
+    client = _client_or_404(db, client_id)
+    ctype = (file.content_type or "").lower()
+    ext = CONTRACT_TYPES.get(ctype)
+    if not ext:
+        raise HTTPException(status_code=422, detail="Upload the contract as a PDF, JPG or PNG")
+    data = await file.read(CONTRACT_MAX_BYTES + 1)
+    if len(data) > CONTRACT_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="The file is larger than 15 MB")
+    if not data:
+        raise HTTPException(status_code=422, detail="The file is empty")
+    os.makedirs(_photo_dir(client_id), exist_ok=True)
+    name = f"contract-{secrets.token_hex(10)}{ext}"
+    with open(os.path.join(_photo_dir(client_id), name), "wb") as fh:
+        fh.write(data)
+    _remove_contract(client)  # the old one
+    client.contract_file, client.contract_type, client.contract_uploaded_at = name, ctype, utcnow()
+    db.commit()
+    db.refresh(client)
+    return client
+
+
+@router.get("/{client_id}/contract")
+def contract_file(client_id: int, db: Session = Depends(get_db)):
+    c = _client_or_404(db, client_id)
+    path = contract_path(c)
+    if not path:
+        raise HTTPException(status_code=404, detail="No contract")
+    return FileResponse(path, media_type=c.contract_type, headers={"Cache-Control": "private, no-store"})
+
+
+@router.delete("/{client_id}/contract")
+def delete_contract(client_id: int, db: Session = Depends(get_db)):
+    c = _client_or_404(db, client_id)
+    _remove_contract(c)
+    db.commit()
+    return {"detail": "deleted"}
+
+
 @router.get("/photos/{photo_id}/file")
 def photo_file(photo_id: int, db: Session = Depends(get_db)):
     p = db.query(models.ProgressPhoto).filter(models.ProgressPhoto.id == photo_id).first()
@@ -385,6 +442,7 @@ def delete_client(client_id: int, db: Session = Depends(get_db)):
     for p in db_client.photos:
         _remove_photo_file(p)
     _remove_avatar(db_client)
+    _remove_contract(db_client)
     db.delete(db_client)
     db.commit()
     return {"detail": "Client deleted"}

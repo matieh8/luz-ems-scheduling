@@ -4,92 +4,188 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex, nofollow">
-  <title>My account</title>
-  <link rel="icon" href="/favicon.ico?v=3" sizes="48x48">
-  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png?v=3">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#ffffff">
+  <title>My account · LUZ</title>
+  <link rel="icon" href="/favicon.ico?v=4" sizes="48x48">
+  <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png?v=4">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png?v=4">
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Text:wght@400;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    :root { --bg:#f4f7f5; --surface:#fff; --text:#0f1f19; --text-2:#5b6b64; --border:#e2e9e5; --accent:#0f7a5a; --accent-light:#e3f3ec; --good:#0f9f6e; --bad:#dc2626; }
-    @media (prefers-color-scheme: dark) { :root { --bg:#0c1411; --surface:#141f1a; --text:#e8f0ec; --text-2:#93a59c; --border:#24342c; --accent:#34c494; --accent-light:#17342a; } }
-    * { box-sizing:border-box; } body { margin:0; font-family:'Inter',-apple-system,sans-serif; background:var(--bg); color:var(--text); }
-    .wrap { max-width:560px; margin:0 auto; padding:24px 16px 60px; }
-    .brand { text-align:center; margin-bottom:18px; } .brand h1 { margin:0; font-size:1.4rem; font-weight:800; } .brand h1 span { color:var(--accent); }
-    .card { background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:18px; margin-bottom:14px; }
-    h2 { margin:0 0 4px; font-size:1.25rem; } h3 { margin:0 0 10px; font-size:1rem; } .muted { color:var(--text-2); font-size:.88rem; }
-    .kpis { display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:10px; margin-top:14px; }
-    .kpi { background:var(--accent-light); border-radius:14px; padding:12px; } .kpi b { display:block; font-size:1.5rem; margin-top:2px; } .kpi.bad { background:#fde8e8; color:#7f1d1d; }
-    .row { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 0; border-top:1px solid var(--border); font-size:.93rem; } .row:first-of-type { border-top:none; }
-    .row .r { text-align:right; white-space:nowrap; } .bar { height:8px; background:var(--border); border-radius:99px; overflow:hidden; margin-top:6px; } .bar i { display:block; height:100%; background:var(--accent); }
-    .badge { display:inline-block; padding:3px 9px; border-radius:999px; font-size:.72rem; font-weight:700; background:var(--accent-light); color:var(--accent); text-transform:capitalize; }
-    .btn { display:inline-block; padding:12px 16px; border-radius:12px; font-weight:700; font-size:.93rem; text-decoration:none; border:none; cursor:pointer; font-family:inherit; }
-    .btn-primary { background:var(--accent); color:#fff; } .btn-ghost { background:transparent; color:var(--accent); padding:6px 8px; font-size:.85rem; }
-    .actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:14px; } a { color:var(--accent); }
+    /* LUZ black & white with the emerald green of luzfitlife.com */
+    :root { --bg:#f6f6f6; --surface:#fff; --text:#0a0a0a; --text-2:#5c5c5c; --border:#e6e6e6; --line:#f0f0f0;
+            --green:#0b7a55; --green-bg:#e7f3ee; --bad:#b42318; --bad-bg:#fbeceb;
+            --serif:'Crimson Text', Georgia, 'Times New Roman', serif; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:Inter, system-ui, -apple-system, sans-serif; background:var(--bg); color:var(--text); -webkit-font-smoothing:antialiased; }
+    .wrap { max-width:560px; margin:0 auto; padding:22px 16px 56px; }
+    .logo { display:block; text-align:center; font-family:var(--serif); font-weight:400; font-size:32px; letter-spacing:.07em; line-height:1; margin:6px 0 22px; color:var(--text); }
+    .card { background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:20px; margin-bottom:14px; }
+    h2 { font-family:var(--serif); font-weight:400; font-size:2rem; line-height:1.1; margin:0 0 6px; }
+    h3 { font-family:var(--serif); font-weight:600; font-size:1.3rem; margin:0 0 10px; }
+    .muted { color:var(--text-2); font-size:.88rem; }
+    .kpis { display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:10px; margin-top:16px; }
+    .kpi { background:var(--bg); border-radius:14px; padding:12px 14px; font-size:.8rem; color:var(--text-2); }
+    .kpi b { display:block; font-size:1.5rem; color:var(--text); margin-top:2px; font-weight:600; }
+    .kpi.bad { background:var(--bad-bg); color:var(--bad); } .kpi.bad b { color:var(--bad); }
+    .row { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:11px 0; border-top:1px solid var(--line); font-size:.93rem; }
+    .row:first-of-type { border-top:none; } .row .r { text-align:right; white-space:nowrap; }
+    .bar { height:6px; background:var(--line); border-radius:99px; overflow:hidden; margin-top:8px; } .bar i { display:block; height:100%; background:var(--green); }
+    .badge { display:inline-block; padding:3px 10px; border-radius:999px; font-size:.7rem; font-weight:600; background:var(--bg); color:var(--text-2); text-transform:capitalize; }
+    .badge.on { background:var(--green-bg); color:var(--green); }
+    .btn { display:inline-flex; align-items:center; justify-content:center; gap:10px; padding:14px 22px; border-radius:999px; font:600 .8rem/1 Inter, sans-serif;
+           letter-spacing:.08em; text-transform:uppercase; text-decoration:none; border:none; cursor:pointer; }
+    .btn-green { background:var(--green); color:#fff; width:100%; margin-top:18px; } .btn-green:hover { filter:brightness(1.08); }
+    .btn-green::after { content:''; width:5px; height:5px; border-radius:50%; background:#fff; }
+    .btn-line { background:transparent; color:var(--text); border:1px solid var(--border); width:100%; }
+    .btn-line:hover { border-color:var(--text); }
+    .link { background:none; border:none; padding:4px 0; color:var(--green); font:500 .84rem Inter, sans-serif; cursor:pointer; text-decoration:none; }
+    /* progress */
+    .trend { display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:6px; }
+    .trend .now { font-family:var(--serif); font-size:2.2rem; line-height:1; } .trend .now small { font-size:1rem; color:var(--text-2); }
+    .chg { display:inline-flex; align-items:center; gap:4px; padding:5px 11px; border-radius:999px; font-weight:700; font-size:.85rem; white-space:nowrap; }
+    .chg.good { background:var(--green-bg); color:var(--green); } .chg.bad { background:var(--bad-bg); color:var(--bad); } .chg.flat { background:var(--bg); color:var(--text-2); }
+    .chart { width:100%; height:auto; display:block; margin:6px 0 2px; overflow:visible; }
+    .chart text { font:11px Inter, sans-serif; fill:var(--text-2); }
+    .metric-chg { font-size:.8rem; font-weight:600; margin-left:6px; } .metric-chg.good { color:var(--green); } .metric-chg.bad { color:var(--bad); }
+    /* photos & contract */
+    .reveal { margin-top:12px; }
+    .photos { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:10px; }
+    .photos figure { margin:0; } .photos img { width:100%; aspect-ratio:3/4; object-fit:cover; border-radius:12px; background:var(--line); display:block; cursor:zoom-in; }
+    .photos figcaption { font-size:.76rem; color:var(--text-2); margin-top:4px; text-transform:capitalize; }
+    .contract img { width:100%; border-radius:12px; border:1px solid var(--border); }
+    .viewer { position:fixed; inset:0; background:rgba(10,10,10,.92); display:flex; align-items:center; justify-content:center; padding:16px; z-index:10; cursor:zoom-out; }
+    .viewer img { max-width:100%; max-height:100%; border-radius:12px; }
+    [hidden] { display:none !important; }
     #print-area { display:none; }
-    @media print { body > .wrap { display:none; } #print-area { display:block; color:#000; font-family:'Inter',sans-serif; padding:24px; }
+    @media print { body > .wrap { display:none; } #print-area { display:block; color:#000; font-family:Inter, sans-serif; padding:24px; }
       #print-area table { width:100%; border-collapse:collapse; margin:18px 0; } #print-area td { padding:8px 0; border-bottom:1px solid #ddd; } #print-area .num { text-align:right; } }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <div class="brand"><h1 id="biz">LUZ <span>EMS</span></h1></div>
+    <span class="logo" aria-label="LUZ">LUZ</span>
     <div id="app"><div class="card"><p class="muted">Loading your account…</p></div></div>
   </div>
   <div id="print-area"></div>
   <script>
     const token = location.pathname.split('/').pop();
+    const base = `/api/public/portal/${encodeURIComponent(token)}`;
     const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     let D = null;
     const money = n => `${D.currency} ${Number(n || 0).toLocaleString('en', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
-    const card = (title, body) => `<div class="card"><h3>${title}</h3>${body}</div>`;
-    const empty = t => `<p class="muted">${t}</p>`;
+    const card = (title, body, id) => `<div class="card"${id ? ` id="${id}"` : ''}><h3>${title}</h3>${body}</div>`;
+    const empty = t => `<p class="muted" style="margin:0">${t}</p>`;
+    const STATUS = { scheduled: 'booked', confirmed: 'confirmed', arrived: 'arrived' };
+    // Lower is better for weight, body fat and waist; higher is better for muscle
+    const METRICS = { weight_kg: ['Weight', 'kg', -1], body_fat_pct: ['Body fat', '%', -1], muscle_kg: ['Muscle', 'kg', 1], waist_cm: ['Waist', 'cm', -1] };
+    const fmtN = n => Number(n.toFixed(1)).toString();
+    const day = (iso, year) => new Date(iso + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', ...(year ? { year: 'numeric' } : {}) });  // check-in dates come as 2026-11-20
+
+    function change(k, first, last) {
+      const d = last - first, [, unit, better] = METRICS[k];
+      if (Math.abs(d) < 0.05) return { cls: 'flat', text: 'no change' };
+      return { cls: Math.sign(d) === better ? 'good' : 'bad', text: `${d > 0 ? '↑' : '↓'} ${fmtN(Math.abs(d))} ${unit}` };
+    }
+
+    // Weight over time: a line with a dot per check-in, green when it went down, red when it went up
+    function weightChart(pts) {
+      const W = 320, H = 150, L = 34, R = 12, T = 14, B = 24;
+      const vals = pts.map(p => p.weight_kg), lo = Math.min(...vals), hi = Math.max(...vals), pad = Math.max((hi - lo) * 0.25, 0.5);
+      const y0 = lo - pad, y1 = hi + pad;
+      const x = i => L + (pts.length === 1 ? (W - L - R) / 2 : i * (W - L - R) / (pts.length - 1));
+      const y = v => T + (y1 - v) * (H - T - B) / (y1 - y0);
+      const c = change('weight_kg', vals[0], vals[vals.length - 1]).cls;
+      const col = c === 'good' ? 'var(--green)' : c === 'bad' ? 'var(--bad)' : 'var(--text)';
+      const line = pts.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${y(p.weight_kg).toFixed(1)}`).join(' ');
+      const area = `${line} L${x(pts.length - 1).toFixed(1)} ${H - B} L${x(0).toFixed(1)} ${H - B} Z`;
+      let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Weight from ${fmtN(vals[0])} kg to ${fmtN(vals[vals.length - 1])} kg">
+        <defs><linearGradient id="wg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${col}" stop-opacity=".16"/><stop offset="1" stop-color="${col}" stop-opacity="0"/></linearGradient></defs>`;
+      [y1 - pad, y0 + pad].forEach(v => { s += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${fmtN(v)}</text>`; });
+      if (pts.length > 1) s += `<path d="${area}" fill="url(#wg)"/><path d="${line}" fill="none" stroke="${col}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
+      pts.forEach((p, i) => { const last = i === pts.length - 1; s += `<circle cx="${x(i)}" cy="${y(p.weight_kg)}" r="${last ? 5 : 3.5}" fill="${last ? col : 'var(--surface)'}" stroke="${col}" stroke-width="2"><title>${esc(day(p.date, true))}: ${p.weight_kg} kg</title></circle>`; });
+      s += `<text x="${x(0)}" y="${H - 6}" text-anchor="${pts.length === 1 ? 'middle' : 'start'}">${esc(day(pts[0].date))}</text>`;
+      if (pts.length > 1) s += `<text x="${x(pts.length - 1)}" y="${H - 6}" text-anchor="end">${esc(day(pts[pts.length - 1].date))}</text>`;
+      return s + '</svg>';
+    }
+
+    function progressCard(prog) {
+      if (!prog.length) return '';
+      const w = prog.filter(p => p.weight_kg != null);
+      let body = '';
+      if (w.length) {
+        const first = w[0].weight_kg, last = w[w.length - 1].weight_kg, c = change('weight_kg', first, last);
+        body += `<div class="trend"><div><div class="muted">Weight</div><div class="now">${fmtN(last)} <small>kg</small></div></div>
+          ${w.length > 1 ? `<span class="chg ${c.cls}">${c.text}</span>` : '<span class="chg flat">first check-in</span>'}</div>
+          ${weightChart(w)}${w.length > 1 ? `<p class="muted" style="margin:4px 0 6px">Started at ${fmtN(first)} kg on ${esc(day(w[0].date, true))}</p>` : ''}`;
+      }
+      const last = prog[prog.length - 1];
+      body += Object.entries(METRICS).filter(([k]) => k !== 'weight_kg' && last[k] != null).map(([k, [name, unit]]) => {
+        const firstRow = prog.find(p => p[k] != null), c = prog.filter(p => p[k] != null).length > 1 ? change(k, firstRow[k], last[k]) : null;
+        return `<div class="row"><span>${name}</span><span class="r"><b>${fmtN(last[k])} ${unit}</b>${c && c.cls !== 'flat' ? `<span class="metric-chg ${c.cls}">${c.text}</span>` : ''}</span></div>`;
+      }).join('');
+      body += `<p class="muted" style="margin:10px 0 0">Last check-in: ${esc(day(last.date, true))} · ${prog.length} check-in${prog.length > 1 ? 's' : ''}</p>`;
+      return card('My progress', body);
+    }
 
     async function load() {
-      const r = await fetch(`/api/public/portal/${encodeURIComponent(token)}`);
+      const r = await fetch(base);
       const d = await r.json();
       if (!r.ok) { document.getElementById('app').innerHTML = card('Link not active', `<p class="muted">${esc(d.detail)}</p>`); return; }
       D = d;
-      document.getElementById('biz').innerHTML = esc(d.business.name).replace(/ (\S+)$/, ' <span>$1</span>');
-      document.title = `${d.name} · ${d.business.name}`;
-      const active = d.packages.filter(p => p.active);
-      const left = active.reduce((a, p) => a + p.sessions_remaining, 0);
+      document.title = `${d.name} · LUZ`;
+      const left = d.packages.filter(p => p.active).reduce((a, p) => a + p.sessions_remaining, 0);
       const next = d.upcoming[0];
-      const phone = (d.business.phone || '').replace(/[^\d+]/g, '');
-      let html = `<div class="card"><h2>Hi ${esc(d.name.split(' ')[0])} 👋</h2><p class="muted">Your sessions, packages, payments and progress, always up to date.</p>
+      const phone = d.business.whatsapp;  // already in international form (971…)
+      const msg = encodeURIComponent(`Hi LUZ, I'd like to book a session. – ${d.name}`);
+      let html = `<div class="card"><h2>Hi ${esc(d.name.split(' ')[0])}</h2><p class="muted" style="margin:0">Your sessions, packages, payments and progress, always up to date.</p>
         <div class="kpis"><div class="kpi">Sessions left<b>${left}</b></div>
-        <div class="kpi">Next session<b style="font-size:1rem">${next ? `${esc(next.date.split(',')[0])}<br>${esc(next.time)}` : '—'}</b></div>
+        <div class="kpi">Next session<b style="font-size:1rem;line-height:1.35">${next ? `${esc(next.date.split(',')[0])}<br>${esc(next.time)}` : '—'}</b></div>
         ${d.owed > 0 ? `<div class="kpi bad">To pay<b>${money(d.owed)}</b></div>` : ''}</div>
-        <div class="actions">${d.online_booking ? '<a class="btn btn-primary" href="/book">Book a session</a>' : ''}
-        ${phone ? `<a class="btn btn-ghost" href="https://wa.me/${esc(phone.replace('+', ''))}">WhatsApp the studio</a><a class="btn btn-ghost" href="tel:${esc(phone)}">Call</a>` : ''}</div></div>`;
+        ${phone ? `<a class="btn btn-green" href="https://wa.me/${phone}?text=${msg}" target="_blank" rel="noopener">Book a session</a>` : ''}</div>`;
 
       html += card('Upcoming sessions', d.upcoming.length ? d.upcoming.map(a => `<div class="row"><div><b>${esc(a.date)}</b><div class="muted">${esc(a.time)} · ${esc(a.service)}${a.staff ? ' · ' + esc(a.staff) : ''}</div></div>
-        <div class="r"><span class="badge">${esc(a.status)}</span><br><a class="btn btn-ghost" href="/a/${encodeURIComponent(a.token)}">Change / cancel</a></div></div>`).join('') : empty('No sessions booked.'));
+        <div class="r"><span class="badge on">${esc(STATUS[a.status] || a.status)}</span><br><a class="link" href="/a/${encodeURIComponent(a.token)}">Change / cancel</a></div></div>`).join('') : empty('No sessions booked.'));
 
-      html += card('My packages', d.packages.length ? d.packages.map(p => `<div class="row" style="display:block"><div style="display:flex;justify-content:space-between"><b>${esc(p.name)}</b><span class="badge">${p.active ? 'active' : 'ended'}</span></div>
+      html += card('My packages', d.packages.length ? d.packages.map(p => `<div class="row" style="display:block"><div style="display:flex;justify-content:space-between;gap:10px"><b>${esc(p.name)}</b><span class="badge${p.active ? ' on' : ''}">${p.active ? 'active' : 'ended'}</span></div>
         <div class="muted">${p.sessions_remaining} of ${p.sessions_total} sessions left${p.end ? ` · valid until ${esc(p.end)}` : ''}</div>
         <div class="bar"><i style="width:${p.sessions_total ? Math.round(100 * p.sessions_used / p.sessions_total) : 0}%"></i></div></div>`).join('') : empty('No packages yet.'));
 
-      if (d.progress.length) {
-        const first = d.progress[0], last = d.progress[d.progress.length - 1];
-        const diff = (k, unit) => first[k] != null && last[k] != null && d.progress.length > 1 ? ` <span class="muted">(${last[k] - first[k] > 0 ? '+' : ''}${(last[k] - first[k]).toFixed(1)} ${unit} since ${esc(first.date)})</span>` : '';
-        html += card('My progress', `${last.weight_kg != null ? `<div class="row"><span>Weight</span><span class="r"><b>${last.weight_kg} kg</b>${diff('weight_kg', 'kg')}</span></div>` : ''}
-          ${last.body_fat_pct != null ? `<div class="row"><span>Body fat</span><span class="r"><b>${last.body_fat_pct}%</b>${diff('body_fat_pct', '%')}</span></div>` : ''}
-          ${last.muscle_kg != null ? `<div class="row"><span>Muscle</span><span class="r"><b>${last.muscle_kg} kg</b>${diff('muscle_kg', 'kg')}</span></div>` : ''}
-          ${last.waist_cm != null ? `<div class="row"><span>Waist</span><span class="r"><b>${last.waist_cm} cm</b>${diff('waist_cm', 'cm')}</span></div>` : ''}
-          <p class="muted" style="margin:8px 0 0">Last check-in: ${esc(last.date)} · ${d.progress.length} check-in${d.progress.length > 1 ? 's' : ''}</p>`);
-      }
+      html += progressCard(d.progress);
 
       html += card('Payments and invoices', d.payments.length ? d.payments.map(p => `<div class="row"><div><b>${money(p.amount)}</b><div class="muted">${esc(p.date)} · ${esc(p.for)} · ${esc(p.method)}</div></div>
-        <div class="r"><button class="btn btn-ghost" data-invoice="${p.id}">Invoice</button></div></div>`).join('') : empty('No payments yet.'));
+        <div class="r"><button class="link" data-invoice="${p.id}">Invoice</button></div></div>`).join('') : empty('No payments yet.'));
 
-      html += card('Past sessions', d.history.length ? d.history.map(a => `<div class="row"><div>${esc(a.date)}<div class="muted">${esc(a.time)} · ${esc(a.service)}</div></div><span class="badge">${a.status === 'no_show' ? 'missed' : 'done'}</span></div>`).join('') : empty('No sessions yet.'));
+      html += card('Past sessions', d.history.length ? d.history.map(a => `<div class="row"><div>${esc(a.date)}<div class="muted">${esc(a.time)} · ${esc(a.service)}</div></div><span class="badge${a.status === 'no_show' ? '' : ' on'}">${a.status === 'no_show' ? 'missed' : 'done'}</span></div>`).join('') : empty('No sessions yet.'));
+
+      if (d.photos.length) html += card('My photos', `<button class="btn btn-line" data-toggle="photos" aria-expanded="false">View my photos (${d.photos.length})</button>
+        <div class="reveal photos" id="photos" hidden>${d.photos.map(p => `<figure><img data-src="${base}/photos/${p.id}" alt="${esc(p.pose)} photo, ${esc(p.date)}"><figcaption>${esc(p.pose)} · ${esc(p.date)}</figcaption></figure>`).join('')}</div>`);
+
+      // A PDF opens in the phone's own viewer (phones don't show a PDF inside a page); a photo of the contract opens right here
+      if (d.contract) html += card('My contract', d.contract.type === 'application/pdf'
+        ? `<a class="btn btn-line" href="${base}/contract" target="_blank" rel="noopener">View my contract</a>`
+        : `<button class="btn btn-line" data-toggle="contract" aria-expanded="false">View my contract</button><div class="reveal contract" id="contract" hidden></div>`);
 
       document.getElementById('app').innerHTML = html;
     }
 
+    function toggle(btn) {
+      const box = document.getElementById(btn.dataset.toggle), open = box.hidden;
+      box.hidden = !open; btn.setAttribute('aria-expanded', open);
+      btn.textContent = btn.textContent.replace(open ? 'View' : 'Hide', open ? 'Hide' : 'View');
+      if (!open) return;
+      box.querySelectorAll('img[data-src]').forEach(img => { img.src = img.dataset.src; img.removeAttribute('data-src'); });
+      if (box.id === 'contract' && !box.innerHTML) box.innerHTML = `<img src="${base}/contract" alt="My contract">`;
+    }
+
     document.addEventListener('click', async e => {
-      const id = e.target.dataset && e.target.dataset.invoice;
-      if (!id) return;
-      const r = await fetch(`/api/public/portal/${encodeURIComponent(token)}/invoice/${encodeURIComponent(id)}`);
+      const t = e.target.closest('[data-toggle], [data-invoice], .photos img, .viewer');
+      if (!t) return;
+      if (t.dataset.toggle) return toggle(t);
+      if (t.classList.contains('viewer')) return t.remove();
+      if (t.tagName === 'IMG') { const v = document.createElement('div'); v.className = 'viewer'; v.innerHTML = `<img src="${t.src}" alt="${esc(t.alt)}">`; document.body.appendChild(v); return; }
+      const r = await fetch(`${base}/invoice/${encodeURIComponent(t.dataset.invoice)}`);
       if (!r.ok) return;
       const inv = await r.json();
       const m = n => `${inv.currency} ${Number(n).toFixed(2)}`;
@@ -99,6 +195,7 @@
         <tr><td><b>Total paid (${esc(inv.method)})</b></td><td class="num"><b>${m(inv.total)}</b></td></tr></table><div>Thank you!</div>`;
       const title = document.title; document.title = inv.number; window.print(); document.title = title;
     });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') document.querySelector('.viewer')?.remove(); });
     load();
   </script>
 </body>

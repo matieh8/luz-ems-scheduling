@@ -93,6 +93,8 @@ class PhotoResponse(BaseModel):
 class ClientResponse(ClientBase):
     photo_consent_at: Optional[datetime] = None
     avatar: Optional[str] = None
+    contract_file: Optional[str] = None
+    contract_uploaded_at: Optional[datetime] = None
     id: int
     created_at: datetime
     updated_at: datetime

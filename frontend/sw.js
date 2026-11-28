@@ -12,7 +12,7 @@ self.addEventListener('push', (event) => {
     body: msg.body || '',
     tag: msg.tag || undefined,
     renotify: !!msg.tag,
-    icon: '/icons/icon-192.png?v=3',
+    icon: '/icons/icon-192.png?v=4',
     badge: '/icons/badge-96.png?v=3',
     data: { url: msg.url || '/admin' },
   }));

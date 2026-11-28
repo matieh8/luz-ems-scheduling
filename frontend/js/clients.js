@@ -69,6 +69,27 @@ async function loadAvatars(root) {
     } catch (e) { /* initials stay */ }
   }));
 }
+// Contract: one file per client, shown at the bottom of the client's own page
+async function uploadContract(id, input) {
+  const f = input.files && input.files[0]; if (!f) return;
+  guard(async () => {
+    const fd = new FormData(); fd.append('file', f);
+    const r = await fetch(`${API}/clients/${id}/contract`, { method: 'POST', headers: { Authorization: `Bearer ${S.token}` }, body: fd });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || 'Upload failed');
+    toast('Contract saved: the client can see it on their page'); openClientDetail(id);
+  });
+}
+async function viewContract(id) {
+  const w = window.open('', '_blank');  // opened now, while the click still counts, so pop-up blockers allow it
+  const r = await fetch(`${API}/clients/${id}/contract`, { headers: { Authorization: `Bearer ${S.token}` } });
+  if (!r.ok) { if (w) w.close(); return toast('Contract not found', true); }
+  const url = URL.createObjectURL(await r.blob());
+  if (w) w.location = url; else location.href = url;
+}
+async function removeContract(id) {
+  if (!await ask('Remove this contract? The client will no longer see it on their page.', 'Remove')) return;
+  guard(async () => { await api('DELETE', `/clients/${id}/contract`); toast('Contract removed'); openClientDetail(id); });
+}
 async function pickAvatar(id, input) {
   const f = input.files && input.files[0]; if (!f) return;
   guard(async () => {
@@ -140,6 +161,10 @@ async function openClientDetail(id, tab) {
       ${c.main_trainer ? `<div class="cd-staff">${avatar(c.main_trainer)}<div><div class="tiny muted">Coach</div><strong>${esc(c.main_trainer)}</strong></div></div>` : '<div class="tiny muted">No trainer yet</div>'}
       <div class="section-label">Client since</div>
       <div class="small">${fmtDate(c.created_at)}${c.source ? ' · ' + esc(c.source) : ''}</div>
+      <div class="section-label">Contract</div>
+      <div class="cd-contract">${c.contract_file ? `<div class="small">📄 Uploaded ${fmtDate(c.contract_uploaded_at)}</div>
+        <div class="cd-contract-actions"><button class="btn btn-ghost btn-xs" onclick="viewContract(${c.id})">View</button><label class="btn btn-ghost btn-xs">Replace<input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" hidden onchange="uploadContract(${c.id}, this)"></label><button class="btn btn-ghost btn-xs" onclick="removeContract(${c.id})">Remove</button></div>`
+        : `<label class="btn btn-secondary btn-xs">Upload contract<input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" hidden onchange="uploadContract(${c.id}, this)"></label><div class="tiny muted" style="margin-top:4px">PDF or photo. The client sees it at the bottom of their page.</div>`}</div>
       ${c.health_notes ? `<div class="health-flag" style="margin-top:14px"><strong>Injuries &amp; restrictions</strong><div>${esc(c.health_notes)}</div></div>` : `<div class="tiny muted" style="margin-top:14px">No injuries or restrictions recorded. <a href="#" onclick="editClient(${c.id});return false">Add</a></div>`}
     </aside>
     <div class="cd-main">

@@ -823,3 +823,4 @@ button:focus-visible, select:focus-visible, input[type=checkbox]:focus-visible, 
 .cal.by-status .cal-ev.st-overdue { background: var(--warn-bg); color: var(--warn); border: 2px dashed var(--warn); border-left: 4px solid var(--svc); }
 .cal.by-status .cal-ev:hover { filter: brightness(.97); }
 .cal:not(.by-status) .cal-ev.st-overdue { outline: 2px dashed var(--warn); outline-offset: 1px; }
+.cd-contract { text-align: left; } .cd-contract-actions { display: flex; gap: 2px; flex-wrap: wrap; margin: 4px 0 0 -8px; }

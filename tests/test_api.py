@@ -1814,3 +1814,30 @@ def test_arrived_status_keeps_the_session_on(client):
     assert summary["next_visit"] is not None                                                # still shows as coming
     assert client.post(f"/api/appointments/{a['id']}/status", json={"status": "completed"}).json()["status"] == "completed"
     assert client.post(f"/api/appointments/{a['id']}/status", json={"status": "bogus"}).status_code == 400
+
+
+def test_client_page_shows_own_photos_and_contract_only(client):
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+    pdf = b"%PDF-1.4 contract"
+    a = client.post("/api/clients/", json={"name": "Portal Photo A", "phone": "0509990821", "photo_consent": True}).json()["id"]
+    b = client.post("/api/clients/", json={"name": "Portal Photo B", "phone": "0509990822"}).json()["id"]
+    ph = client.post(f"/api/clients/{a}/photos", files={"file": ("f.png", png, "image/png")}, data={"pose": "front"}).json()
+    assert client.post(f"/api/clients/{a}/contract", files={"file": ("c.txt", b"x", "text/plain")}).status_code == 422
+    c = client.post(f"/api/clients/{a}/contract", files={"file": ("contract.pdf", pdf, "application/pdf")}).json()
+    assert c["contract_file"] and c["contract_uploaded_at"]
+    assert client.get(f"/api/clients/{a}/contract").content == pdf
+    ta = client.post(f"/api/clients/{a}/portal-link").json()["path"].split("/")[-1]
+    tb = client.post(f"/api/clients/{b}/portal-link").json()["path"].split("/")[-1]
+    with TestClient(app) as anon:
+        d = anon.get(f"/api/public/portal/{ta}").json()
+        assert [x["id"] for x in d["photos"]] == [ph["id"]] and d["contract"]["type"] == "application/pdf"
+        assert "whatsapp" in d["business"]                                                    # the Book button opens WhatsApp
+        assert anon.get(f"/api/public/portal/{ta}/photos/{ph['id']}").content == png
+        assert anon.get(f"/api/public/portal/{ta}/contract").content == pdf
+        assert anon.get(f"/api/public/portal/{tb}/photos/{ph['id']}").status_code == 404    # another client's link can't see it
+        assert anon.get(f"/api/public/portal/{tb}/contract").status_code == 404
+        assert anon.get(f"/api/public/portal/{tb}").json()["contract"] is None
+    assert client.delete(f"/api/clients/{a}/contract").status_code == 200
+    assert client.get(f"/api/clients/{a}/contract").status_code == 404
+    from backend.notifications import normalize_phone
+    assert normalize_phone("050 123 4567") == "971501234567"                                 # wa.me needs the country code

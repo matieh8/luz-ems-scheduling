@@ -1,8 +1,10 @@
 """Unauthenticated endpoints for the client self-booking page and manage-booking links."""
+import os
 import time
 from datetime import datetime, timedelta, date
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from backend.database import get_db
@@ -221,8 +223,8 @@ def _portal_client(db: Session, token: str) -> models.Client:
 
 @router.get("/portal/{token}")
 def portal(token: str, db: Session = Depends(get_db)):
-    """Read-only view of one client's own bookings, packages, payments and progress.
-    Staff notes, health notes and photos are never included."""
+    """Read-only view of one client's own bookings, packages, payments, progress, photos and contract.
+    Staff notes and health notes are never included."""
     c = _portal_client(db, token)
     s = get_settings(db)
     tz, now = s.timezone, utcnow()
@@ -253,9 +255,34 @@ def portal(token: str, db: Session = Depends(get_db)):
                 for m in sorted(c.measurements, key=lambda m: m.measured_at)]
     owed = models.unpaid_sessions(db, db.query(models.Appointment).filter(models.Appointment.client_id == c.id))
     return {"name": c.name, "currency": s.currency, "online_booking": bool(s.online_booking_enabled),
-            "business": {"name": s.business_name, "phone": s.business_phone, "address": s.business_address},
+            "business": {"name": s.business_name, "phone": s.business_phone, "address": s.business_address,
+                         "whatsapp": notifications.normalize_phone(s.business_phone) or None},  # 971… for wa.me links
             "upcoming": upcoming, "history": history, "packages": packages, "payments": payments,
-            "progress": progress, "owed": round(sum(a.balance_due for a in owed), 2)}
+            "progress": progress, "owed": round(sum(a.balance_due for a in owed), 2),
+            "photos": [{"id": p.id, "date": fmt_date(p.taken_at, tz), "pose": p.pose}
+                       for p in sorted(c.photos, key=lambda p: (p.taken_at, p.id))],
+            "contract": {"date": fmt_date(c.contract_uploaded_at, tz), "type": c.contract_type} if c.contract_file else None}
+
+
+# The client's own files, behind their private link only (each request checks the photo is theirs)
+@router.get("/portal/{token}/photos/{photo_id}")
+def portal_photo(token: str, photo_id: int, db: Session = Depends(get_db)):
+    from backend.routers.clients import _photo_path
+    c = _portal_client(db, token)
+    p = next((p for p in c.photos if p.id == photo_id), None)
+    if not p or not os.path.exists(_photo_path(p)):
+        raise HTTPException(status_code=404, detail="Photo not found")
+    return FileResponse(_photo_path(p), media_type=p.content_type, headers={"Cache-Control": "private, no-store"})
+
+
+@router.get("/portal/{token}/contract")
+def portal_contract(token: str, db: Session = Depends(get_db)):
+    from backend.routers.clients import contract_path
+    c = _portal_client(db, token)
+    path = contract_path(c)
+    if not path:
+        raise HTTPException(status_code=404, detail="No contract")
+    return FileResponse(path, media_type=c.contract_type, headers={"Cache-Control": "private, no-store", "Content-Disposition": "inline"})
 
 
 @router.get("/portal/{token}/invoice/{payment_id}")

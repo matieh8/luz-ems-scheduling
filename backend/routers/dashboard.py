@@ -133,7 +133,7 @@ def overview(db: Session = Depends(get_db)):
     def active_clients(start, end):
         q = db.query(func.count(func.distinct(models.Appointment.client_id))).filter(
             models.Appointment.start_time >= start, models.Appointment.start_time < end,
-            models.Appointment.status.in_(("scheduled", "confirmed", "completed")))
+            models.Appointment.status.in_((*models.ACTIVE_STATUSES, "completed")))
         return int(q.scalar() or 0)
     ac = active_clients(now - timedelta(days=30), now + timedelta(seconds=1))
     ac_prev = active_clients(now - timedelta(days=60), now - timedelta(days=30))
@@ -149,7 +149,7 @@ def overview(db: Session = Depends(get_db)):
     _, week_end = local_day_bounds(today + timedelta(days=6), tz)  # today + the next 6 days, the same days the calendar agenda opens on
     upcoming = dict(db.query(models.Appointment.status, func.count(models.Appointment.id)).filter(
         models.Appointment.start_time >= now, models.Appointment.start_time < week_end,
-        models.Appointment.status.in_(("scheduled", "confirmed"))).group_by(models.Appointment.status).all())
+        models.Appointment.status.in_(models.ACTIVE_STATUSES)).group_by(models.Appointment.status).all())
 
     # Leads: new this month (same span as the money KPIs), still open, and follow-ups due today or earlier
     def new_leads(start, end):
@@ -182,7 +182,7 @@ def overview(db: Session = Depends(get_db)):
     # Best sellers this month
     svc = defaultdict(lambda: {"count": 0, "value": 0.0})
     for a in db.query(models.Appointment).filter(models.Appointment.start_time >= cur_start, models.Appointment.start_time < cur_end,
-                                                 models.Appointment.status.in_(("scheduled", "confirmed", "completed"))).all():
+                                                 models.Appointment.status.in_((*models.ACTIVE_STATUSES, "completed"))).all():
         row = svc[a.service.name if a.service else "Other"]
         row["count"] += 1
         if a.subscription_id and a.subscription and a.subscription.sessions_total:
@@ -225,7 +225,7 @@ def overview(db: Session = Depends(get_db)):
         },
         "today_sessions": {"total": int(sessions_today), "done": int(today_by_status.get("completed", 0)),
                            "no_show": int(today_by_status.get("no_show", 0)),
-                           "to_come": int(today_by_status.get("scheduled", 0) + today_by_status.get("confirmed", 0))},
+                           "to_come": int(sum(today_by_status.get(s, 0) for s in models.ACTIVE_STATUSES))},
         "upcoming": {"count": int(sum(upcoming.values())), "unconfirmed": int(upcoming.get("scheduled", 0)), "days": 7},
         "updated_at": now.replace(tzinfo=timezone.utc).isoformat(),
         "months": [months[p] for p in periods],
@@ -259,7 +259,7 @@ def dashboard(db: Session = Depends(get_db)):
             q = q.filter(models.Payment.paid_at < end)
         return float(q.scalar() or 0)
 
-    active = ("scheduled", "confirmed")
+    active = models.ACTIVE_STATUSES
     total_clients = db.query(func.count(models.Client.id)).filter(models.Client.active == True).scalar() or 0
     new_clients = db.query(func.count(models.Client.id)).filter(models.Client.created_at >= month_start).scalar() or 0
     total_services = db.query(func.count(models.Service.id)).filter(models.Service.active == True).scalar() or 0

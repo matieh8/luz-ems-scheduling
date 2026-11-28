@@ -43,7 +43,7 @@ def summarize(c: models.Client) -> dict:
     now = utcnow()
     appts = c.appointments
     completed = [a for a in appts if a.status == "completed"]
-    future = [a for a in appts if a.status in ("scheduled", "confirmed") and a.start_time >= now]
+    future = [a for a in appts if a.status in models.ACTIVE_STATUSES and a.start_time >= now]
     no_shows = len([a for a in appts if a.status == "no_show"])
     outstanding = sum(a.balance_due for a in completed)
     live = sorted([s for s in c.subscriptions if s.status == "active" and s.sessions_remaining > 0 and (s.end_date is None or s.end_date >= now)],
@@ -61,7 +61,7 @@ def summarize(c: models.Client) -> dict:
         sessions_remaining=int(remaining),
         last_visit=max((a.start_time for a in completed), default=None),
         # same rule as the dashboard's "active clients": a session that isn't cancelled or a no-show, up to now
-        last_session=max((a.start_time for a in appts if a.status in ("scheduled", "confirmed", "completed") and a.start_time <= now), default=None),
+        last_session=max((a.start_time for a in appts if a.status in (*models.ACTIVE_STATUSES, "completed") and a.start_time <= now), default=None),
         next_visit=min((a.start_time for a in future), default=None),
         package_name=live[0].plan.name if live and live[0].plan else None,
         package_end=live[0].end_date if live else None,

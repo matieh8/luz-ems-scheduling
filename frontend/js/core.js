@@ -128,6 +128,7 @@ function esc(s) { if (s === null || s === undefined) return ''; return String(s)
 function $(id) { return document.getElementById(id); }
 function val(id) { return $(id).value; }
 function setVal(id, v) { const el = $(id); el.value = v === null || v === undefined ? '' : v; if (el._flatpickr) el._flatpickr.setDate(el.value || null, false); }
+const ACTIVE = ['scheduled', 'confirmed', 'arrived'];  // a session that is still on (same as the server)
 function badge(status) { return `<span class="badge badge-${status}">${esc(status.replace('_', ' '))}</span>`; }
 function toast(msg, isError) { const t = $('toast'); t.textContent = msg; t.classList.toggle('error', !!isError); t.setAttribute('role', isError ? 'alert' : 'status'); t.classList.add('show'); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), isError ? 5000 : 3000); }
 /* ---------- dialogs: keyboard, screen readers, focus ---------- */

@@ -1797,3 +1797,20 @@ def test_dashboard_actions_change_the_real_booking(client):
     r = client.put(f"/api/appointments/{a['id']}", json={"staff_id": 999999, "send_notification": False})
     assert r.status_code in (400, 404, 409, 422)                                              # an unknown trainer is refused
     assert client.get(f"/api/appointments/{a['id']}").json()["staff_id"] == t1                # and nothing was changed
+
+
+def test_arrived_status_keeps_the_session_on(client):
+    """Arrived: the client is at the studio. The session still holds its slot and still counts as booked."""
+    svc = client.post("/api/services/", json={"name": "Arrive Check", "duration_minutes": 30, "buffer_minutes": 0, "price": 100}).json()
+    cid = client.post("/api/clients/", json={"name": "Arriving Amal", "phone": "0509990811"}).json()["id"]
+    other = client.post("/api/clients/", json={"name": "Second Sami", "phone": "0509990812"}).json()["id"]
+    start = next_weekday_at(11, days_ahead=10)
+    a = client.post("/api/appointments/", json={"client_id": cid, "service_id": svc["id"], "start_time": start.isoformat(), "send_notification": False}).json()
+    r = client.post(f"/api/appointments/{a['id']}/status", json={"status": "arrived"}).json()
+    assert r["status"] == "arrived" and r["confirmed_at"]                                  # arriving also counts as confirmed
+    clash = client.post("/api/appointments/", json={"client_id": other, "service_id": svc["id"], "start_time": start.isoformat(), "send_notification": False})
+    assert clash.status_code == 409                                                         # the slot is still taken
+    summary = next(c for c in client.get("/api/clients/").json() if c["id"] == cid)
+    assert summary["next_visit"] is not None                                                # still shows as coming
+    assert client.post(f"/api/appointments/{a['id']}/status", json={"status": "completed"}).json()["status"] == "completed"
+    assert client.post(f"/api/appointments/{a['id']}/status", json={"status": "bogus"}).status_code == 400

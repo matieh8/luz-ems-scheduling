@@ -59,7 +59,7 @@ async function bookingHistory(clientId) {
   const box = $('booking-history'); box.innerHTML = ''; if (!clientId) return;
   try {
     const list = await api('GET', `/appointments/?client_id=${clientId}&limit=500`), now = new Date();
-    const n = s => list.filter(a => a.status === s).length, next = list.filter(a => ['scheduled', 'confirmed'].includes(a.status) && parseISO(a.start_time) > now).sort((a, b) => a.start_time < b.start_time ? -1 : 1)[0];
+    const n = s => list.filter(a => a.status === s).length, next = list.filter(a => ACTIVE.includes(a.status) && parseISO(a.start_time) > now).sort((a, b) => a.start_time < b.start_time ? -1 : 1)[0];
     box.innerHTML = `<label>Client history</label><div class="small">${n('completed')} done · <span${n('no_show') ? ' style="color:var(--bad);font-weight:600"' : ''}>${n('no_show')} no-show</span> · ${n('cancelled')} cancelled</div>
       <div class="tiny muted">${next ? 'Next: ' + fmtDateShort(next.start_time) + ' ' + fmtTime(next.start_time) : 'Nothing else booked'}</div>`;
   } catch (e) { /* history is a hint only */ }
@@ -171,8 +171,9 @@ async function openAppointment(id) {
       <dt>History</dt><dd id="drawer-history"><span class="muted small">…</span></dd>
       <dt>Client link</dt><dd><input class="input input-sm" value="${esc(manageLink)}" readonly onclick="this.select()"><div class="tiny muted">Client can confirm or cancel from this link (sent in messages).</div></dd>
     </dl>
-    ${(a.status === 'scheduled' || a.status === 'confirmed') ? `<div class="mt" style="display:flex;gap:6px;flex-wrap:wrap">
+    ${ACTIVE.includes(a.status) ? `<div class="mt" style="display:flex;gap:6px;flex-wrap:wrap">
       ${a.status === 'scheduled' ? `<button class="btn btn-success btn-sm" onclick="setStatus(${a.id}, 'confirmed')">✓ Confirm</button>` : ''}
+      ${a.status !== 'arrived' ? `<button class="btn btn-secondary btn-sm" onclick="setStatus(${a.id}, 'arrived')">Arrived</button>` : ''}
       <button class="btn btn-primary btn-sm" onclick="completeFlow(${a.id})">Complete</button>
       <button class="btn btn-warn btn-sm" onclick="setStatus(${a.id}, 'no_show')">No-show</button>
       <button class="btn btn-secondary btn-sm" onclick="closeDrawer();openBookingModal(${a.id})">Reschedule</button>

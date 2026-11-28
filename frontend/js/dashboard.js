@@ -158,11 +158,12 @@ async function loadDashboard() {
   const where = (S.settings && S.settings.business_address) || '';
   const noTrainer = today.filter(a => !a.staff && a.status !== 'cancelled').length;
   $('dash-unassigned').textContent = noTrainer ? `· ${noTrainer} without a trainer` : '';
-  $('dash-today').innerHTML = today.length ? today.map(a => { const open = ['scheduled', 'confirmed'].includes(a.status) && parseISO(a.end_time) > new Date();
+  $('dash-today').innerHTML = today.length ? today.map(a => { const open = ACTIVE.includes(a.status) && parseISO(a.end_time) > new Date(), soon = parseISO(a.start_time) - new Date() < 3600e3,
+      overdue = ['scheduled', 'confirmed'].includes(a.status) && !open;  // its time has passed and nobody marked it
     return `<div class="sched${a.staff ? '' : ' no-trainer'}" onclick="openAppointment(${a.id})" role="button" tabindex="0" aria-label="${esc(a.client.name)}, ${fmtTime(a.start_time)}, ${esc(a.service.name)}">
       <div class="sched-time mono">${fmtTime(a.start_time)}<span class="tiny muted">${fmtTime(a.end_time)}</span></div><span class="sched-bar" style="background:${a.service.color}"></span>
-      <div class="sched-main"><strong>${esc(a.client.name)}</strong>${a.staff ? '' : ' <span class="chip chip-warn">⚠ No trainer</span>'}<div class="tiny muted">${esc(a.service.name)}${a.staff ? ' · ' + esc(a.staff.name) : ''}${a.subscription_id ? ' · package' : ''}${where ? ' · ' + esc(where) : ''}</div>
-        <div class="sched-actions">${!a.staff && open ? `<button class="btn btn-warn btn-xs" onclick="event.stopPropagation();assignTrainer(${a.id}, ${jsArg(a.client.name)}, ${jsArg(fmtTime(a.start_time))})">Assign trainer</button>` : ''}${a.status === 'scheduled' && open ? `<button class="btn btn-secondary btn-xs" onclick="event.stopPropagation();dashConfirm(${a.id}, ${jsArg(a.client.name)}, ${jsArg(fmtTime(a.start_time))})">✓ Confirm</button>` : ''}${open ? `<button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();openBookingModal(${a.id})">Reschedule</button>` : ''}<button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();openAppointment(${a.id})">Details</button></div></div>${badge(a.status)}</div>`; }).join('')
+      <div class="sched-main"><strong>${esc(a.client.name)}</strong>${a.staff ? '' : ' <span class="chip chip-warn">⚠ No trainer</span>'}${overdue ? ' <span class="chip chip-warn">Needs update</span>' : ''}<div class="tiny muted">${esc(a.service.name)}${a.staff ? ' · ' + esc(a.staff.name) : ''}${a.subscription_id ? ' · package' : ''}${where ? ' · ' + esc(where) : ''}</div>
+        <div class="sched-actions">${!a.staff && open ? `<button class="btn btn-warn btn-xs" onclick="event.stopPropagation();assignTrainer(${a.id}, ${jsArg(a.client.name)}, ${jsArg(fmtTime(a.start_time))})">Assign trainer</button>` : ''}${a.status !== 'arrived' && open && soon ? `<button class="btn btn-success btn-xs" onclick="event.stopPropagation();dashArrived(${a.id})">Arrived</button>` : ''}${a.status === 'arrived' || overdue ? `<button class="btn btn-primary btn-xs" onclick="event.stopPropagation();completeFlow(${a.id})">Complete</button>` : ''}${a.status === 'scheduled' && open && !soon ? `<button class="btn btn-secondary btn-xs" onclick="event.stopPropagation();dashConfirm(${a.id}, ${jsArg(a.client.name)}, ${jsArg(fmtTime(a.start_time))})">✓ Confirm</button>` : ''}${open ? `<button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();openBookingModal(${a.id})">Reschedule</button>` : ''}<button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();openAppointment(${a.id})">Details</button></div></div>${badge(a.status)}</div>`; }).join('')
     : `<div class="empty small">No sessions today.<br><a href="#" onclick="openBookingModal();return false">Book one</a></div>`;
 
   $('dash-payments').innerHTML = o.recent_payments.length ? `<div class="table-wrap"><table class="plain"><thead><tr><th>Client</th><th>For</th><th>Date</th><th class="num">Amount</th></tr></thead><tbody>${
@@ -237,7 +238,7 @@ async function dashDetail(kind, arg) {
     if (kind === 'today' || kind === 'upcoming') {
       const f = kind === 'today' ? zonedToDate(DASH_TODAY, '00:00') : new Date(), t2 = kind === 'today' ? zonedToDate(addDays(DASH_TODAY, 1), '00:00') : new Date(Date.now() + 7 * 864e5);
       const list = (await api('GET', `/appointments/?from_date=${f.toISOString()}&to_date=${t2.toISOString()}&limit=5000`))
-        .filter(a => kind === 'today' ? a.status !== 'cancelled' : ['scheduled', 'confirmed'].includes(a.status)).sort((a, b) => a.start_time < b.start_time ? -1 : 1);
+        .filter(a => kind === 'today' ? a.status !== 'cancelled' : ACTIVE.includes(a.status)).sort((a, b) => a.start_time < b.start_time ? -1 : 1);
       return showDetail(kind === 'today' ? `Today's sessions (${list.length})` : `Upcoming bookings · next 7 days (${list.length})`, list.length ? apptTable(list, { withDate: kind !== 'today' }) : '<div class="empty small">Nothing booked.</div>');
     }
     if (kind === 'owed') {
@@ -252,12 +253,12 @@ async function dashDetail(kind, arg) {
     }
     if (kind === 'sessions' || kind === 'service') {
       let list = await api('GET', `/appointments/?${range}&limit=5000`);
-      list = kind === 'sessions' ? list.filter(a => a.status === 'completed') : list.filter(a => a.service.name === arg && ['scheduled', 'confirmed', 'completed'].includes(a.status));
+      list = kind === 'sessions' ? list.filter(a => a.status === 'completed') : list.filter(a => a.service.name === arg && [...ACTIVE, 'completed'].includes(a.status));
       return showDetail(`${kind === 'sessions' ? 'Sessions done' : arg} · ${label} (${list.length})`, apptTable(list, { withDate: true }));
     }
     if (kind === 'clients') {
       const now = new Date(), list = (await api('GET', `/appointments/?from_date=${new Date(now - 30 * 864e5).toISOString()}&to_date=${now.toISOString()}&limit=5000`))
-        .filter(a => ['scheduled', 'confirmed', 'completed'].includes(a.status));
+        .filter(a => [...ACTIVE, 'completed'].includes(a.status));
       const by = {}; list.forEach(a => { const r = by[a.client_id] = by[a.client_id] || { c: a.client, n: 0, last: a.start_time }; r.n++; if (a.start_time > r.last) r.last = a.start_time; });
       const rows = Object.entries(by).sort((a, b) => b[1].n - a[1].n);
       return showDetail(`Active clients · last 30 days (${rows.length})`, rows.length ? `<div class="table-wrap"><table><thead><tr><th>Client</th><th class="num">Sessions</th><th>Last</th></tr></thead><tbody>${
@@ -295,3 +296,6 @@ function assignTrainer(id, name, time) {
     toast('Trainer assigned'); loadDashboard();
   });
 }
+
+// The client is here: one tap, no question (it can be changed back from the session's details)
+function dashArrived(id) { guard(async () => { await api('POST', `/appointments/${id}/status`, { status: 'arrived' }); toast('Marked arrived'); loadDashboard(); }); }

@@ -6,6 +6,10 @@ from backend.database import Base
 from backend.tz import now_utc
 
 
+# A session that is still on: booked, confirmed by the client, or the client has arrived at the studio
+ACTIVE_STATUSES = ("scheduled", "confirmed", "arrived")
+
+
 def _token():
     return secrets.token_urlsafe(16)
 
@@ -572,7 +576,7 @@ Payment.refunded_amount = property(lambda self: float(sum(-r.amount for r in sel
 Appointment.balance_due = property(_appt_balance_due)
 Subscription.sessions_booked = property(_sub_booked)
 Subscription.sessions_done = property(lambda self: sum(1 for a in self.appointments if a.status in ("completed", "no_show")))
-Subscription.sessions_upcoming = property(lambda self: sum(1 for a in self.appointments if a.status in ("scheduled", "confirmed")))
+Subscription.sessions_upcoming = property(lambda self: sum(1 for a in self.appointments if a.status in ACTIVE_STATUSES))
 Subscription.sessions_used = property(_sub_used, _sub_set_used)
 Subscription.sessions_remaining = property(_sub_remaining)
 Subscription.paid_amount = property(_sub_paid)

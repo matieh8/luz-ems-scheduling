@@ -1,5 +1,12 @@
 /* Calendar: week / day / agenda views in the business time zone */
 const CAL = { view: matchMedia('(max-width: 640px)').matches ? 'day' : 'week', anchor: todayKey(), hours: [], appts: [], blocks: [] };  // phones open on one day
+try { CAL.colorBy = localStorage.getItem('luz_cal_color') || 'status'; } catch (e) { CAL.colorBy = 'status'; }
+// Status colours: [label, fill, edge]. "Needs update" = the time has passed and nobody marked it done / no-show yet.
+const CAL_STATUS = { scheduled: ['Booked', 'var(--surface)', 'var(--text-3)'], confirmed: ['Confirmed', 'var(--good-bg)', 'var(--good)'],
+  arrived: ['Arrived', 'var(--good)', 'var(--good)'], completed: ['Done', 'var(--neutral-bg)', 'var(--border-strong)'],
+  no_show: ['No-show', 'var(--bad-bg)', 'var(--bad)'], overdue: ['Needs update', 'var(--warn-bg)', 'var(--warn)'] };
+function calKey(a) { return ['scheduled', 'confirmed'].includes(a.status) && parseISO(a.end_time) < new Date() ? 'overdue' : a.status; }
+function calColorBy(v) { CAL.colorBy = v; try { localStorage.setItem('luz_cal_color', v); } catch (e) {} loadCalendar(); }
 const ROW_MIN = 30, ROW_PX = 36;
 
 function calView(v) { CAL.view = v; CAL.agendaDays = null; document.querySelectorAll('#cal-view button').forEach(b => b.classList.toggle('active', b.dataset.v === v)); loadCalendar(); }
@@ -23,7 +30,11 @@ async function loadCalendar() {
   const staffId = val('cal-staff');
   const q = `from_date=${zonedToDate(from, '00:00').toISOString()}&to_date=${zonedToDate(to, '00:00').toISOString()}`;
   [CAL.appts, CAL.blocks] = await Promise.all([api('GET', `/appointments/?${q}${staffId ? '&staff_id=' + staffId : ''}`), api('GET', `/blocked-times/?${q}`)]);
-  $('cal-legend').innerHTML = S.services.filter(s => s.active).map(s => `<span class="dot" style="background:${s.color}"></span>${esc(s.name)}&nbsp;&nbsp;`).join('');
+  const byStatus = CAL.colorBy === 'status';
+  $('cal').classList.toggle('by-status', byStatus);
+  $('cal-legend').innerHTML = `<span class="seg seg-sm" role="group" aria-label="Colour sessions by"><button type="button" class="${byStatus ? 'active' : ''}" aria-pressed="${byStatus}" onclick="calColorBy('status')">Status</button><button type="button" class="${byStatus ? '' : 'active'}" aria-pressed="${!byStatus}" onclick="calColorBy('service')">Service</button></span>`
+    + (byStatus ? Object.values(CAL_STATUS).map(([n, f, e]) => `<span class="lg-item"><span class="cal-sw" style="background:${f};border-color:${e}"></span>${n}</span>`)
+                : S.services.filter(s => s.active).map(s => `<span class="lg-item"><span class="dot" style="background:${s.color}"></span>${esc(s.name)}</span>`)).join('');
   if (CAL.view === 'agenda') return renderAgenda(from, to);
   if (CAL.view === 'month') return renderMonth(from);
   renderGrid(from, CAL.view === 'day' ? 1 : 7);
@@ -63,10 +74,10 @@ function renderGrid(from, days) {
       html += `<div class="cal-block" style="top:${px(s - gridStart)}px;height:${px(e - s)}px" onclick="deleteBlock(${b.id}, ${jsArg(b.reason || 'Blocked')})">⛔ ${esc(b.reason || 'Blocked')}${b.staff ? ' · ' + esc(b.staff.name) : ''}</div>`; });
     CAL.appts.filter(a => dateKey(parseISO(a.start_time)) === k).forEach(a => {
       const s = minOf(a.start_time), e = minOf(a.end_time);
-      const icon = a.status === 'confirmed' ? '✓' : a.status === 'completed' ? '✓✓' : a.status === 'no_show' ? '✗' : a.status === 'cancelled' ? '—' : '';
+      const k = calKey(a), icon = k === 'overdue' ? '!' : a.status === 'confirmed' ? '✓' : a.status === 'arrived' ? '●' : a.status === 'completed' ? '✓✓' : a.status === 'no_show' ? '✗' : a.status === 'cancelled' ? '—' : '';
       const hpx = Math.max(px(e - s) - 2, 20), short = hpx < 34;
       const detail = `${fmtTime(a.start_time)} · ${esc(a.service.name)}${a.staff ? ' · ' + esc(a.staff.name.replace('Coach ', '')) : ''}`;
-      html += `<div class="cal-ev ${a.status} ${short ? 'short' : ''}" style="top:${px(s - gridStart)}px;height:${hpx}px;background:${a.service.color}" onclick="event.stopPropagation();openAppointment(${a.id})" title="${esc(a.client.name)} · ${detail}">
+      html += `<div class="cal-ev ${a.status} st-${k} ${short ? 'short' : ''}" style="top:${px(s - gridStart)}px;height:${hpx}px;--svc:${a.service.color}" onclick="event.stopPropagation();openAppointment(${a.id})" title="${esc(a.client.name)} · ${detail} · ${(CAL_STATUS[k] || [a.status])[0]}">
         <strong>${esc(a.client.name)}${short ? ` <em>· ${fmtTime(a.start_time)}</em>` : ''}</strong><span class="dt">${detail}</span><span class="st">${icon}</span></div>`; });
     if (k === nowKey && nowMin >= gridStart && nowMin <= gridEnd) html += `<div class="cal-now" style="top:${px(nowMin - gridStart)}px"></div>`;
     html += '</div>';
@@ -95,7 +106,7 @@ function renderMonth(from) {
     const list = byDay[k] || [], h = hoursFor(k), closed = !h || h.closed;
     html += `<div class="cm-day ${k.slice(0, 7) !== month ? 'other' : ''} ${k === today ? 'today' : ''} ${closed ? 'closed' : ''}" onclick="calOpenDay('${k}')" role="button" tabindex="0" aria-label="${fmtKeyLong(k)}, ${list.length} session(s)">
       <div class="cm-top"><span class="cm-n">${+k.slice(8)}</span>${list.length ? `<span class="cm-count">${list.length}</span>` : ''}</div>
-      ${list.slice(0, 3).map(a => `<div class="cm-ev" style="--c:${a.service.color}" onclick="event.stopPropagation();openAppointment(${a.id})" title="${esc(a.client.name)} · ${esc(a.service.name)}"><b>${fmtTime(a.start_time)}</b> ${esc(a.client.name.split(' ')[0])}</div>`).join('')}
+      ${list.slice(0, 3).map(a => `<div class="cm-ev" style="--c:${CAL.colorBy === 'status' ? (CAL_STATUS[calKey(a)] || CAL_STATUS.completed)[2] : a.service.color}" onclick="event.stopPropagation();openAppointment(${a.id})" title="${esc(a.client.name)} · ${esc(a.service.name)}"><b>${fmtTime(a.start_time)}</b> ${esc(a.client.name.split(' ')[0])}</div>`).join('')}
       ${list.length > 3 ? `<div class="cm-more">+${list.length - 3} more</div>` : ''}</div>`;
   }));
   $('cal').innerHTML = html + '</div></div>';
@@ -119,7 +130,7 @@ function apptTable(list, opts = {}) {
       <td><strong>${esc(a.client.name)}</strong><div class="tiny muted">${esc(a.client.phone)}</div></td>
       <td><span class="dot" style="background:${a.service.color}"></span>${esc(a.service.name)}</td>
       <td>${a.staff ? esc(a.staff.name) : '<span class="muted">—</span>'}</td>
-      <td>${badge(a.status)}${a.late_minutes ? ` <span class="chip" style="color:var(--warn)">${a.late_minutes}m late</span>` : ''}${a.source === 'online' ? ' <span class="chip">online</span>' : ''}</td>
+      <td>${badge(a.status)}${calKey(a) === 'overdue' ? ' <span class="chip chip-warn">needs update</span>' : ''}${a.late_minutes ? ` <span class="chip" style="color:var(--warn)">${a.late_minutes}m late</span>` : ''}${a.source === 'online' ? ' <span class="chip">online</span>' : ''}</td>
       <td class="num">${a.subscription_id ? '<span class="chip">package</span>' : money(a.price)}${a.balance_due > 0 ? `<div class="tiny" style="color:var(--bad)">due ${money(a.balance_due)}</div>` : ''}</td>
       <td class="num"><button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();openAppointment(${a.id})">Manage</button></td></tr>`).join('') + '</tbody></table></div>';
 }

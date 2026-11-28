@@ -664,7 +664,7 @@ def daily_summary(db: Session):
     settings = get_settings(db)
     now = utcnow()
     start, end = local_day_bounds(local_today(settings.timezone), settings.timezone)
-    active = ("scheduled", "confirmed")
+    active = models.ACTIVE_STATUSES
     today = (db.query(models.Appointment).filter(models.Appointment.start_time >= start, models.Appointment.start_time < end,
                                                  models.Appointment.status.in_(active))
              .order_by(models.Appointment.start_time).all())
@@ -742,7 +742,7 @@ def run_auto_complete_job(db: Session):
     now = utcnow()
     past = (
         db.query(models.Appointment)
-        .filter(models.Appointment.status.in_(("scheduled", "confirmed")))
+        .filter(models.Appointment.status.in_(models.ACTIVE_STATUSES))
         .filter(models.Appointment.end_time <= now)
         .all()
     )
@@ -853,7 +853,7 @@ def run_win_back_job(db: Session):
         last = max(done)
         if last > now - timedelta(days=days) or last < now - timedelta(days=180):
             continue  # still coming, or gone too long ago to message out of the blue
-        if any(a.status in ("scheduled", "confirmed") and a.start_time > now for a in c.appointments):
+        if any(a.status in models.ACTIVE_STATUSES and a.start_time > now for a in c.appointments):
             continue
         if any(s.status == "active" and s.sessions_remaining > 0 and (s.end_date is None or s.end_date >= now) for s in c.subscriptions):
             continue  # they have sessions left: a different conversation

@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from backend import models
 from backend.tz import local_to_utc, to_local, utcnow
 
-ACTIVE_STATUSES = ("scheduled", "confirmed")
+ACTIVE_STATUSES = models.ACTIVE_STATUSES
 
 
 def get_settings(db: Session) -> models.Setting:

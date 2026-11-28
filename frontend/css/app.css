@@ -94,8 +94,9 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .badge-scheduled { background: var(--info-bg); color: var(--info); }
 .badge-confirmed { background: var(--good-bg); color: var(--good); }
 .badge-completed { background: var(--neutral-bg); color: var(--neutral-ink); }
-.badge-cancelled { background: var(--bad-bg); color: var(--bad); }
-.badge-no_show { background: var(--warn-bg); color: var(--warn); }
+.badge-cancelled { background: var(--neutral-bg); color: var(--text-3); text-decoration: line-through; }
+.badge-no_show { background: var(--bad-bg); color: var(--bad); }
+.badge-arrived { background: var(--good); color: var(--surface); }
 .badge-sent, .badge-active { background: var(--good-bg); color: var(--good); }
 .badge-queued, .badge-expired { background: var(--warn-bg); color: var(--warn); }
 .badge-failed { background: var(--bad-bg); color: var(--bad); }
@@ -178,7 +179,7 @@ textarea.input { min-height: 80px; resize: vertical; }
 .cal-row.hour { border-top-color: var(--border); }
 .cal-row.closed { background: repeating-linear-gradient(135deg, var(--closed-a) 0 6px, var(--closed-b) 6px 12px); }
 .cal-row:hover { background: var(--accent-light); cursor: pointer; }
-.cal-ev { position: absolute; left: 3px; right: 3px; border-radius: 7px; padding: 3px 7px; font-size: .72rem; color: #fff; overflow: hidden; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,.15); border-left: 3px solid rgba(0,0,0,.25); line-height: 1.3; z-index: 2; display: flex; flex-direction: column; justify-content: center; }
+.cal-ev { position: absolute; left: 3px; right: 3px; border-radius: 7px; padding: 3px 7px; font-size: .72rem; color: #fff; background: var(--svc); overflow: hidden; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,.15); border-left: 3px solid rgba(0,0,0,.25); line-height: 1.3; z-index: 2; display: flex; flex-direction: column; justify-content: center; }
 .cal-ev:hover { filter: brightness(1.08); z-index: 4; }
 .cal-ev strong, .cal-ev .dt { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 18px; }
 .cal-ev strong { font-weight: 700; }
@@ -808,3 +809,17 @@ button:focus-visible, select:focus-visible, input[type=checkbox]:focus-visible, 
 .chip-warn { background: var(--warn-bg); color: var(--warn); border-color: transparent; font-weight: 600; }
 .sched.no-trainer .sched-bar { outline: 2px dashed var(--warn); outline-offset: 1px; }
 .unassigned-note { font-size: .74rem; font-weight: 600; color: var(--warn); margin-left: 8px; }
+/* Calendar colours by status (default) or by service. In status mode the service stays as the left stripe. */
+#cal-legend { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+#cal-legend .lg-item { display: inline-flex; align-items: center; white-space: nowrap; }
+.seg-sm { padding: 2px; } .seg-sm button { padding: 3px 10px; font-size: .74rem; }
+.cal-sw { display: inline-block; width: 14px; height: 10px; border-radius: 3px; border: 1.5px solid; margin-right: 5px; }
+.cal.by-status .cal-ev { background: var(--surface); color: var(--text); border: 1px solid var(--text-3); border-left: 4px solid var(--svc); box-shadow: none; opacity: 1; }
+.cal.by-status .cal-ev.st-confirmed { background: var(--good-bg); color: var(--good); border-color: var(--good); border-left-color: var(--svc); }
+.cal.by-status .cal-ev.st-arrived { background: var(--good); color: var(--surface); border-color: var(--good); border-left-color: var(--svc); font-weight: 600; }
+.cal.by-status .cal-ev.st-completed { background: var(--neutral-bg); color: var(--neutral-ink); border-color: var(--border-strong); border-left-color: var(--svc); }
+.cal.by-status .cal-ev.st-no_show { background: var(--bad-bg); color: var(--bad); border-color: var(--bad); border-left-color: var(--svc); }
+.cal.by-status .cal-ev.st-cancelled { background: repeating-linear-gradient(135deg, var(--neutral-bg) 0 6px, var(--surface) 6px 12px); color: var(--text-3); border-color: var(--border-strong); text-decoration: line-through; }
+.cal.by-status .cal-ev.st-overdue { background: var(--warn-bg); color: var(--warn); border: 2px dashed var(--warn); border-left: 4px solid var(--svc); }
+.cal.by-status .cal-ev:hover { filter: brightness(.97); }
+.cal:not(.by-status) .cal-ev.st-overdue { outline: 2px dashed var(--warn); outline-offset: 1px; }

@@ -122,7 +122,7 @@ async function openClientDetail(id, tab) {
   CD = h;
   const c = h.client;
   $('cd-title').innerHTML = `<span class="muted" style="font-weight:500">Clients /</span> ${esc(c.name)}${c.active ? '' : ' <span class="chip">archived</span>'}`;
-  const upcoming = h.appointments.filter(a => ['scheduled', 'confirmed'].includes(a.status) && parseISO(a.start_time) > new Date()).reverse();
+  const upcoming = h.appointments.filter(a => ACTIVE.includes(a.status) && parseISO(a.start_time) > new Date()).reverse();
   const past = h.appointments.filter(a => !upcoming.includes(a));
   const r = RISK[c.risk] || RISK.new;
   $('cd-body').innerHTML = `<div class="cd-layout">

@@ -217,7 +217,7 @@ def cancel_series(appointment_id: int, body: SeriesCancel, db: Session = Depends
     rows = (db.query(models.Appointment)
             .filter(models.Appointment.series_id == appt.series_id,
                     models.Appointment.start_time >= appt.start_time,
-                    models.Appointment.status.in_(("scheduled", "confirmed")))
+                    models.Appointment.status.in_(models.ACTIVE_STATUSES))
             .order_by(models.Appointment.start_time).all())
     for a in rows:
         a.status = "cancelled"
@@ -274,15 +274,15 @@ def update_appointment(appointment_id: int, body: schemas.AppointmentUpdate, req
         new_sub = find_active_subscription(db, appt.client_id, appt.start_time)
         appt.subscription_id = new_sub.id if new_sub else None
         appt.price = 0.0 if new_sub else float(service.price or 0)
-    if appt.start_time != old_start and appt.status in ("scheduled", "confirmed"):
+    if appt.start_time != old_start and appt.status in models.ACTIVE_STATUSES:
         db.flush()
         recheck_package(db, appt)  # moved past the package's end date: it can't use that package any more
     if (any(k in data for k in ("start_time", "service_id", "staff_id", "client_id")) or body.duration_minutes) \
-            and appt.status in ("scheduled", "confirmed"):
+            and appt.status in models.ACTIVE_STATUSES:
         validate_slot(db, appt.start_time, appt.end_time, service, appt.staff_id, body.force, exclude_id=appt.id, client_id=appt.client_id)
     db.commit()
     db.refresh(appt)
-    if appt.start_time != old_start and body.send_notification and appt.status in ("scheduled", "confirmed"):
+    if appt.start_time != old_start and body.send_notification and appt.status in models.ACTIVE_STATUSES:
         try:
             notifications.send_reschedule(db, appt)
         except Exception as e:
@@ -296,7 +296,7 @@ def change_status(appointment_id: int, body: schemas.AppointmentStatusChange, re
     if not appt:
         raise HTTPException(status_code=404, detail="Appointment not found")
     new = body.status
-    if new not in ("scheduled", "confirmed", "completed", "cancelled", "no_show"):
+    if new not in ("scheduled", "confirmed", "arrived", "completed", "cancelled", "no_show"):
         raise HTTPException(status_code=400, detail="Invalid status")
     old = appt.status
     now = utcnow()
@@ -312,9 +312,9 @@ def change_status(appointment_id: int, body: schemas.AppointmentStatusChange, re
         appt.cancelled_at = None
         appt.cancel_reason = None
         appt.cancelled_by = None
-    if new in ("confirmed", "completed"):
+    if new in ("confirmed", "arrived", "completed"):
         sub = link_online_booking_to_package(db, appt) or sub
-    if new == "confirmed":
+    if new == "confirmed" or (new == "arrived" and not appt.confirmed_at):
         appt.confirmed_at = now
     if new == "completed":
         appt.completed_at = now

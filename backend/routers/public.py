@@ -234,7 +234,7 @@ def portal(token: str, db: Session = Depends(get_db)):
     appts = sorted(c.appointments, key=lambda a: a.start_time)
     upcoming = [{"token": a.public_token, "service": a.service.name if a.service else "", "status": a.status,
                  "staff": a.staff.name if a.staff else None, **when(a.start_time)}
-                for a in appts if a.start_time >= now and a.status in ("scheduled", "confirmed")]
+                for a in appts if a.start_time >= now and a.status in models.ACTIVE_STATUSES]
     history = [{"service": a.service.name if a.service else "", "status": a.status, **when(a.start_time)}
                for a in reversed(appts) if a.start_time < now and a.status in ("completed", "no_show")][:30]
     packages = [{"name": p.plan.name if p.plan else "Package", "sessions_total": p.sessions_total,
